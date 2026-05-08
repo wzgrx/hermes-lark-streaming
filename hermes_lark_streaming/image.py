@@ -96,8 +96,6 @@ class ImageResolver:
         return self.resolve_images(text)
 
     def _start_upload(self, url: str) -> None:
-        if url in self._pending or url in self._cache or url in self._failed:
-            return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:

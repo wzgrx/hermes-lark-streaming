@@ -110,26 +110,6 @@ class FeishuClient:
     def _dumps(obj: Any) -> str:
         return json.dumps(obj, ensure_ascii=False)
 
-    async def send_card(self, chat_id: str, card: dict[str, Any]) -> str:
-        """发送互动卡片，返回 message_id."""
-        request = (
-            CreateMessageRequest.builder()
-            .receive_id_type("chat_id")
-            .request_body(
-                CreateMessageRequestBody.builder()
-                .receive_id(chat_id)
-                .msg_type("interactive")
-                .content(self._dumps(card))
-                .build()
-            )
-            .build()
-        )
-        resp = await self._client.im.v1.message.acreate(request)
-        self._check(resp, "send_card")
-        if resp.data and resp.data.message_id:
-            return resp.data.message_id
-        raise FeishuAPIError("send_card: response missing message_id")
-
     async def reply_card(self, message_id: str, card: dict[str, Any]) -> str:
         """回复消息，返回 message_id."""
         request = (

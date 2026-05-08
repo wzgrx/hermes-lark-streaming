@@ -222,9 +222,6 @@ class ToolUseTracker:
         self._session: ToolSession | None = None
         self._max_steps = max_steps
 
-    def start_session(self) -> None:
-        self._session = ToolSession(started_at=time.time())
-
     @property
     def elapsed_ms(self) -> float:
         if self._session is None:
@@ -233,7 +230,7 @@ class ToolUseTracker:
 
     def record_start(self, name: str, detail: str = "") -> None:
         if self._session is None:
-            self.start_session()
+            self._session = ToolSession(started_at=time.time())
         if len(self._session.steps) >= self._max_steps:
             return
         desc = _resolve_tool_descriptor(name)

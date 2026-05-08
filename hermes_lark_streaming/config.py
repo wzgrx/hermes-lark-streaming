@@ -53,7 +53,7 @@ class Config:
         if not fields:
             return self._default_footer_fields()
         # 一维数组自动包装为二维
-        if fields and isinstance(fields[0], str):
+        if isinstance(fields[0], str):
             return [fields]
         return fields
 

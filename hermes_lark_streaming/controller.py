@@ -28,7 +28,6 @@ from .feishu import (
     CARDKIT_CONTENT_FAILED,
     CARDKIT_ELEMENT_LIMIT,
     CARDKIT_RATE_LIMITED,
-    MSG_NOT_FOUND,
     FeishuAPIError,
     FeishuClient,
     FeishuClientConfig,
@@ -60,7 +59,7 @@ class CardSession:
         "text", "tool_use", "flush",
         "reasoning_text", "reasoning_start",
         "footer", "sequence",
-        "epoch", "_loop",
+        "_loop",
         "guard", "image_resolver",
         "last_tool_use_update", "created_at",
     )
@@ -84,7 +83,6 @@ class CardSession:
         self.reasoning_start: float = 0.0
         self.footer: dict[str, Any] = {}
         self.sequence = 1
-        self.epoch = 0
         self._loop = loop
         self.last_tool_use_update = 0.0
         self.created_at = time.time()
@@ -323,15 +321,6 @@ class StreamCardController:
         if session.guard.should_skip("_schedule_card_update"):
             return
 
-        if not self._client_ok():
-            try:
-                asyncio.run_coroutine_threadsafe(
-                    self._ensure_init(),
-                    session._loop,
-                )
-            except RuntimeError:
-                return
-
         session.flush.schedule_update(
             lambda: self._do_update_card(session)
         )
@@ -441,11 +430,6 @@ class StreamCardController:
                     session.use_cardkit = False
                     session.flush.set_throttle(PATCH_MS)
                     return
-
-            if e.code == MSG_NOT_FOUND:
-                session.guard.terminate("_do_update_card", e)
-                session.state = FAILED
-                return
 
             _logger.warning("card update failed: %s", e)
 
