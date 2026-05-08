@@ -73,16 +73,13 @@ def _downgrade_tables(text: str, limit: int = _MAX_CARD_TABLES) -> str:
 
 
 def optimize_markdown_style(text: str) -> str:
-    """优化流式 Markdown 以适配飞书 CardKit 渲染
+    """优化流式 Markdown 以适配飞书 CardKit 渲染.
 
-    与 openclaw-lark 的 optimizeMarkdownStyle 对齐:
     1. 提取代码块用占位符保护
     2. 标题降级: H1 -> H4, H2-H6 -> H5
-    3. 连续标题间增加 <br> 间距
-    4. 表格前后增加 <br> 间距
-    5. 还原代码块（前后加 <br>）
-    6. 压缩多余空行
-    7. 剥离无效图片 key（非 img_xxx 格式）
+    3. 还原代码块
+    4. 压缩多余空行
+    5. 剥离无效图片 key（非 img_xxx 格式）
     """
     try:
         # 1. 提取代码块
@@ -103,49 +100,14 @@ def optimize_markdown_style(text: str) -> str:
             r = re.sub(r"^#{2,6} (.+)$", r"##### \1", r, flags=re.MULTILINE)
             r = re.sub(r"^# (.+)$", r"#### \1", r, flags=re.MULTILINE)
 
-        # 3. 连续标题间增加 <br>
-        r = re.sub(r"^(#{4,5} .+)\n{1,2}(#{4,5} )", r"\1\n<br>\n\2", r, flags=re.MULTILINE)
-
-        # 4. 表格前后增加 <br>
-        # 4a. 非表格行直接跟表格行时，补一个空行
-        r = re.sub(r"^([^|\n].*)\n(\|.+\|)", r"\1\n\n\2", r, flags=re.MULTILINE)
-        # 4b. 表格前插入 <br>
-        r = re.sub(r"\n\n((?:\|.+\|[^\S\n]*\n?)+)", "\n\n<br>\n\n\\1", r)
-        # 4c. 表格后追加 <br>（跳过后接分隔线/标题/加粗/文末）
-        def _table_after_br(m: re.Match) -> str:
-            after = r[m.end():].lstrip("\n")
-            if not after or re.match(r"^(---|#{4,5} |\*\*)", after):
-                return m.group(0)
-            return m.group(0) + "\n<br>\n"
-
-        r = re.sub(
-            r"((?:^\|.+\|[^\S\n]*\n?)+)",
-            _table_after_br, r, flags=re.MULTILINE,
-        )
-        # 4d. 表格前是普通文本时，精简间距
-        r = re.sub(
-            r"^((?!#{4,5} )(?!\*\*).+)\n\n(<br>)\n\n(\|)",
-            r"\1\n\2\n\3", r, flags=re.MULTILINE,
-        )
-        # 4d2. 表格前是加粗行时
-        r = re.sub(
-            r"^(\*\*.+)\n\n(<br>)\n\n(\|)",
-            r"\1\n\2\n\n\3", r, flags=re.MULTILINE,
-        )
-        # 4e. 表格后是普通文本时，精简间距
-        r = re.sub(
-            r"(\|[^\n]*\n)\n(<br>\n)((?!#{4,5} )(?!\*\*))",
-            r"\1\2\3", r, flags=re.MULTILINE,
-        )
-
-        # 5. 还原代码块，前后加 <br>
+        # 3. 还原代码块
         for i, block in enumerate(code_blocks):
-            r = r.replace(f"{mark}{i}___", f"\n<br>\n{block}\n<br>\n")
+            r = r.replace(f"{mark}{i}___", block)
 
-        # 6. 压缩多余空行
+        # 4. 压缩多余空行
         r = re.sub(r"\n{3,}", "\n\n", r)
 
-        # 7. 剥离无效图片 key
+        # 5. 剥离无效图片 key
         r = _strip_invalid_image_keys(r)
 
         return r
