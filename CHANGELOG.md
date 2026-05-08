@@ -9,23 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1] - 2026-05-08
 
+### Added
+
+- Add `AGENTS.md` with architecture overview and development guide.
+
 ### Changed
 
 - Simplify `optimize_markdown_style` by removing unnecessary `<br>` spacing logic (consecutive headers, tables, code-block padding). Blank-line compression is sufficient for CardKit rendering.
 - Remove redundant code across 5 modules.
 
-### Added
+### 新增
 
-- Add `AGENTS.md` with architecture overview and development guide.
+- 新增 `AGENTS.md`，包含架构概览与开发指南。
 
 ### 变更
 
 - 精简 `optimize_markdown_style`，移除不必要的 `<br>` 间距逻辑（连续标题、表格、代码块前后填充）。空行压缩已足够适配 CardKit 渲染。
 - 移除 5 个模块中的冗余代码。
-
-### 新增
-
-- 新增 `AGENTS.md`，包含架构概览与开发指南。
 
 ---
 
