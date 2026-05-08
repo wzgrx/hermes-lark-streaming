@@ -38,6 +38,16 @@
 
 > **注意：** Hermes 运行在独立的 Python 虚拟环境中，请使用 Hermes 的 Python 安装插件，否则 gateway 启动后会无法加载。
 
+### AI Agent
+
+让 Agent 读取 README 后按手动步骤操作：
+
+```
+curl https://raw.githubusercontent.com/Cheerwhy/hermes-lark-streaming/main/README.md
+```
+
+### 手动安装
+
 ```bash
 git clone https://github.com/Cheerwhy/hermes-lark-streaming.git
 cd hermes-lark-streaming

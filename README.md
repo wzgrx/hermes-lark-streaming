@@ -38,6 +38,16 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 
 > **Note:** Hermes runs in its own Python venv. Install the plugin using Hermes's Python, or the gateway will fail to load it at runtime.
 
+### AI Agent
+
+Tell your agent to read the README and follow the manual steps:
+
+```
+curl https://raw.githubusercontent.com/Cheerwhy/hermes-lark-streaming/main/README.md
+```
+
+### Manual
+
 ```bash
 git clone https://github.com/Cheerwhy/hermes-lark-streaming.git
 cd hermes-lark-streaming
