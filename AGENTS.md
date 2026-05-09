@@ -57,7 +57,7 @@ Card templates (cardkit.py) — builds Feishu card JSON
 
 ## Key Constraints
 
-- `patcher.py` targets specific function names in Hermes's `gateway/run.py` (`_handle_message_with_agent`, `progress_callback`, `_stream_delta_cb`, `_interim_assistant_cb`). If Hermes changes these, `verify` will catch it.
+- Hermes `>= 0.11.0` (2026.4.23) required. `patcher.py` targets specific function names in Hermes's `gateway/run.py` (`_handle_message_with_agent`, `progress_callback`, `_stream_delta_cb`, `_interim_assistant_cb`). If Hermes changes these, `verify` will catch it.
 - The interrupt hook is injected at the `"Restart typing indicator"` comment in `_run_agent`. It fires when `was_interrupted and next_message_id` are both truthy. The `_interrupt_map` redirects `on_completed(old_id)` to the new session, handling nested interrupts (A→B→C).
 - The `_thinking_hook` has a `not already_streamed` guard (patcher.py:103) — thinking deltas are skipped once answer streaming has begun.
 - Reasoning display depends on upstream providing `<thinking>`/`<thought>`/`<antthinking>` tags or `Reasoning:\n` prefix in text. The Hermes gateway does NOT set `reasoning_callback` on the agent, so native API thinking blocks are not available during streaming.

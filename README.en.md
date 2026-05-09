@@ -29,7 +29,7 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 
 ## Requirements
 
-- Hermes Gateway with Feishu/Lark platform configured
+- Hermes `>= 0.11.0` (2026.4.23) with Feishu/Lark platform configured
 - `Python >= 3.11`
 - `lark-oapi >= 1.4.0` — Feishu/Lark official Python SDK
 - `PyYAML >= 6.0` — YAML parser
