@@ -22,7 +22,7 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 - **Completion card** — Final card with token usage, duration, and context info
 - **Message guard** — Auto-terminates updates when message is deleted/recalled
 - **Image resolution** — Detects markdown image references, downloads and re-uploads as Feishu img_key
-- **Abort handling** — Gracefully handles `/stop` command with aborted state card
+- **Abort handling** — Gracefully handles `/stop` command and message interrupts with aborted state card and automatic new session
 
 ---
 
@@ -119,7 +119,7 @@ Default (when not configured): `fields: [[status, elapsed, model], [tokens, cont
 
 ## How It Works
 
-The plugin injects **6 hook calls** into `gateway/run.py` via AST patching. All business logic lives in the `hermes_lark_streaming` package:
+The plugin injects **7 hook calls** into `gateway/run.py` via AST patching. All business logic lives in the `hermes_lark_streaming` package:
 
 | Hook | Injection Target | Description |
 |------|-----------------|-------------|
@@ -128,6 +128,7 @@ The plugin injects **6 hook calls** into `gateway/run.py` via AST patching. All 
 | `on_answer_delta` | `_stream_delta_cb` | Streams answer text to the card |
 | `on_thinking_delta` | `_interim_assistant_cb` | Displays reasoning/thinking process |
 | `on_message_aborted` | Before stale `return None` | Handles `/stop` abort |
+| `on_message_interrupted` | Before recursive `_run_agent` call | Handles message interrupts, terminates old card and creates new session |
 | `on_message_completed` | Before `return response` | Sends completion card |
 
 **Message flow:**
@@ -141,6 +142,16 @@ User sends message
 ```
 
 If a message is deleted/recalled, UnavailableGuard auto-terminates further updates.
+
+**Interrupt handling:**
+
+- `/stop` abort — User actively stops generation, card shows interrupted state:
+
+![](assets/abort.jpg)
+
+- Message interrupt — User sends a new message while a response is in progress; old card shows interrupted state, and a new streaming card is automatically created for the new message:
+
+![](assets/interrupt.jpg)
 
 ---
 
@@ -182,7 +193,7 @@ hermes_lark_streaming/
 ├── text.py                # Streaming text accumulator (reasoning extraction + delta tracking)
 ├── tooluse.py             # Tool call tracker (icon mapping + result block formatting)
 ├── unavailable_guard.py   # Message unavailability guard (delete/recall detection)
-├── patch.py               # 6 hook functions (called by injected code)
+├── patch.py               # 7 hook functions (called by injected code)
 └── patcher.py             # AST patcher (modifies run.py)
 ```
 

@@ -22,7 +22,7 @@
 - **终态卡片** — 完成后展示完整结果，含 token 用量、耗时、上下文信息
 - **消息保护** — 消息被删除/撤回后自动终止更新，避免无效 API 调用
 - **图片解析** — 自动识别 markdown 图片引用，下载上传后替换为飞书 img_key
-- **中断处理** — 处理 `/stop` 命令，展示中断状态卡片
+- **中断处理** — 处理 `/stop` 命令和消息打断，展示中断状态卡片并自动开启新会话
 
 ---
 
@@ -119,7 +119,7 @@ streaming:
 
 ## 工作原理
 
-插件通过 AST 注入在 `gateway/run.py` 的 **6 个位置**插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成：
+插件通过 AST 注入在 `gateway/run.py` 的 **7 个位置**插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成：
 
 | Hook | 注入位置 | 说明 |
 |------|----------|------|
@@ -128,6 +128,7 @@ streaming:
 | `on_answer_delta` | `_stream_delta_cb` 内部 | 流式更新回答文本 |
 | `on_thinking_delta` | `_interim_assistant_cb` 内部 | 显示思考/推理过程 |
 | `on_message_aborted` | stale `return None` 之前 | 处理 `/stop` 中断 |
+| `on_message_interrupted` | `_run_agent` 递归调用前 | 处理消息打断，终止旧卡片并创建新会话 |
 | `on_message_completed` | `return response` 之前 | 发送终态卡片 |
 
 **消息处理流程：**
@@ -141,6 +142,16 @@ streaming:
 ```
 
 若消息被删除/撤回，UnavailableGuard 自动终止后续更新。
+
+**中断处理：**
+
+- `/stop` 终止 — 用户主动停止，卡片展示中断状态：
+
+![](assets/abort.jpg)
+
+- 消息打断 — 用户发送新消息打断正在处理的回复，旧卡片展示中断状态，并自动为新消息创建新的流式卡片：
+
+![](assets/interrupt.jpg)
 
 ---
 
@@ -182,7 +193,7 @@ hermes_lark_streaming/
 ├── text.py                # 流式文本累积器（reasoning 提取 + 增量追踪）
 ├── tooluse.py             # 工具调用追踪（图标映射 + 结果块格式化）
 ├── unavailable_guard.py   # 消息不可用保护（删除/撤回检测 + 终止 pipeline）
-├── patch.py               # 6 个 hook 函数（被注入代码调用）
+├── patch.py               # 7 个 hook 函数（被注入代码调用）
 └── patcher.py             # AST 注入器（修改 run.py）
 ```
 

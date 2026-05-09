@@ -1,4 +1,4 @@
-"""AST Patcher — 在 Hermes gateway/run.py 中注入 6 处 Hook 调用."""
+"""AST Patcher — 在 Hermes gateway/run.py 中注入 7 处 Hook 调用."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ _logger = logging.getLogger("hermes_lark_streaming")
 
 PREFIX = "HERMES_LARK"
 
-_HOOK_NAMES = ["START", "COMPLETE", "TOOL", "ANSWER", "THINKING", "ABORT"]
+_HOOK_NAMES = ["START", "COMPLETE", "TOOL", "ANSWER", "THINKING", "ABORT", "INTERRUPT"]
 MARKERS: list[tuple[str, str]] = [
     (f"# {PREFIX}_{n}_BEGIN", f"# {PREFIX}_{n}_END") for n in _HOOK_NAMES
 ]
@@ -23,6 +23,7 @@ MK_TOOL, MK_TOOL_END = MARKERS[2]
 MK_ANSWER, MK_ANSWER_END = MARKERS[3]
 MK_THINKING, MK_THINKING_END = MARKERS[4]
 MK_ABORT, MK_ABORT_END = MARKERS[5]
+MK_INTERRUPT, MK_INTERRUPT_END = MARKERS[6]
 
 _BACKUP_SUFFIX = ".hermes_lark.bak"
 
@@ -118,6 +119,21 @@ def _abort_hook(indent: str) -> str:
     ])
 
 
+def _interrupt_hook(indent: str) -> str:
+    return _make_hook(indent, MK_INTERRUPT, MK_INTERRUPT_END, [
+        "try:",
+        "    from hermes_lark_streaming.patch import on_message_interrupted",
+        "    if was_interrupted and next_message_id:",
+        "        on_message_interrupted(",
+        "            message_id=event_message_id,",
+        "            new_message_id=next_message_id,",
+        "            chat_id=source.chat_id,",
+        "        )",
+        "except Exception:",
+        "    pass",
+    ])
+
+
 class PatcherError(RuntimeError):
     pass
 
@@ -182,6 +198,12 @@ class Patcher:
                 "Hermes version may be incompatible"
             )
 
+        if "Restart typing indicator so the user sees activity" not in content:
+            raise PatcherError(
+                "Cannot find interrupt anchor in run.py — "
+                "Hermes version may be incompatible"
+            )
+
     def apply(self) -> None:
         if self.is_patched():
             return
@@ -220,6 +242,7 @@ class Patcher:
             ("start", "start", _find_func_body(tree, lines, "_handle_message_with_agent")),
             ("complete", "complete", _find_handler_return(tree, lines)),
             ("abort", "abort", _find_handler_abort(tree, lines)),
+            ("interrupt", "interrupt", _find_interrupt_site(tree, lines)),
             ("tool", "tool", _find_func_body(tree, lines, "progress_callback")),
             ("answer", "answer", _find_func_body(tree, lines, "_stream_delta_cb")),
             ("thinking", "thinking", _find_func_body(tree, lines, "_interim_assistant_cb")),
@@ -237,6 +260,7 @@ class Patcher:
             "start": _start_hook,
             "complete": _complete_hook,
             "abort": _abort_hook,
+            "interrupt": _interrupt_hook,
             "tool": _tool_hook,
             "answer": _answer_hook,
             "thinking": _thinking_hook,
@@ -314,6 +338,14 @@ def _find_handler_abort(tree: ast.Module, lines: list[str]) -> tuple[int, str] |
                     indent = _safe_indent(lines, j)
                     return j, indent
             break
+    return None
+
+
+def _find_interrupt_site(tree: ast.Module, lines: list[str]) -> tuple[int, str] | None:
+    for i, line in enumerate(lines):
+        if "Restart typing indicator so the user sees activity" in line:
+            indent = _safe_indent(lines, i)
+            return i, indent
     return None
 
 

@@ -107,6 +107,7 @@ class StreamCardController:
         self._cfg = Config()
         self._client: FeishuClient | None = None
         self._sessions: dict[str, CardSession] = {}
+        self._interrupt_map: dict[str, str] = {}
         self._initialized = False
         self._init_lock = asyncio.Lock()
         self._session_ttl = self._cfg.card_duration_sec
@@ -282,6 +283,42 @@ class StreamCardController:
 
         self._fire_and_forget(self._do_complete(session), session._loop)
 
+    def on_interrupted(
+        self,
+        *,
+        old_message_id: str,
+        new_message_id: str,
+        chat_id: str,
+    ) -> None:
+        """用户发送新消息导致前一条消息被中断 — abort A + create B."""
+        if not self.enabled:
+            return
+
+        old_session = self._get_active_session(old_message_id)
+        if old_session is not None:
+            old_session.state = ABORTED
+            old_session.flush.mark_completed()
+            _logger.info(
+                "on_interrupted: abort old msg=%s", old_message_id[:12],
+            )
+            self._fire_and_forget(self._do_complete(old_session), old_session._loop)
+
+        if new_message_id not in self._sessions:
+            loop = self._get_loop()
+            if loop is not None:
+                session = CardSession(new_message_id, chat_id, loop)
+                self._sessions[new_message_id] = session
+                _logger.info(
+                    "on_interrupted: create new msg=%s chat=%s",
+                    new_message_id[:12], chat_id[:12],
+                )
+                self._fire_and_forget(self._do_create_card(session), loop)
+
+        self._interrupt_map[old_message_id] = new_message_id
+        for key, val in list(self._interrupt_map.items()):
+            if val == old_message_id:
+                self._interrupt_map[key] = new_message_id
+
     def on_completed(
         self,
         *,
@@ -297,7 +334,16 @@ class StreamCardController:
             return False
         session = self._get_active_session(message_id)
         if session is None:
-            return False
+            redirected_id = self._interrupt_map.pop(message_id, None)
+            if redirected_id is not None:
+                _logger.info(
+                    "on_completed: redirect msg=%s -> msg=%s",
+                    message_id[:12], redirected_id[:12],
+                )
+                session = self._get_active_session(redirected_id)
+            if session is None:
+                return False
+            message_id = redirected_id
 
         # 卡片创建失败 → 交回 gateway 正常回复
         if session.state == FAILED:
@@ -565,6 +611,9 @@ class StreamCardController:
         session = self._sessions.pop(message_id, None)
         if session is None:
             return
+        stale_keys = [k for k, v in self._interrupt_map.items() if v == message_id]
+        for k in stale_keys:
+            del self._interrupt_map[k]
         session.flush.mark_completed()
         if session.image_resolver:
             for task in session.image_resolver._pending.values():
