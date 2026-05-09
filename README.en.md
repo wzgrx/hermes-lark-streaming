@@ -172,7 +172,7 @@ hermes_lark_streaming/
 ├── __init__.py            # Package entry + register() plugin API
 ├── __main__.py            # CLI: install / uninstall / status / verify / restore
 ├── cardkit.py             # CardKit v2.0 card template builder
-├── config.py              # Config reader (config.yaml + .env)
+├── config.py              # Config reader (config.yaml + env vars)
 ├── controller.py          # Streaming card controller (singleton)
 ├── feishu.py              # Feishu API client (lark-oapi SDK)
 ├── flush.py               # Throttle scheduler (exception-safe + wait_for_flush)

@@ -71,11 +71,11 @@ class Config:
 
     @property
     def env_app_id(self) -> str:
-        return os.environ.get("LARK_APP_ID") or os.environ.get("FEISHU_APP_ID") or ""
+        return os.environ.get("FEISHU_APP_ID") or os.environ.get("LARK_APP_ID") or ""
 
     @property
     def env_app_secret(self) -> str:
-        return os.environ.get("LARK_APP_SECRET") or os.environ.get("FEISHU_APP_SECRET") or ""
+        return os.environ.get("FEISHU_APP_SECRET") or os.environ.get("LARK_APP_SECRET") or ""
 
 
     def _streaming_sec(self) -> dict[str, Any]:
@@ -92,8 +92,8 @@ class Config:
                 "app_id": self.env_app_id,
                 "app_secret": self.env_app_secret,
                 "base_url": os.environ.get(
-                    "LARK_BASE_URL",
-                    os.environ.get("FEISHU_BASE_URL", "https://open.feishu.cn/open-apis"),
+                    "FEISHU_BASE_URL",
+                    os.environ.get("LARK_BASE_URL", "https://open.feishu.cn/open-apis"),
                 ),
             }
         raw = self._load()

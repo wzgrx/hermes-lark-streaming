@@ -172,7 +172,7 @@ hermes_lark_streaming/
 ├── __init__.py            # 包入口 + register() 插件 API
 ├── __main__.py            # CLI: install / uninstall / status / verify / restore
 ├── cardkit.py             # CardKit v2.0 卡片模板构建
-├── config.py              # 配置读取（config.yaml + .env）
+├── config.py              # 配置读取（config.yaml + 环境变量）
 ├── controller.py          # 流式卡片主控制器（单例）
 ├── feishu.py              # 飞书 API 客户端（lark-oapi SDK）
 ├── flush.py               # 节流调度器（异常安全 + wait_for_flush）
