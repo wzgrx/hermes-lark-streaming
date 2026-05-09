@@ -23,6 +23,7 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 - **Message guard** — Auto-terminates updates when message is deleted/recalled
 - **Image resolution** — Detects markdown image references, downloads and re-uploads as Feishu img_key
 - **Abort handling** — Gracefully handles `/stop` command and message interrupts with aborted state card and automatic new session
+- **i18n** — Built-in Chinese/English bilingual card text (status, tool panel, thinking labels, etc.) that auto-switches based on Feishu client language
 
 ---
 
