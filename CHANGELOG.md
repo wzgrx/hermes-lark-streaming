@@ -9,15 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1] - 2026-05-08
 
-### Added
-
-- Add `AGENTS.md` with architecture overview and development guide.
-
-### Changed
-
-- Simplify `optimize_markdown_style` by removing unnecessary `<br>` spacing logic (consecutive headers, tables, code-block padding). Blank-line compression is sufficient for CardKit rendering.
-- Remove redundant code across 5 modules.
-
 ### 新增
 
 - 新增 `AGENTS.md`，包含架构概览与开发指南。
@@ -27,32 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 精简 `optimize_markdown_style`，移除不必要的 `<br>` 间距逻辑（连续标题、表格、代码块前后填充）。空行压缩已足够适配 CardKit 渲染。
 - 移除 5 个模块中的冗余代码。
 
----
-
-## [0.1.0] - 2026-05-08
-
 ### Added
 
-- Initial release of `hermes-lark-streaming` — a real-time streaming card plugin for Hermes Gateway via Feishu/Lark CardKit v2.0.
-- Streaming output with typewriter effect via CardKit `streaming_mode`.
-- Reasoning/thinking display in collapsible panels.
-- Live tool-use status tracking with icons, result blocks, and error blocks.
-- Auto fallback from CardKit streaming to IM PATCH on creation failure or rate limiting.
-- Completion card with footer metadata (duration, model, tokens, context usage).
-- `UnavailableGuard` — auto-terminates updates when the source message is deleted or recalled.
-- `ImageResolver` — asynchronously detects markdown image URLs, downloads, uploads to Feishu, and replaces with `img_key`.
-- AST injection of 6 hooks into `gateway/run.py` (`on_message_started`, `on_answer_delta`, `on_thinking_delta`, `on_tool_updated`, `on_message_completed`, `on_message_aborted`).
-- CLI commands: `install`, `uninstall`, `verify`, `status`, `restore`.
+- Add `AGENTS.md` with architecture overview and development guide.
 
 ### Changed
 
-- Clarify in README that the plugin must be installed into Hermes's own Python venv (`~/.hermes/hermes-agent/venv/bin/python3`), not the system Python. This prevents the gateway from failing to load the plugin at runtime.
-
-### Fixed
-
-- Remove trailing `.strip()` in `strip_reasoning_tags()` to preserve newlines for CardKit streaming. Markdown formatting (bold, code blocks, tables, lists) now renders correctly during the streaming phase, not just after completion.
+- Simplify `optimize_markdown_style` by removing unnecessary `<br>` spacing logic (consecutive headers, tables, code-block padding). Blank-line compression is sufficient for CardKit rendering.
+- Remove redundant code across 5 modules.
 
 ---
+
+## [0.1.0] - 2026-05-08
 
 ### 新增
 
@@ -74,3 +51,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 修复
 
 - 移除 `strip_reasoning_tags()` 末尾的 `.strip()`，保留换行符以支持 CardKit 流式渲染。Markdown 格式（加粗、代码块、表格、列表）现在在流式阶段即可正确渲染，不再仅在全量更新后正常显示。
+
+### Added
+
+- Initial release of `hermes-lark-streaming` — a real-time streaming card plugin for Hermes Gateway via Feishu/Lark CardKit v2.0.
+- Streaming output with typewriter effect via CardKit `streaming_mode`.
+- Reasoning/thinking display in collapsible panels.
+- Live tool-use status tracking with icons, result blocks, and error blocks.
+- Auto fallback from CardKit streaming to IM PATCH on creation failure or rate limiting.
+- Completion card with footer metadata (duration, model, tokens, context usage).
+- `UnavailableGuard` — auto-terminates updates when the source message is deleted or recalled.
+- `ImageResolver` — asynchronously detects markdown image URLs, downloads, uploads to Feishu, and replaces with `img_key`.
+- AST injection of 6 hooks into `gateway/run.py` (`on_message_started`, `on_answer_delta`, `on_thinking_delta`, `on_tool_updated`, `on_message_completed`, `on_message_aborted`).
+- CLI commands: `install`, `uninstall`, `verify`, `status`, `restore`.
+
+### Changed
+
+- Clarify in README that the plugin must be installed into Hermes's own Python venv (`~/.hermes/hermes-agent/venv/bin/python3`), not the system Python. This prevents the gateway from failing to load the plugin at runtime.
+
+### Fixed
+
+- Remove trailing `.strip()` in `strip_reasoning_tags()` to preserve newlines for CardKit streaming. Markdown formatting (bold, code blocks, tables, lists) now renders correctly during the streaming phase, not just after completion.
