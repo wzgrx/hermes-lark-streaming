@@ -9,23 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0] - 2026-05-09
 
+### Highlights
+
+- 消息打断处理：用户发送新消息可中断正在生成的回复，支持嵌套中断（A→B→C）
+  ![interrupt](assets/interrupt.jpg)
+
 ### 新增
 
 - 新增第 7 个 hook `on_message_interrupted`，处理用户发送新消息打断正在处理的回复。
 - `_interrupt_map` 机制：中断时映射旧消息 ID → 新消息 ID，`on_completed` 通过重定向将旧消息的完成结果传递给新会话。
 - 支持嵌套中断（A→B→C），自动更新映射链。
-- 新增 `abort.jpg`（/stop 终止）和 `interrupt.jpg`（消息打断）截图。
 
 ### 修复
 
 - 修复消息打断时旧卡片未终止、新卡片未创建的问题。
+
+### Highlights
+
+- Message interrupt handling: send a new message to interrupt the ongoing reply, with nested interrupt support (A→B→C)
+  ![interrupt](assets/interrupt.jpg)
 
 ### Added
 
 - Add 7th hook `on_message_interrupted` for handling message interrupts when user sends a new message while agent is still processing.
 - `_interrupt_map` mechanism: maps old message ID → new message ID on interrupt, `on_completed` redirects the old message's completion to the new session.
 - Support nested interrupts (A→B→C) with automatic chain update.
-- Add `abort.jpg` (/stop abort) and `interrupt.jpg` (message interrupt) screenshots.
 
 ### Fixed
 
