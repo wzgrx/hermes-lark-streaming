@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] - 2026-05-09
+
+### 新增
+
+- 使用 CardKit batch_update API 延迟渲染工具面板，首次工具调用时插入，后续事件仅局部更新，避免重建整个卡片。
+- 新增 patcher 测试，基于 Hermes 环境中的真实 run.py 执行注入/移除/幂等性/备份恢复测试。
+
+### 修复
+
+- 修复 `tool_panel_added` 标志在 API 调用前被设置，导致失败后无法正确重试的问题。
+- 修复模型在同次响应中先输出文本再调用工具时，工具面板不更新的问题。
+- 修复卡片创建失败时未正确让出给 gateway 默认回复的问题。
+
+### Added
+
+- Use CardKit batch_update API to lazy-render tool panel — insert on first tool event, then update element locally, avoiding full card rebuilds.
+- Add patcher tests using real run.py from Hermes environment for inject/remove/idempotency/backup-restore coverage.
+
+### Fixed
+
+- Fix `tool_panel_added` flag being set before API call, preventing correct retry on failure.
+- Fix tool panel not updating when model outputs text before tool calls in the same streaming response.
+- Fix card creation failure not yielding to gateway default reply.
+
+---
+
 ## [0.1.1] - 2026-05-08
 
 ### 新增
