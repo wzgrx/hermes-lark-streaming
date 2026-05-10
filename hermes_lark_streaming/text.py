@@ -81,9 +81,9 @@ class TextState:
 
     @property
     def display_text(self) -> str:
-        if self.completed_text:
-            return self.completed_text
-        return self.accumulated or ""
+        if self.accumulated:
+            return self.accumulated
+        return self.completed_text or ""
 
     def on_partial(self, text: str) -> None:
         if not text:
@@ -96,6 +96,8 @@ class TextState:
             self.completed_text += "\n\n" + text
         else:
             self.completed_text = text
+        if not self.accumulated:
+            self.accumulated = text
 
     def is_dirty(self, new_text: str | None = None) -> bool:
         check = new_text if new_text is not None else self.display_text
