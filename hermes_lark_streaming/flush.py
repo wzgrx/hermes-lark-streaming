@@ -70,7 +70,8 @@ class FlushController:
             # 超出节流窗口
             if elapsed > LONG_GAP_MS:
                 # 长时间空闲 → 延迟一小批让内容更完整
-                self._schedule(delay=BATCH_AFTER_GAP_MS, do_flush=do_flush)
+                if self._pending_timer is None:
+                    self._schedule(delay=BATCH_AFTER_GAP_MS, do_flush=do_flush)
             else:
                 # 立即 flush
                 self._do_flush_task(do_flush)
