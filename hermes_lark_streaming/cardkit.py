@@ -528,10 +528,8 @@ def build_streaming_card(
     tool_steps: list[dict] | None = None,
     reasoning_text: str = "",
     text: str = "",
-    has_cardkit: bool = False,
-    summary: str = "",
 ) -> dict[str, Any]:
-    """流式生成过程中的卡片 — CardKit 2.0 格式."""
+    """IM PATCH 降级路径的流式更新卡片."""
     elements: list[dict] = []
 
     if tool_steps:
@@ -547,29 +545,16 @@ def build_streaming_card(
             ),
         })
 
-    display = (reasoning_text + "\n\n" + text if reasoning_text and text else text) or ""
-    content = display or " "
+    elements.append({"tag": "markdown", "content": text or " "})
 
-    if has_cardkit:
-        elements.append(_streaming_element(content))
-        elements.append(_loading_element())
-    else:
-        elements.append({"tag": "markdown", "content": content})
-
-    card: dict[str, Any] = {"config": {"locales": _LOCALES}}
-    if summary:
-        card["config"]["summary"] = {"content": summary}
-
-    if has_cardkit:
-        card["schema"] = "2.0"
-        card["config"]["streaming_mode"] = True
-        card["body"] = {"elements": elements}
-    else:
-        card["config"]["wide_screen_mode"] = True
-        card["config"]["update_multi"] = True
-        card["elements"] = elements
-
-    return card
+    return {
+        "config": {
+            "wide_screen_mode": True,
+            "update_multi": True,
+            "locales": _LOCALES,
+        },
+        "elements": elements,
+    }
 
 
 def build_complete_card(

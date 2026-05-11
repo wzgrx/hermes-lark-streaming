@@ -476,7 +476,6 @@ class StreamCardController:
                     tool_steps=tool_steps,
                     reasoning_text=session.reasoning_text if not display else "",
                     text=display,
-                    has_cardkit=False,
                 )
                 await self._client.update_card(session.card_msg_id, card)
 
