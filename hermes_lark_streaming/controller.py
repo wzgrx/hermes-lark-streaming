@@ -174,11 +174,13 @@ class StreamCardController:
     def on_message_started(
         self,
         *,
-        message_id: str,
+        message_id: str | None,
         chat_id: str,
     ) -> None:
         """消息处理开始 — 创建会话 + 发占位卡片."""
         if not self.enabled:
+            return
+        if not message_id:
             return
         if message_id in self._sessions:
             return
@@ -645,7 +647,7 @@ class StreamCardController:
         now = time.time()
         stale = [
             mid for mid, s in self._sessions.items()
-            if now - s.created_at > self._session_ttl
+            if mid is not None and now - s.created_at > self._session_ttl
         ]
         for mid in stale:
             _logger.warning("pruning stale session: msg=%s", mid[:12])
