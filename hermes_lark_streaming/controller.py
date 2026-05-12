@@ -181,6 +181,7 @@ class StreamCardController:
         if not self.enabled:
             return
         if not message_id:
+            _logger.warning("on_message_started: missing message_id, chat=%s", chat_id[:12])
             return
         if message_id in self._sessions:
             return
