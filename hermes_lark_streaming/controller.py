@@ -18,6 +18,7 @@ from typing import Any, Coroutine
 from .cardkit import (
     STREAMING_ELEMENT_ID,
     TOOL_PANEL_ELEMENT_ID,
+    _downgrade_tables,
     build_complete_card,
     build_im_fallback_card,
     build_streaming_card,
@@ -465,7 +466,7 @@ class StreamCardController:
 
         try:
             if session.use_cardkit and session.card_id:
-                optimized = optimize_markdown_style(display)
+                optimized = _downgrade_tables(optimize_markdown_style(display))
                 session.sequence += 1
                 await self._client.cardkit_stream_element(
                     session.card_id,

@@ -550,7 +550,7 @@ def build_streaming_card(
             ),
         })
 
-    elements.append({"tag": "markdown", "content": text or " "})
+    elements.append({"tag": "markdown", "content": _downgrade_tables(optimize_markdown_style(text)) if text else " "})
 
     return {
         "config": {
