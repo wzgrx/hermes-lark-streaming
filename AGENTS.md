@@ -18,9 +18,10 @@ $HERMES_PYTHON -m hermes_lark_streaming status     # Show patch status
 
 # Install for development
 $HERMES_PYTHON -m pip install -e .
+$HERMES_PYTHON -m pip install -e ".[dev]"  # test dependencies
 
-# Run tests (copies real run.py from Hermes env to tests/samples/ each time)
-$HERMES_PYTHON -m pytest tests/test_patcher.py -v
+# Run tests (local run.py first, CI auto-downloads from GitHub)
+$HERMES_PYTHON -m pytest tests/ -v
 ```
 
 ## Architecture

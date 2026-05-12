@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import shutil
 import textwrap
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -20,13 +21,22 @@ RUN_BAK = RUN_SRC.with_suffix(RUN_SRC.suffix + ".hermes_lark.bak")
 SAMPLES_DIR = Path(__file__).parent / "samples"
 SAMPLE_RUN = SAMPLES_DIR / "run.py"
 
+_RUN_URL = "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/gateway/run.py"
+
 
 def _ensure_sample() -> Path:
     src = RUN_BAK if RUN_BAK.exists() else RUN_SRC
-    if not src.exists():
-        pytest.skip(f"run.py not found: {RUN_SRC}")
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, SAMPLE_RUN)
+    if src.exists():
+        shutil.copy2(src, SAMPLE_RUN)
+        return SAMPLE_RUN
+    # CI fallback: download from GitHub
+    try:
+        urllib.request.urlretrieve(_RUN_URL, SAMPLE_RUN)
+    except Exception as exc:
+        pytest.skip(f"run.py not found locally and download failed: {exc}")
+    if not SAMPLE_RUN.exists() or SAMPLE_RUN.stat().st_size == 0:
+        pytest.skip("run.py download returned empty file")
     return SAMPLE_RUN
 
 
