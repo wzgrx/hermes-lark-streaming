@@ -57,14 +57,16 @@ def on_message_completed(
     context: dict[str, Any] | None = None,
 ) -> bool:
     """[注入点 2] return 前 — message.completed."""
-    return bool(ctrl.on_completed(
-        message_id=message_id,
-        answer=answer,
-        duration=duration,
-        model=model,
-        tokens=tokens,
-        context=context,
-    ))
+    return bool(
+        ctrl.on_completed(
+            message_id=message_id,
+            answer=answer,
+            duration=duration,
+            model=model,
+            tokens=tokens,
+            context=context,
+        )
+    )
 
 
 @_safe_hook(default_return=False)

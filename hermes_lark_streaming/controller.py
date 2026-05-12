@@ -519,8 +519,7 @@ class StreamCardController:
                 return
 
             if e.code == CARDKIT_STREAMING_CLOSED:
-                _logger.info("streaming mode closed, skipping update: msg=%s",
-                             session.message_id[:12])
+                _logger.info("streaming mode closed, skipping update: msg=%s", session.message_id[:12])
                 return
 
             if e.code == CARDKIT_CONTENT_FAILED:
