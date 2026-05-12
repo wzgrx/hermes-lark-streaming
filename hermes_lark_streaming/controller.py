@@ -31,6 +31,7 @@ from .feishu import (
     CARDKIT_CONTENT_FAILED,
     CARDKIT_ELEMENT_LIMIT,
     CARDKIT_RATE_LIMITED,
+    CARDKIT_STREAMING_CLOSED,
     FeishuAPIError,
     FeishuClient,
     FeishuClientConfig,
@@ -492,6 +493,11 @@ class StreamCardController:
                 _logger.info("rate limited, skipping frame")
                 return
 
+            if e.code == CARDKIT_STREAMING_CLOSED:
+                _logger.info("streaming mode closed, skipping update: msg=%s",
+                             session.message_id[:12])
+                return
+
             if e.code == CARDKIT_CONTENT_FAILED:
                 sub_code = e.extract_sub_code()
                 if sub_code == CARDKIT_ELEMENT_LIMIT:
@@ -631,7 +637,7 @@ class StreamCardController:
             "cardkit complete failed after 3 attempts: card_id=%s card_msg_id=%s seq=%d",
             session.card_id, session.card_msg_id, session.sequence,
         )
-        session.state = COMPLETED
+        session.state = FAILED
         return False
 
     def _cleanup(self, message_id: str) -> None:
