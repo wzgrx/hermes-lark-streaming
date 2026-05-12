@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from unittest.mock import patch
 
 import pytest
 
 from hermes_lark_streaming.tooluse import (
-    ToolStep,
     ToolUseTracker,
     _basename_only,
     _build_display_block,
@@ -77,7 +75,7 @@ class TestSanitizeDetail:
     def test_command_sanitizer_strips_html(self) -> None:
         result = _sanitize_detail("<b>bold</b> text", "command")
         assert "<b>" not in result
-        assert "bold text" == result
+        assert result == "bold text"
 
     def test_command_sanitizer_redacts_secrets(self) -> None:
         result = _sanitize_detail("run with token=secret", "command")
@@ -204,7 +202,7 @@ class TestBuildDisplayBlock:
         assert '"key"' in result["content"]
 
     def test_json_array_string(self) -> None:
-        result = _build_display_block('[1, 2, 3]')
+        result = _build_display_block("[1, 2, 3]")
         assert result is not None
         assert result["language"] == "json"
 

@@ -9,7 +9,6 @@ import pytest
 
 from hermes_lark_streaming.flush import (
     BATCH_AFTER_GAP_MS,
-    CARDKIT_MS,
     LONG_GAP_MS,
     FlushController,
 )
@@ -184,7 +183,7 @@ class TestWaitForFlush:
             await flush_event.wait()
 
         # 启动一个阻塞的 flush
-        asyncio.create_task(ctrl._do_flush(slow_flush))
+        _task = asyncio.create_task(ctrl._do_flush(slow_flush))
         await asyncio.sleep(0.02)
         assert ctrl._flush_in_progress
 
@@ -223,7 +222,7 @@ class TestMarkCompleted:
         async def blocking_flush() -> None:
             await flush_event.wait()
 
-        asyncio.create_task(ctrl._do_flush(blocking_flush))
+        _task = asyncio.create_task(ctrl._do_flush(blocking_flush))
         await asyncio.sleep(0.02)
 
         waiter = asyncio.create_task(ctrl.wait_for_flush())
@@ -255,7 +254,7 @@ class TestReflush:
         assert ctrl._flush_in_progress
 
         # 再次尝试 flush → 应设置 reflush 标志
-        task2 = asyncio.create_task(ctrl._do_flush(slow_flush))
+        asyncio.create_task(ctrl._do_flush(slow_flush))
         await asyncio.sleep(0.02)
         assert ctrl._needs_reflush
 

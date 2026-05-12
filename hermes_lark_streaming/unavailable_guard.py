@@ -8,7 +8,8 @@ from __future__ import annotations
 import logging
 import re
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .feishu import MSG_NOT_FOUND
 
@@ -16,9 +17,9 @@ _logger = logging.getLogger("hermes_lark_streaming")
 
 
 _TERMINAL_MESSAGE_CODES = {
-    231003,    # message deleted
+    231003,  # message deleted
     MSG_NOT_FOUND,
-    230011,    # message recalled
+    230011,  # message recalled
 }
 
 
@@ -29,10 +30,7 @@ _UNENHANCED_CACHE_TTL_SEC = 30 * 60  # 30 分钟 TTL
 def _prune_cache() -> None:
     """清理过期缓存条目."""
     now = time.time()
-    expired = [
-        k for k, v in _unavailable_cache.items()
-        if now - v.get("at", 0) > _UNENHANCED_CACHE_TTL_SEC
-    ]
+    expired = [k for k, v in _unavailable_cache.items() if now - v.get("at", 0) > _UNENHANCED_CACHE_TTL_SEC]
     for k in expired:
         _unavailable_cache.pop(k, None)
 
@@ -59,7 +57,7 @@ def extract_api_code(err: Exception | None) -> int | None:
     if err is None:
         return None
     if hasattr(err, "code"):
-        code = getattr(err, "code")
+        code = err.code
         if isinstance(code, int):
             return code
     if hasattr(err, "args") and err.args:
@@ -116,15 +114,15 @@ class UnavailableGuard:
         card_msg_id = self._get_card_message_id()
 
         # 从错误码或缓存中判断
-        if code is None:
-            # 检查缓存
-            if is_unavailable(self._reply_to_message_id) or is_unavailable(card_msg_id):
-                code = _unavailable_cache.get(
-                    self._reply_to_message_id or "", {}
-                ).get("code") or _unavailable_cache.get(card_msg_id or "", {}).get("code")
+        if code is None and (is_unavailable(self._reply_to_message_id) or is_unavailable(card_msg_id)):
+            code = _unavailable_cache.get(self._reply_to_message_id or "", {}).get("code") or _unavailable_cache.get(
+                card_msg_id or "", {}
+            ).get("code")
 
         if not is_terminal_api_code(code):
             return False
+
+        assert code is not None
 
         self._terminated = True
         self._on_terminate()
@@ -132,7 +130,9 @@ class UnavailableGuard:
         affected = self._reply_to_message_id or card_msg_id or "unknown"
         _logger.warning(
             "reply pipeline terminated by unavailable message: source=%s code=%s message_id=%s",
-            source, code, affected,
+            source,
+            code,
+            affected,
         )
 
         # 标记缓存

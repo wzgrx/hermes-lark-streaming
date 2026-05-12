@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import re
 import logging
+import re
 from typing import Any
 
 _logger = logging.getLogger("hermes_lark_streaming")
@@ -20,19 +20,19 @@ _LOCALES = ["zh_cn", "en_us"]
 
 _T: dict[str, tuple[str, str]] = {
     "status_completed": ("✅ Completed", "✅ 已完成"),
-    "status_error":     ("❌ Error", "❌ 出错"),
-    "status_stopped":   ("🛑 Stopped", "🛑 已停止"),
-    "elapsed":          ("Elapsed {}", "耗时 {}"),
-    "context":          ("Context {}", "上下文 {}"),
-    "processing":       ("Processing...", "处理中..."),
-    "processing_prefix":("💭 Processing...", "💭 处理中..."),
-    "tool_use":         ("Tool use", "工具执行"),
-    "tool_pending":     ("🛠️ Tool use pending", "🛠️ 等待工具执行"),
-    "steps":            ("{} step{}", "{} 步"),
-    "thinking":         ("💭 **Thinking...**", "💭 **思考中...**"),
-    "thought":          ("Thought", "思考"),
-    "thought_for":      ("Thought for {}", "思考了 {}"),
-    "done":             ("Done.", "完成。"),
+    "status_error": ("❌ Error", "❌ 出错"),
+    "status_stopped": ("🛑 Stopped", "🛑 已停止"),
+    "elapsed": ("Elapsed {}", "耗时 {}"),
+    "context": ("Context {}", "上下文 {}"),
+    "processing": ("Processing...", "处理中..."),
+    "processing_prefix": ("💭 Processing...", "💭 处理中..."),
+    "tool_use": ("Tool use", "工具执行"),
+    "tool_pending": ("🛠️ Tool use pending", "🛠️ 等待工具执行"),
+    "steps": ("{} step{}", "{} 步"),
+    "thinking": ("💭 **Thinking...**", "💭 **思考中...**"),
+    "thought": ("Thought", "思考"),
+    "thought_for": ("Thought for {}", "思考了 {}"),
+    "done": ("Done.", "完成。"),
 }
 
 
@@ -89,7 +89,7 @@ def optimize_markdown_style(text: str) -> str:
 
         def _extract(m: re.Match) -> str:
             prefix = m.group(1) or ""
-            block = m.group(0)[len(prefix):]
+            block = m.group(0)[len(prefix) :]
             idx = len(code_blocks)
             code_blocks.append(block)
             return f"{prefix}{mark}{idx}___"
@@ -372,7 +372,8 @@ def _build_footer_elements(
             en, zh = _render_footer_field(field, data, is_error, is_aborted, show_label)
             if en:
                 en_parts.append(en)
-                zh_parts.append(zh)
+                if zh:
+                    zh_parts.append(zh)
         if en_parts:
             en_lines.append(" · ".join(en_parts))
             zh_lines.append(" · ".join(zh_parts))
@@ -541,14 +542,16 @@ def build_streaming_card(
         elements.append(_build_tool_panel(tool_steps))
 
     if reasoning_text and not text:
-        elements.append({
-            "tag": "markdown",
-            "content": f"{_T['thinking'][0]}\n\n{reasoning_text}",
-            "i18n_content": _i18n(
-                f"{_T['thinking'][0]}\n\n{reasoning_text}",
-                f"{_T['thinking'][1]}\n\n{reasoning_text}",
-            ),
-        })
+        elements.append(
+            {
+                "tag": "markdown",
+                "content": f"{_T['thinking'][0]}\n\n{reasoning_text}",
+                "i18n_content": _i18n(
+                    f"{_T['thinking'][0]}\n\n{reasoning_text}",
+                    f"{_T['thinking'][1]}\n\n{reasoning_text}",
+                ),
+            }
+        )
 
     elements.append({"tag": "markdown", "content": _downgrade_tables(optimize_markdown_style(text)) if text else " "})
 
@@ -589,10 +592,15 @@ def build_complete_card(
     for chunk in _split_long_text(content):
         elements.append({"tag": "markdown", "content": chunk})
 
-    elements.extend(_build_footer_elements(
-        footer_data, is_error, is_aborted,
-        fields=footer_fields, show_label=footer_show_label,
-    ))
+    elements.extend(
+        _build_footer_elements(
+            footer_data,
+            is_error,
+            is_aborted,
+            fields=footer_fields,
+            show_label=footer_show_label,
+        )
+    )
 
     summary = (text or reasoning_text or "")[:120]
     summary = summary.replace("\n", " ").replace("```", "").strip()

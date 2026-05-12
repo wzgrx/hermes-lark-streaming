@@ -47,15 +47,20 @@ def extract_thinking_content(text: str) -> str:
 
 def strip_reasoning_tags(text: str) -> str:
     result = _REASONING_OPEN_RE.sub(
-        lambda _: "", _REASONING_CLOSE_RE.sub("", text),
+        lambda _: "",
+        _REASONING_CLOSE_RE.sub("", text),
     )
     result = re.sub(
         r"<\s*" + _REASONING_TAG + r"\s*>[\s\S]*?<\s*/\s*" + _REASONING_TAG + r"\s*>",
-        "", result, flags=re.IGNORECASE,
+        "",
+        result,
+        flags=re.IGNORECASE,
     )
     result = re.sub(
         r"<\s*" + _REASONING_TAG + r"\s*>[\s\S]*$",
-        "", result, flags=re.IGNORECASE,
+        "",
+        result,
+        flags=re.IGNORECASE,
     )
     if result.strip().startswith(REASONING_PREFIX):
         result = ""
@@ -65,8 +70,7 @@ def strip_reasoning_tags(text: str) -> str:
 def _clean_reasoning_prefix(text: str) -> str:
     cleaned = re.sub(r"^Reasoning:\s*", "", text, flags=re.IGNORECASE)
     cleaned = "\n".join(
-        line.replace("_", "") if line.startswith("_") and line.endswith("_") else line
-        for line in cleaned.split("\n")
+        line.replace("_", "") if line.startswith("_") and line.endswith("_") else line for line in cleaned.split("\n")
     )
     return cleaned.strip()
 

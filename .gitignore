@@ -8,3 +8,5 @@ build/
 .eggs/
 tests/samples/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/

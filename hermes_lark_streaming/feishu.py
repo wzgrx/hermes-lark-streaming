@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
-from urllib.request import urlopen, Request
 from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 import lark_oapi as lark
 from lark_oapi.api.cardkit.v1 import (
@@ -28,20 +29,20 @@ from lark_oapi.api.cardkit.v1 import (
 from lark_oapi.api.im.v1 import (
     CreateImageRequest,
     CreateImageRequestBody,
-    CreateMessageRequest,
-    CreateMessageRequestBody,
     PatchMessageRequest,
     PatchMessageRequestBody,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
 
+_logger = logging.getLogger("hermes_lark_streaming")
+
 
 def _sanitize_message(msg: str) -> str:
     """从错误消息中移除 token 和 secret."""
-    msg = re.sub(r'(tenant_access_token["\s:=]+)([A-Za-z0-9_-]{10,})', r'\1***', msg)
-    msg = re.sub(r'(app_secret["\s:=]+)([A-Za-z0-9]{10,})', r'\1***', msg)
-    msg = re.sub(r'(Bearer\s+)([A-Za-z0-9_-]{10,})', r'\1***', msg)
+    msg = re.sub(r'(tenant_access_token["\s:=]+)([A-Za-z0-9_-]{10,})', r"\1***", msg)
+    msg = re.sub(r'(app_secret["\s:=]+)([A-Za-z0-9]{10,})', r"\1***", msg)
+    msg = re.sub(r"(Bearer\s+)([A-Za-z0-9_-]{10,})", r"\1***", msg)
     return msg
 
 
@@ -63,11 +64,11 @@ class FeishuAPIError(RuntimeError):
         return None
 
 
-CARDKIT_RATE_LIMITED = 230020       # 频控
-CARDKIT_CONTENT_FAILED = 230099     # 卡片内容创建失败（通用码，需检查子错误）
-CARDKIT_ELEMENT_LIMIT = 11310       # 子码: 卡片元素数量超限
-CARDKIT_STREAMING_CLOSED = 300309   # 卡片流式模式已关闭
-MSG_NOT_FOUND = 1000023             # 消息不存在/已删除
+CARDKIT_RATE_LIMITED = 230020  # 频控
+CARDKIT_CONTENT_FAILED = 230099  # 卡片内容创建失败（通用码，需检查子错误）
+CARDKIT_ELEMENT_LIMIT = 11310  # 子码: 卡片元素数量超限
+CARDKIT_STREAMING_CLOSED = 300309  # 卡片流式模式已关闭
+MSG_NOT_FOUND = 1000023  # 消息不存在/已删除
 
 
 @dataclass(frozen=True)
@@ -91,11 +92,7 @@ class FeishuClient:
 
     def __init__(self, config: FeishuClientConfig) -> None:
         self.config = config
-        builder = (
-            lark.Client.builder()
-            .app_id(config.app_id)
-            .app_secret(config.app_secret)
-        )
+        builder = lark.Client.builder().app_id(config.app_id).app_secret(config.app_secret)
         self._client = builder.build()
 
     @staticmethod
@@ -118,18 +115,13 @@ class FeishuClient:
         request = (
             ReplyMessageRequest.builder()
             .message_id(message_id)
-            .request_body(
-                ReplyMessageRequestBody.builder()
-                .msg_type("interactive")
-                .content(self._dumps(card))
-                .build()
-            )
+            .request_body(ReplyMessageRequestBody.builder().msg_type("interactive").content(self._dumps(card)).build())
             .build()
         )
         resp = await self._client.im.v1.message.areply(request)
         self._check(resp, "reply_card")
         if resp.data and resp.data.message_id:
-            return resp.data.message_id
+            return str(resp.data.message_id)
         raise FeishuAPIError("reply_card: response missing message_id")
 
     async def reply_card_by_id(self, message_id: str, card_id: str) -> str:
@@ -148,7 +140,7 @@ class FeishuClient:
         resp = await self._client.im.v1.message.areply(request)
         self._check(resp, "reply_card_by_id")
         if resp.data and resp.data.message_id:
-            return resp.data.message_id
+            return str(resp.data.message_id)
         raise FeishuAPIError("reply_card_by_id: response missing message_id")
 
     async def update_card(self, message_id: str, card: dict[str, Any]) -> None:
@@ -156,11 +148,7 @@ class FeishuClient:
         request = (
             PatchMessageRequest.builder()
             .message_id(message_id)
-            .request_body(
-                PatchMessageRequestBody.builder()
-                .content(self._dumps(card))
-                .build()
-            )
+            .request_body(PatchMessageRequestBody.builder().content(self._dumps(card)).build())
             .build()
         )
         resp = await self._client.im.v1.message.apatch(request)
@@ -170,18 +158,13 @@ class FeishuClient:
         """创建 CardKit 实体，返回 card_id."""
         request = (
             CreateCardRequest.builder()
-            .request_body(
-                CreateCardRequestBody.builder()
-                .type("card_json")
-                .data(self._dumps(card))
-                .build()
-            )
+            .request_body(CreateCardRequestBody.builder().type("card_json").data(self._dumps(card)).build())
             .build()
         )
         resp = await self._client.cardkit.v1.card.acreate(request)
         self._check(resp, "cardkit_create")
         if resp.data and resp.data.card_id:
-            return resp.data.card_id
+            return str(resp.data.card_id)
         raise FeishuAPIError("cardkit_create: response missing card_id")
 
     async def cardkit_stream_element(
@@ -203,7 +186,8 @@ class FeishuClient:
             .build()
         )
         resp = await asyncio.to_thread(
-            self._client.cardkit.v1.card_element.content, request,
+            self._client.cardkit.v1.card_element.content,
+            request,
         )
         self._check(resp, "cardkit_stream_element")
 
@@ -215,18 +199,10 @@ class FeishuClient:
     ) -> None:
         """全量更新 CardKit 卡片."""
         body_builder = UpdateCardRequestBody.builder().card(
-            Card.builder()
-            .type("card_json")
-            .data(self._dumps(card))
-            .build()
+            Card.builder().type("card_json").data(self._dumps(card)).build()
         )
         body_builder = body_builder.sequence(sequence)
-        request = (
-            UpdateCardRequest.builder()
-            .card_id(card_id)
-            .request_body(body_builder.build())
-            .build()
-        )
+        request = UpdateCardRequest.builder().card_id(card_id).request_body(body_builder.build()).build()
         resp = await self._client.cardkit.v1.card.aupdate(request)
         self._check(resp, "cardkit_update")
 
@@ -238,32 +214,16 @@ class FeishuClient:
         sequence: int = 0,
     ) -> None:
         """局部更新 CardKit 卡片（增删改组件）."""
-        body_builder = (
-            BatchUpdateCardRequestBody.builder()
-            .sequence(sequence)
-            .actions(self._dumps(actions))
-        )
-        request = (
-            BatchUpdateCardRequest.builder()
-            .card_id(card_id)
-            .request_body(body_builder.build())
-            .build()
-        )
+        body_builder = BatchUpdateCardRequestBody.builder().sequence(sequence).actions(self._dumps(actions))
+        request = BatchUpdateCardRequest.builder().card_id(card_id).request_body(body_builder.build()).build()
         resp = await self._client.cardkit.v1.card.abatch_update(request)
         self._check(resp, "cardkit_batch_update")
 
     async def cardkit_close_streaming(self, card_id: str, sequence: int = 0) -> None:
         """关闭 CardKit 卡片的流式模式."""
-        body_builder = SettingsCardRequestBody.builder().settings(
-            self._dumps({"streaming_mode": False})
-        )
+        body_builder = SettingsCardRequestBody.builder().settings(self._dumps({"streaming_mode": False}))
         body_builder = body_builder.sequence(sequence)
-        request = (
-            SettingsCardRequest.builder()
-            .card_id(card_id)
-            .request_body(body_builder.build())
-            .build()
-        )
+        request = SettingsCardRequest.builder().card_id(card_id).request_body(body_builder.build()).build()
         resp = await self._client.cardkit.v1.card.asettings(request)
         self._check(resp, "cardkit_close_streaming")
 
@@ -272,7 +232,9 @@ class FeishuClient:
         try:
             loop = asyncio.get_running_loop()
             data = await loop.run_in_executor(
-                None, self._download_image, image_url,
+                None,
+                self._download_image,
+                image_url,
             )
         except Exception:
             _logger.debug("image upload failed for %s", image_url, exc_info=True)
@@ -284,17 +246,12 @@ class FeishuClient:
         file = io.BytesIO(data)
         request = (
             CreateImageRequest.builder()
-            .request_body(
-                CreateImageRequestBody.builder()
-                .image_type("message")
-                .image(file)
-                .build()
-            )
+            .request_body(CreateImageRequestBody.builder().image_type("message").image(file).build())
             .build()
         )
         resp = await self._client.im.v1.image.acreate(request)
         if resp.success() and resp.data and resp.data.image_key:
-            return resp.data.image_key
+            return str(resp.data.image_key)
         return None
 
     @staticmethod
@@ -305,7 +262,7 @@ class FeishuClient:
             with urlopen(req, timeout=timeout) as resp:
                 if resp.status != 200:
                     return None
-                return resp.read()
+                return bytes(resp.read())
         except (URLError, OSError):
             _logger.debug("image download failed: %s", url)
             return None

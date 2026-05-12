@@ -58,21 +58,25 @@ class TestVerify:
 
     def test_verify_fails_on_missing_handler(self, tmp_path: Path) -> None:
         p = tmp_path / "run.py"
-        p.write_text(textwrap.dedent("""\
+        p.write_text(
+            textwrap.dedent("""\
             async def _stream_delta_cb(text):
                 pass
             async def progress_callback(event_type):
                 pass
-        """))
+        """)
+        )
         with pytest.raises(PatcherError, match="_handle_message_with_agent"):
             _patcher(p).verify_target()
 
     def test_verify_fails_on_missing_callback(self, tmp_path: Path) -> None:
         p = tmp_path / "run.py"
-        p.write_text(textwrap.dedent("""\
+        p.write_text(
+            textwrap.dedent("""\
             async def _handle_message_with_agent(source, event):
                 self.hooks.emit("agent:end", {})
-        """))
+        """)
+        )
         with pytest.raises(PatcherError, match="Missing injection targets"):
             _patcher(p).verify_target()
 

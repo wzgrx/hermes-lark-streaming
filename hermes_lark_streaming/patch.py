@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 from .controller import get_controller
 
@@ -20,6 +21,7 @@ def _safe_hook(
     log_level: str = "warning",
 ) -> Callable:
     """统一处理 enabled 检查和异常捕获."""
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*, message_id: str, **kwargs: Any) -> Any:
@@ -31,7 +33,9 @@ def _safe_hook(
             except Exception as exc:
                 getattr(_logger, log_level)("%s error: %s", func.__name__, exc, exc_info=True)
                 return default_return
+
         return wrapper
+
     return decorator
 
 
@@ -53,14 +57,14 @@ def on_message_completed(
     context: dict[str, Any] | None = None,
 ) -> bool:
     """[注入点 2] return 前 — message.completed."""
-    return ctrl.on_completed(
+    return bool(ctrl.on_completed(
         message_id=message_id,
         answer=answer,
         duration=duration,
         model=model,
         tokens=tokens,
         context=context,
-    )
+    ))
 
 
 @_safe_hook(default_return=False)

@@ -10,7 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .feishu import FeishuClient
@@ -35,9 +36,9 @@ class ImageResolver:
         self._client = client
         self._timeout = timeout
         self._on_image_resolved = on_image_resolved
-        self._cache: dict[str, str] = {}       # url → img_key
+        self._cache: dict[str, str] = {}  # url → img_key
         self._pending: dict[str, asyncio.Task[str | None]] = {}  # url → upload task
-        self._failed: set[str] = set()          # 已失败的不重试
+        self._failed: set[str] = set()  # 已失败的不重试
 
     def resolve_images(self, text: str) -> str:
         """同步解析图片：缓存命中替换、新 URL strip 并触发异步上传.
@@ -48,12 +49,12 @@ class ImageResolver:
             return text
 
         def _replace(m: re.Match) -> str:
-            alt = m.group(0).split("](")[0][2:]  # extract alt text
-            url = m.group(1)
+            alt = str(m.group(0)).split("](")[0][2:]  # extract alt text
+            url = str(m.group(1))
 
             # 已经是飞书 img_key
             if url.startswith("img_"):
-                return m.group(0)
+                return str(m.group(0))
 
             # 缓存命中
             if url in self._cache:
@@ -89,7 +90,7 @@ class ImageResolver:
                     asyncio.gather(*tasks, return_exceptions=True),
                     timeout=self._timeout,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _logger.warning("image_resolver: timeout waiting for uploads")
 
         # 第二遍：替换已完成的

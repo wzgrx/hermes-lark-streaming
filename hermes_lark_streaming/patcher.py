@@ -13,9 +13,7 @@ _logger = logging.getLogger("hermes_lark_streaming")
 PREFIX = "HERMES_LARK"
 
 _HOOK_NAMES = ["START", "COMPLETE", "TOOL", "ANSWER", "THINKING", "ABORT", "INTERRUPT"]
-MARKERS: list[tuple[str, str]] = [
-    (f"# {PREFIX}_{n}_BEGIN", f"# {PREFIX}_{n}_END") for n in _HOOK_NAMES
-]
+MARKERS: list[tuple[str, str]] = [(f"# {PREFIX}_{n}_BEGIN", f"# {PREFIX}_{n}_END") for n in _HOOK_NAMES]
 
 MK_START, MK_START_END = MARKERS[0]
 MK_COMPLETE, MK_COMPLETE_END = MARKERS[1]
@@ -35,103 +33,138 @@ def _make_hook(indent: str, begin: str, end: str, body_lines: list[str]) -> str:
 
 
 def _start_hook(indent: str) -> str:
-    return _make_hook(indent, MK_START, MK_START_END, [
-        "try:",
-        "    from hermes_lark_streaming.patch import on_message_started",
-        "    on_message_started(message_id=event.message_id, chat_id=source.chat_id)",
-        "except Exception:",
-        "    pass",
-    ])
+    return _make_hook(
+        indent,
+        MK_START,
+        MK_START_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_message_started",
+            "    on_message_started(message_id=event.message_id, chat_id=source.chat_id)",
+            "except Exception:",
+            "    pass",
+        ],
+    )
 
 
 def _complete_hook(indent: str) -> str:
-    return _make_hook(indent, MK_COMPLETE, MK_COMPLETE_END, [
-        "try:",
-        "    from hermes_lark_streaming.patch import on_message_completed",
-        "    _lark_card_sent = on_message_completed(",
-        "        message_id=event.message_id,",
-        "        answer=response,",
-        "        duration=_response_time,",
-        "        model=agent_result.get('model', ''),",
-        "        tokens={",
-        "            'input_tokens': agent_result.get('input_tokens', 0),",
-        "            'output_tokens': agent_result.get('output_tokens', 0),",
-        "        },",
-        "        context={",
-        "            'used_tokens': agent_result.get('last_prompt_tokens', 0),",
-        "            'max_tokens': agent_result.get('context_length', 0),",
-        "        },",
-        "    )",
-        "    if _lark_card_sent:",
-        "        agent_result['already_sent'] = True",
-        "except Exception:",
-        "    pass",
-    ])
+    return _make_hook(
+        indent,
+        MK_COMPLETE,
+        MK_COMPLETE_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_message_completed",
+            "    _lark_card_sent = on_message_completed(",
+            "        message_id=event.message_id,",
+            "        answer=response,",
+            "        duration=_response_time,",
+            "        model=agent_result.get('model', ''),",
+            "        tokens={",
+            "            'input_tokens': agent_result.get('input_tokens', 0),",
+            "            'output_tokens': agent_result.get('output_tokens', 0),",
+            "        },",
+            "        context={",
+            "            'used_tokens': agent_result.get('last_prompt_tokens', 0),",
+            "            'max_tokens': agent_result.get('context_length', 0),",
+            "        },",
+            "    )",
+            "    if _lark_card_sent:",
+            "        agent_result['already_sent'] = True",
+            "except Exception:",
+            "    pass",
+        ],
+    )
 
 
 def _tool_hook(indent: str) -> str:
-    return _make_hook(indent, MK_TOOL, MK_TOOL_END, [
-        "try:",
-        "    from hermes_lark_streaming.patch import on_tool_updated",
-        "    if _run_still_current() and event_type in ('tool.started', 'tool.completed'):",
-        "        if on_tool_updated(",
-        "            message_id=event_message_id,",
-        "            tool_name=tool_name or '',",
-        "            status='started' if event_type == 'tool.started' else 'completed',",
-        "            detail=preview or '',",
-        "        ):",
-        "            return",
-        "except Exception:",
-        "    pass",
-    ])
+    return _make_hook(
+        indent,
+        MK_TOOL,
+        MK_TOOL_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_tool_updated",
+            "    if _run_still_current() and event_type in ('tool.started', 'tool.completed'):",
+            "        if on_tool_updated(",
+            "            message_id=event_message_id,",
+            "            tool_name=tool_name or '',",
+            "            status='started' if event_type == 'tool.started' else 'completed',",
+            "            detail=preview or '',",
+            "        ):",
+            "            return",
+            "except Exception:",
+            "    pass",
+        ],
+    )
 
 
 def _answer_hook(indent: str) -> str:
-    return _make_hook(indent, MK_ANSWER, MK_ANSWER_END, [
-        "try:",
-        "    from hermes_lark_streaming.patch import on_answer_delta",
-        "    if text and _run_still_current() and on_answer_delta(message_id=event_message_id, text=text):",
-        "        return",
-        "except Exception:",
-        "    pass",
-    ])
+    return _make_hook(
+        indent,
+        MK_ANSWER,
+        MK_ANSWER_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_answer_delta",
+            "    if text and _run_still_current() and on_answer_delta(message_id=event_message_id, text=text):",
+            "        return",
+            "except Exception:",
+            "    pass",
+        ],
+    )
 
 
 def _thinking_hook(indent: str) -> str:
-    return _make_hook(indent, MK_THINKING, MK_THINKING_END, [
-        "try:",
-        "    from hermes_lark_streaming.patch import on_thinking_delta",
-        "    if (text and not already_streamed and _run_still_current()",
-        "            and on_thinking_delta(message_id=event_message_id, text=text)):",
-        "        return",
-        "except Exception:",
-        "    pass",
-    ])
+    return _make_hook(
+        indent,
+        MK_THINKING,
+        MK_THINKING_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_thinking_delta",
+            "    if (text and not already_streamed and _run_still_current()",
+            "            and on_thinking_delta(message_id=event_message_id, text=text)):",
+            "        return",
+            "except Exception:",
+            "    pass",
+        ],
+    )
 
 
 def _abort_hook(indent: str) -> str:
-    return _make_hook(indent, MK_ABORT, MK_ABORT_END, [
-        "try:",
-        "    from hermes_lark_streaming.patch import on_message_aborted",
-        "    on_message_aborted(message_id=event.message_id)",
-        "except Exception:",
-        "    pass",
-    ])
+    return _make_hook(
+        indent,
+        MK_ABORT,
+        MK_ABORT_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_message_aborted",
+            "    on_message_aborted(message_id=event.message_id)",
+            "except Exception:",
+            "    pass",
+        ],
+    )
 
 
 def _interrupt_hook(indent: str) -> str:
-    return _make_hook(indent, MK_INTERRUPT, MK_INTERRUPT_END, [
-        "try:",
-        "    from hermes_lark_streaming.patch import on_message_interrupted",
-        "    if was_interrupted and next_message_id:",
-        "        on_message_interrupted(",
-        "            message_id=event_message_id,",
-        "            new_message_id=next_message_id,",
-        "            chat_id=source.chat_id,",
-        "        )",
-        "except Exception:",
-        "    pass",
-    ])
+    return _make_hook(
+        indent,
+        MK_INTERRUPT,
+        MK_INTERRUPT_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_message_interrupted",
+            "    if was_interrupted and next_message_id:",
+            "        on_message_interrupted(",
+            "            message_id=event_message_id,",
+            "            new_message_id=next_message_id,",
+            "            chat_id=source.chat_id,",
+            "        )",
+            "except Exception:",
+            "    pass",
+        ],
+    )
 
 
 class PatcherError(RuntimeError):
@@ -157,10 +190,7 @@ class Patcher:
 
         handler = _find_func_body(tree, content.splitlines(keepends=True), "_handle_message_with_agent")
         if handler is None:
-            raise PatcherError(
-                "Cannot find _handle_message_with_agent in run.py — "
-                "Hermes version may be incompatible"
-            )
+            raise PatcherError("Cannot find _handle_message_with_agent in run.py — Hermes version may be incompatible")
 
         anchor_found = False
         for node in ast.walk(tree):
@@ -168,18 +198,16 @@ class Patcher:
                 func = node.func
                 if isinstance(func, ast.Attribute) and func.attr == "emit":
                     hooks_obj = func.value
-                    if isinstance(hooks_obj, ast.Attribute) and hooks_obj.attr == "hooks":
-                        if (
-                            node.args
-                            and isinstance(node.args[0], ast.Constant)
-                            and node.args[0].value == "agent:end"
-                        ):
-                            anchor_found = True
-                            break
+                    if (
+                        isinstance(hooks_obj, ast.Attribute)
+                        and hooks_obj.attr == "hooks"
+                        and (node.args and isinstance(node.args[0], ast.Constant) and node.args[0].value == "agent:end")
+                    ):
+                        anchor_found = True
+                        break
         if not anchor_found:
             raise PatcherError(
-                "Cannot find hooks.emit('agent:end', ...) anchor in run.py — "
-                "Hermes version may be incompatible"
+                "Cannot find hooks.emit('agent:end', ...) anchor in run.py — Hermes version may be incompatible"
             )
 
         required_callbacks = {
@@ -188,21 +216,16 @@ class Patcher:
             "_interim_assistant_cb": False,
         }
         for node in ast.walk(tree):
-            if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
-                if node.name in required_callbacks:
-                    required_callbacks[node.name] = True
+            if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name in required_callbacks:
+                required_callbacks[node.name] = True
         missing = [name for name, found in required_callbacks.items() if not found]
         if missing:
             raise PatcherError(
-                f"Missing injection targets in run.py: {', '.join(missing)} — "
-                "Hermes version may be incompatible"
+                f"Missing injection targets in run.py: {', '.join(missing)} — Hermes version may be incompatible"
             )
 
         if "Restart typing indicator so the user sees activity" not in content:
-            raise PatcherError(
-                "Cannot find interrupt anchor in run.py — "
-                "Hermes version may be incompatible"
-            )
+            raise PatcherError("Cannot find interrupt anchor in run.py — Hermes version may be incompatible")
 
     def apply(self) -> None:
         if self.is_patched():
@@ -227,7 +250,6 @@ class Patcher:
         if not backup.exists():
             raise PatcherError(f"No backup found: {backup}")
         shutil.copy2(backup, self.run_path)
-
 
     def _backup(self) -> None:
         backup = self.run_path.with_suffix(self.run_path.suffix + _BACKUP_SUFFIX)
@@ -283,7 +305,7 @@ class Patcher:
                 break
 
         if begin_idx is not None and end_idx is not None:
-            return "".join(lines[:begin_idx] + lines[end_idx + 1:])
+            return "".join(lines[:begin_idx] + lines[end_idx + 1 :])
         return content
 
 
@@ -316,9 +338,10 @@ def _find_handler_return(tree: ast.Module, lines: list[str]) -> tuple[int, str] 
     for node in ast.walk(tree):
         if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name == "_handle_message_with_agent":
             returns = [
-                n for n in ast.walk(node)
+                n
+                for n in ast.walk(node)
                 if isinstance(n, ast.Return)
-                and isinstance(getattr(n, "value", None), ast.Name)
+                and isinstance(n.value, ast.Name)
                 and n.value.id == "response"
                 and n.lineno is not None
             ]
@@ -353,8 +376,8 @@ def _safe_indent(lines: list[str], lineno: int) -> str:
     """获取缩进，跳过空行."""
     for i in range(lineno, -1, -1):
         if 0 <= i < len(lines) and lines[i].strip():
-            return lines[i][:len(lines[i]) - len(lines[i].lstrip())]
+            return lines[i][: len(lines[i]) - len(lines[i].lstrip())]
     for i in range(lineno + 1, len(lines)):
         if lines[i].strip():
-            return lines[i][:len(lines[i]) - len(lines[i].lstrip())]
+            return lines[i][: len(lines[i]) - len(lines[i].lstrip())]
     return ""

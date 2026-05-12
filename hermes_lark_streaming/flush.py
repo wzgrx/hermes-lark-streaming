@@ -11,14 +11,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 _logger = logging.getLogger("hermes_lark_streaming")
 
 
-CARDKIT_MS = 0.100        # CardKit 流式 API 的刷新间隔
-PATCH_MS = 1.500          # IM patch 降级通道的刷新间隔
-LONG_GAP_MS = 2.000       # 超过此间隔 → 认为是长时间空闲
+CARDKIT_MS = 0.100  # CardKit 流式 API 的刷新间隔
+PATCH_MS = 1.500  # IM patch 降级通道的刷新间隔
+LONG_GAP_MS = 2.000  # 超过此间隔 → 认为是长时间空闲
 BATCH_AFTER_GAP_MS = 0.300  # 长时间空闲后等待这个时间再 flush
 
 
@@ -42,7 +42,6 @@ class FlushController:
         except RuntimeError:
             self._loop = asyncio.get_event_loop()
 
-
     @property
     def throttle_ms(self) -> float:
         return self._throttle_ms
@@ -54,7 +53,6 @@ class FlushController:
     @property
     def last_update_time(self) -> float:
         return self._last_update_time
-
 
     def schedule_update(self, do_flush: Callable[[], Awaitable[None]]) -> None:
         """请求一次节流后的卡片刷新.
@@ -114,11 +112,12 @@ class FlushController:
         if ready:
             self._last_update_time = time.monotonic()
 
-
     def _schedule(self, delay: float, do_flush: Callable[[], Awaitable[None]]) -> None:
         self._cancel_timer()
         self._pending_timer = self._loop.call_later(
-            delay, self._do_flush_task, do_flush,
+            delay,
+            self._do_flush_task,
+            do_flush,
         )
 
     def _do_flush_task(self, do_flush: Callable[[], Awaitable[None]]) -> None:

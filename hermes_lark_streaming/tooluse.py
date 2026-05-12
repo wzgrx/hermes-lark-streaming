@@ -13,11 +13,11 @@ from typing import Any
 @dataclass
 class ToolStep:
     name: str
-    status: str          # running | success | error
+    status: str  # running | success | error
     detail: str = ""
     output: str = ""
     error: str = ""
-    result_block: dict[str, Any] | None = None   # {"language": "json"|"text", "content": str}
+    result_block: dict[str, Any] | None = None  # {"language": "json"|"text", "content": str}
     error_block: dict[str, Any] | None = None
     started_at: float = 0.0
     elapsed_ms: float = 0.0
@@ -35,11 +35,10 @@ _SENSITIVE_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 
-_INLINE_ASSIGNMENT_RE = re.compile(
-    r'(^|[\s"\'`])([A-Za-z_][A-Za-z0-9_]*)(=(?:"[^"]*"|\'[^\']*\'|[^\s"\'`]+))'
-)
+_INLINE_ASSIGNMENT_RE = re.compile(r'(^|[\s"\'`])([A-Za-z_][A-Za-z0-9_]*)(=(?:"[^"]*"|\'[^\']*\'|[^\s"\'`]+))')
 _AUTH_HEADER_RE = re.compile(
-    r"(Authorization\s*:\s*(?:Bearer|Basic|Token)\s+)([^\'\"\s]+)", re.IGNORECASE,
+    r"(Authorization\s*:\s*(?:Bearer|Basic|Token)\s+)([^\'\"\s]+)",
+    re.IGNORECASE,
 )
 _SECRET_FLAG_RE = re.compile(
     r'((?:^|[\s"\'`])(--?[A-Za-z0-9][A-Za-z0-9-]*)(=|\s+)("(?:[^"]*)"|\'(?:[^\']*)\'|[^\s"\'`]+))'
@@ -48,21 +47,22 @@ _SECRET_FLAG_RE = re.compile(
 
 def redact_inline_secrets(value: str) -> str:
     """脱敏 key=secret、Authorization header、--flag secret 模式."""
+
     def _redact_assign(m: re.Match) -> str:
-        key = m.group(2)
+        key = str(m.group(2))
         if _SENSITIVE_NAME_RE.search(key):
             return f"{m.group(1)}{key}=[redacted]"
-        return m.group(0)
+        return str(m.group(0))
 
     def _redact_flag(m: re.Match) -> str:
-        flag = re.sub(r'^-+', '', m.group(2))
+        flag = re.sub(r"^-+", "", str(m.group(2)))
         if _SENSITIVE_NAME_RE.search(flag):
             return f"{m.group(1)}{m.group(2)}{m.group(3)}[redacted]"
-        return m.group(0)
+        return str(m.group(0))
 
     return _SECRET_FLAG_RE.sub(
         _redact_flag,
-        _AUTH_HEADER_RE.sub(r'\1[redacted]', _INLINE_ASSIGNMENT_RE.sub(_redact_assign, value)),
+        _AUTH_HEADER_RE.sub(r"\1[redacted]", _INLINE_ASSIGNMENT_RE.sub(_redact_assign, value)),
     )
 
 
@@ -77,11 +77,9 @@ def _sanitize_detail(text: str, sanitizer: str | None) -> str:
         cleaned = redact_inline_secrets(cleaned)
         return _redact_paths(cleaned)
     if sanitizer == "path":
-        return _basename_only(
-            re.sub(r'^(?:from|file|path)\s+', '', cleaned, flags=re.IGNORECASE).strip()
-        )
+        return _basename_only(re.sub(r"^(?:from|file|path)\s+", "", cleaned, flags=re.IGNORECASE).strip())
     if sanitizer == "search":
-        return cleaned.strip('\'"')
+        return cleaned.strip("'\"")
     if sanitizer == "url":
         if cleaned.lower().startswith("from "):
             return cleaned.strip("'\"").replace("from ", "", 1)
@@ -233,13 +231,14 @@ class ToolUseTracker:
             self._session = ToolSession(started_at=time.time())
         if len(self._session.steps) >= self._max_steps:
             return
-        desc = _resolve_tool_descriptor(name)
-        self._session.steps.append(ToolStep(
-            name=name,
-            status="running",
-            detail=detail,
-            started_at=time.time(),
-        ))
+        self._session.steps.append(
+            ToolStep(
+                name=name,
+                status="running",
+                detail=detail,
+                started_at=time.time(),
+            )
+        )
 
     def record_end(self, name: str, *, error: str = "", output: str = "") -> None:
         """通过名字匹配最近的一个 running 步骤来结束."""
@@ -258,16 +257,18 @@ class ToolUseTracker:
                 elif output:
                     step.result_block = _build_display_block(output, "json", sanitizer=sanitizer)
                 return
-        self._session.steps.append(ToolStep(
-            name=name,
-            status="error" if error else "success",
-            detail=error or output,
-            output=output,
-            error=error,
-            started_at=time.time(),
-            error_block=_build_display_block(error, "text", sanitizer=sanitizer) if error else None,
-            result_block=_build_display_block(output, "json", sanitizer=sanitizer) if output else None,
-        ))
+        self._session.steps.append(
+            ToolStep(
+                name=name,
+                status="error" if error else "success",
+                detail=error or output,
+                output=output,
+                error=error,
+                started_at=time.time(),
+                error_block=_build_display_block(error, "text", sanitizer=sanitizer) if error else None,
+                result_block=_build_display_block(output, "json", sanitizer=sanitizer) if output else None,
+            )
+        )
 
     def build_display_steps(self) -> list[dict[str, Any]]:
         """构建用于卡片渲染的步骤列表 — 与 openclaw 结构对齐."""
@@ -281,16 +282,18 @@ class ToolUseTracker:
                 base_title = f"{base_title} ({_format_duration_label(s.elapsed_ms)})"
             sanitizer = desc.get("sanitizer") if desc else None
             detail = _sanitize_detail(s.detail, sanitizer)
-            steps.append({
-                "name": s.name,
-                "title": base_title,
-                "status": s.status,
-                "detail": detail,
-                "output": s.output,
-                "error": s.error,
-                "icon": desc["icon"] if desc else "setting-inter_outlined",
-                "elapsed_ms": s.elapsed_ms,
-                "result_block": None if (desc and desc.get("no_result")) else s.result_block,
-                "error_block": s.error_block,
-            })
+            steps.append(
+                {
+                    "name": s.name,
+                    "title": base_title,
+                    "status": s.status,
+                    "detail": detail,
+                    "output": s.output,
+                    "error": s.error,
+                    "icon": desc["icon"] if desc else "setting-inter_outlined",
+                    "elapsed_ms": s.elapsed_ms,
+                    "result_block": None if (desc and desc.get("no_result")) else s.result_block,
+                    "error_block": s.error_block,
+                }
+            )
         return steps

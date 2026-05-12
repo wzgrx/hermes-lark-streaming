@@ -6,8 +6,6 @@ import os
 from typing import Any
 from unittest.mock import patch
 
-import pytest
-
 from hermes_lark_streaming.config import Config
 
 
@@ -132,7 +130,9 @@ class TestFeishuBaseURL:
 
     def test_from_env(self) -> None:
         cfg = _make_config({})
-        with patch.dict(os.environ, {"FEISHU_APP_ID": "id", "FEISHU_APP_SECRET": "s", "FEISHU_BASE_URL": "https://env.com"}):
+        with patch.dict(
+            os.environ, {"FEISHU_APP_ID": "id", "FEISHU_APP_SECRET": "s", "FEISHU_BASE_URL": "https://env.com"}
+        ):
             assert cfg.feishu_base_url == "https://env.com"
 
 
@@ -150,10 +150,12 @@ class TestPlatformCfg:
             assert result["app_id"] == "lark_id"
 
     def test_feishu_before_lark(self) -> None:
-        cfg = _make_config({
-            "feishu": {"app_id": "feishu_id", "app_secret": "fs"},
-            "lark": {"app_id": "lark_id", "app_secret": "ls"},
-        })
+        cfg = _make_config(
+            {
+                "feishu": {"app_id": "feishu_id", "app_secret": "fs"},
+                "lark": {"app_id": "lark_id", "app_secret": "ls"},
+            }
+        )
         with patch.dict(os.environ, {}, clear=True):
             result = cfg._platform_cfg()
             assert result["app_id"] == "feishu_id"

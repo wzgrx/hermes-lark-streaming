@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from hermes_lark_streaming.text import (
     TextState,
     extract_thinking_content,

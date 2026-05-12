@@ -8,7 +8,6 @@ from typing import Any
 
 import yaml
 
-
 _HERMES_CONFIG_PATH = Path.home() / ".hermes" / "config.yaml"
 
 
@@ -18,7 +17,6 @@ class Config:
     def __init__(self) -> None:
         self._raw: dict[str, Any] | None = None
 
-
     @property
     def enabled(self) -> bool:
         """是否启用流式卡片."""
@@ -27,15 +25,15 @@ class Config:
 
     @property
     def feishu_app_id(self) -> str:
-        return self._platform_cfg().get("app_id", "")
+        return str(self._platform_cfg().get("app_id", ""))
 
     @property
     def feishu_app_secret(self) -> str:
-        return self._platform_cfg().get("app_secret", "")
+        return str(self._platform_cfg().get("app_secret", ""))
 
     @property
     def feishu_base_url(self) -> str:
-        return self._platform_cfg().get("base_url", "https://open.feishu.cn/open-apis")
+        return str(self._platform_cfg().get("base_url", "https://open.feishu.cn/open-apis"))
 
     @property
     def card_duration_sec(self) -> int:
@@ -70,7 +68,6 @@ class Config:
     def _default_footer_fields() -> list[list[str]]:
         return [["status", "elapsed", "context", "model"]]
 
-
     @property
     def env_app_id(self) -> str:
         return os.environ.get("FEISHU_APP_ID") or os.environ.get("LARK_APP_ID") or ""
@@ -78,7 +75,6 @@ class Config:
     @property
     def env_app_secret(self) -> str:
         return os.environ.get("FEISHU_APP_SECRET") or os.environ.get("LARK_APP_SECRET") or ""
-
 
     def _streaming_sec(self) -> dict[str, Any]:
         raw = self._load()

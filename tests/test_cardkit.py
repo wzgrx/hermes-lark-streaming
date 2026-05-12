@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from hermes_lark_streaming.cardkit import (
-    STREAMING_ELEMENT_ID,
     TOOL_PANEL_ELEMENT_ID,
     _build_footer_elements,
     _build_reasoning_panel,
@@ -25,8 +22,8 @@ from hermes_lark_streaming.cardkit import (
     optimize_markdown_style,
 )
 
-
 # --- Markdown 优化 ---
+
 
 class TestOptimizeMarkdownStyle:
     def test_h1_downgraded_to_h4(self) -> None:
@@ -79,12 +76,11 @@ class TestStripInvalidImageKeys:
         assert "img_v3_test" in _strip_invalid_image_keys("![a](img_v3_test)")
 
     def test_non_img_removed(self) -> None:
-        assert "http://example.com/img.png" not in _strip_invalid_image_keys(
-            "![a](http://example.com/img.png)"
-        )
+        assert "http://example.com/img.png" not in _strip_invalid_image_keys("![a](http://example.com/img.png)")
 
 
 # --- 表格处理 ---
+
 
 class TestFindTablesOutsideCodeBlocks:
     def test_no_tables(self) -> None:
@@ -121,6 +117,7 @@ class TestDowngradeTables:
 
 # --- 文本拆分 ---
 
+
 class TestSplitLongText:
     def test_short_text_not_split(self) -> None:
         assert _split_long_text("short") == ["short"]
@@ -145,9 +142,16 @@ class TestSplitLongText:
 # --- 工具面板 ---
 
 _STEP_RUNNING = {
-    "name": "read", "title": "Read", "status": "running",
-    "detail": "", "output": "", "error": "", "icon": "icon",
-    "elapsed_ms": 0, "result_block": None, "error_block": None,
+    "name": "read",
+    "title": "Read",
+    "status": "running",
+    "detail": "",
+    "output": "",
+    "error": "",
+    "icon": "icon",
+    "elapsed_ms": 0,
+    "result_block": None,
+    "error_block": None,
 }
 _STEP_SUCCESS = {**_STEP_RUNNING, "status": "success", "output": "ok", "elapsed_ms": 100}
 
@@ -169,6 +173,7 @@ class TestBuildToolPanel:
 
 
 # --- Footer ---
+
 
 class TestBuildFooterElements:
     def test_empty_data_renders_default_status(self) -> None:
@@ -239,6 +244,7 @@ class TestBuildFooterElements:
 
 # --- 推理面板 ---
 
+
 class TestBuildReasoningPanel:
     def test_without_elapsed(self) -> None:
         panel = _build_reasoning_panel("thinking content")
@@ -252,6 +258,7 @@ class TestBuildReasoningPanel:
 
 
 # --- 数字格式化 ---
+
 
 class TestCompact:
     def test_small_number(self) -> None:
@@ -283,6 +290,7 @@ class TestFormatElapsed:
 
 # --- 工具函数 ---
 
+
 class TestEscapeMd:
     def test_escapes_special_chars(self) -> None:
         result = _escape_md("a`b*c{d}e[f]g<h>i")
@@ -304,6 +312,7 @@ class TestLongestBacktickRun:
 
 
 # --- 完整卡片构建 ---
+
 
 class TestBuildStreamingCardV2:
     def test_structure(self) -> None:

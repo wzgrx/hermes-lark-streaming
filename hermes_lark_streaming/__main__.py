@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .patcher import Patcher
 
 
 def main() -> int:
@@ -122,14 +126,16 @@ def _cmd_status() -> int:
 
     if patched:
         from .patcher import Patcher as _PatcherCls
+
         content = patcher.run_path.read_text(encoding="utf-8")
-        for begin, end in _PatcherCls.MARKERS:
+        for begin, _end in _PatcherCls.MARKERS:
             found = begin in content
             label = begin.replace("# HERMES_LARK_", "").replace("_BEGIN", "").lower()
             print(f"  {label}: {'installed' if found else 'missing'}")
 
     # Check config
     from .config import Config
+
     cfg = Config()
     print(f"Config streaming.enabled: {cfg.enabled}")
     print(f"Feishu credentials: {'configured' if (cfg.env_app_id or cfg.feishu_app_id) else 'MISSING'}")

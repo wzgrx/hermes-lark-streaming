@@ -13,11 +13,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Coroutine
+from collections.abc import Coroutine
+from concurrent.futures import Future as ConcurrentFuture
+from typing import Any
 
 from .cardkit import (
     STREAMING_ELEMENT_ID,
     TOOL_PANEL_ELEMENT_ID,
+    _build_tool_panel,
     _downgrade_tables,
     build_complete_card,
     build_im_fallback_card,
@@ -25,7 +28,6 @@ from .cardkit import (
     build_streaming_card_v2,
     optimize_markdown_style,
 )
-from .cardkit import _build_tool_panel
 from .config import Config
 from .feishu import (
     CARDKIT_CONTENT_FAILED,
@@ -58,15 +60,25 @@ class CardSession:
     """单条消息的卡片会话状态."""
 
     __slots__ = (
-        "message_id", "chat_id", "state",
-        "card_msg_id", "card_id", "use_cardkit",
-        "text", "tool_use", "flush",
-        "reasoning_text", "reasoning_start",
-        "footer", "sequence",
         "_loop",
-        "guard", "image_resolver",
-        "last_tool_use_update", "created_at",
+        "card_id",
+        "card_msg_id",
+        "chat_id",
+        "created_at",
+        "flush",
+        "footer",
+        "guard",
+        "image_resolver",
+        "last_tool_use_update",
+        "message_id",
+        "reasoning_start",
+        "reasoning_text",
+        "sequence",
+        "state",
+        "text",
         "tool_panel_added",
+        "tool_use",
+        "use_cardkit",
     )
 
     def __init__(
@@ -129,11 +141,13 @@ class StreamCardController:
             app_secret = self._cfg.feishu_app_secret or self._cfg.env_app_secret
             if not app_id or not app_secret:
                 raise RuntimeError("feishu credentials not configured")
-            self._client = FeishuClient(FeishuClientConfig(
-                app_id=app_id,
-                app_secret=app_secret,
-                base_url=self._cfg.feishu_base_url,
-            ))
+            self._client = FeishuClient(
+                FeishuClientConfig(
+                    app_id=app_id,
+                    app_secret=app_secret,
+                    base_url=self._cfg.feishu_base_url,
+                )
+            )
             self._initialized = True
 
     def _client_ok(self) -> bool:
@@ -211,15 +225,15 @@ class StreamCardController:
         split = split_reasoning_text(text)
 
         if split.get("reasoning_text") and not split.get("answer_text"):
-            session.reasoning_text = split["reasoning_text"]
+            session.reasoning_text = split["reasoning_text"] or ""
             if not session.reasoning_start:
                 session.reasoning_start = time.time()
         elif split.get("answer_text"):
             if split.get("reasoning_text"):
-                session.reasoning_text = split["reasoning_text"]
+                session.reasoning_text = split["reasoning_text"] or ""
                 if not session.reasoning_start:
                     session.reasoning_start = time.time()
-            session.text.on_partial(split["answer_text"])
+            session.text.on_partial(split["answer_text"] or "")
 
         self._schedule_card_update(session)
 
@@ -263,7 +277,7 @@ class StreamCardController:
 
         split = split_reasoning_text(text)
         if split.get("reasoning_text"):
-            session.reasoning_text = split["reasoning_text"]
+            session.reasoning_text = split["reasoning_text"] or ""
             if not session.reasoning_start:
                 session.reasoning_start = time.time()
 
@@ -304,7 +318,8 @@ class StreamCardController:
             old_session.state = ABORTED
             old_session.flush.mark_completed()
             _logger.info(
-                "on_interrupted: abort old msg=%s", old_message_id[:12],
+                "on_interrupted: abort old msg=%s",
+                old_message_id[:12],
             )
             self._fire_and_forget(self._do_complete(old_session), old_session._loop)
 
@@ -315,7 +330,8 @@ class StreamCardController:
                 self._sessions[new_message_id] = session
                 _logger.info(
                     "on_interrupted: create new msg=%s chat=%s",
-                    new_message_id[:12], chat_id[:12],
+                    new_message_id[:12],
+                    chat_id[:12],
                 )
                 self._fire_and_forget(self._do_create_card(session), loop)
 
@@ -343,12 +359,13 @@ class StreamCardController:
             if redirected_id is not None:
                 _logger.info(
                     "on_completed: redirect msg=%s -> msg=%s",
-                    message_id[:12], redirected_id[:12],
+                    message_id[:12],
+                    redirected_id[:12],
                 )
                 session = self._get_active_session(redirected_id)
             if session is None:
                 return False
-            message_id = redirected_id
+            message_id = redirected_id or message_id
 
         # 卡片创建失败 → 交回 gateway 正常回复
         if session.state == FAILED:
@@ -358,7 +375,10 @@ class StreamCardController:
 
         _logger.info(
             "on_completed: msg=%s has_card=%s state=%s use_cardkit=%s",
-            message_id[:12], bool(session.card_msg_id), session.state, session.use_cardkit,
+            message_id[:12],
+            bool(session.card_msg_id),
+            session.state,
+            session.use_cardkit,
         )
 
         if answer:
@@ -382,9 +402,7 @@ class StreamCardController:
         if session.guard.should_skip("_schedule_card_update"):
             return
 
-        session.flush.schedule_update(
-            lambda: self._do_update_card(session)
-        )
+        session.flush.schedule_update(lambda: self._do_update_card(session))
 
     def _schedule_tool_use_status_update(self, session: CardSession) -> None:
         if not session.use_cardkit or not session.card_id:
@@ -393,9 +411,7 @@ class StreamCardController:
         if now - session.last_tool_use_update < 1.5:
             return
         session.last_tool_use_update = now
-        session.flush.schedule_update(
-            lambda: self._do_tool_use_status_update(session)
-        )
+        session.flush.schedule_update(lambda: self._do_tool_use_status_update(session))
 
     async def _do_create_card(self, session: CardSession) -> None:
         if session.state != IDLE:
@@ -404,6 +420,7 @@ class StreamCardController:
 
         try:
             await self._ensure_init()
+            assert self._client is not None
             if session.image_resolver is None and self._client:
                 session.image_resolver = ImageResolver(
                     client=self._client,
@@ -414,7 +431,8 @@ class StreamCardController:
                 card = build_streaming_card_v2(show_tool_use=False)
                 card_id = await self._client.cardkit_create(card)
                 card_msg_id = await self._client.reply_card_by_id(
-                    session.message_id, card_id,
+                    session.message_id,
+                    card_id,
                 )
                 session.card_id = card_id
                 session.card_msg_id = card_msg_id
@@ -423,7 +441,8 @@ class StreamCardController:
             except FeishuAPIError:
                 card = build_im_fallback_card()
                 card_msg_id = await self._client.reply_card(
-                    session.message_id, card,
+                    session.message_id,
+                    card,
                 )
                 session.card_msg_id = card_msg_id
                 session.use_cardkit = False
@@ -434,7 +453,9 @@ class StreamCardController:
                 session.state = STREAMING
             _logger.info(
                 "card created: msg=%s cardkit=%s card_id=%s",
-                session.message_id[:12], session.use_cardkit, (session.card_id or "")[:12],
+                session.message_id[:12],
+                session.use_cardkit,
+                (session.card_id or "")[:12],
             )
         except Exception:
             _logger.exception("_do_create_card failed")
@@ -452,7 +473,8 @@ class StreamCardController:
         if not session.text.is_dirty(display):
             _logger.info(
                 "update_card skipped (not dirty): msg=%s len=%d",
-                session.message_id[:12], len(display),
+                session.message_id[:12],
+                len(display),
             )
             return
 
@@ -461,11 +483,14 @@ class StreamCardController:
 
         _logger.info(
             "update_card: msg=%s seq=%d len=%d cardkit=%s",
-            session.message_id[:12], session.sequence + 1,
-            len(display), session.use_cardkit,
+            session.message_id[:12],
+            session.sequence + 1,
+            len(display),
+            session.use_cardkit,
         )
 
         try:
+            assert self._client is not None
             if session.use_cardkit and session.card_id:
                 optimized = _downgrade_tables(optimize_markdown_style(display))
                 session.sequence += 1
@@ -512,36 +537,45 @@ class StreamCardController:
         if not session.card_id or session.state in _TERMINAL:
             return
         try:
+            assert self._client is not None
             tool_steps = session.tool_use.build_display_steps()
             panel = _build_tool_panel(
-                tool_steps, session.tool_use.elapsed_ms,
+                tool_steps,
+                session.tool_use.elapsed_ms,
             )
             if not session.tool_panel_added:
-                actions = [{
-                    "action": "add_elements",
-                    "params": {
-                        "type": "insert_before",
-                        "target_element_id": STREAMING_ELEMENT_ID,
-                        "elements": [panel],
-                    },
-                }]
+                actions = [
+                    {
+                        "action": "add_elements",
+                        "params": {
+                            "type": "insert_before",
+                            "target_element_id": STREAMING_ELEMENT_ID,
+                            "elements": [panel],
+                        },
+                    }
+                ]
             else:
-                actions = [{
-                    "action": "update_element",
-                    "params": {
-                        "element_id": TOOL_PANEL_ELEMENT_ID,
-                        "element": panel,
-                    },
-                }]
+                actions = [
+                    {
+                        "action": "update_element",
+                        "params": {
+                            "element_id": TOOL_PANEL_ELEMENT_ID,
+                            "element": panel,
+                        },
+                    }
+                ]
             session.sequence += 1
             _logger.info(
                 "tool_update: msg=%s seq=%d action=%s steps=%d",
-                session.message_id[:12], session.sequence,
+                session.message_id[:12],
+                session.sequence,
                 "add" if not session.tool_panel_added else "update",
                 len(tool_steps),
             )
             await self._client.cardkit_batch_update(
-                session.card_id, actions, sequence=session.sequence,
+                session.card_id,
+                actions,
+                sequence=session.sequence,
             )
             session.tool_panel_added = True
         except Exception as e:
@@ -563,8 +597,10 @@ class StreamCardController:
         display = session.text.display_text
         _logger.info(
             "do_complete: msg=%s state=%s display_len=%d cardkit=%s seq=%d",
-            session.message_id[:12], session.state,
-            len(display), session.use_cardkit,
+            session.message_id[:12],
+            session.state,
+            len(display),
+            session.use_cardkit,
             session.sequence,
         )
         if session.image_resolver:
@@ -595,13 +631,17 @@ class StreamCardController:
 
         for attempt in range(3):
             try:
+                assert self._client is not None
                 if session.use_cardkit and session.card_id:
                     await self._client.cardkit_close_streaming(
-                        session.card_id, sequence=session.sequence + 1,
+                        session.card_id,
+                        sequence=session.sequence + 1,
                     )
                     session.sequence += 1
                     await self._client.cardkit_update(
-                        session.card_id, card, sequence=session.sequence + 1,
+                        session.card_id,
+                        card,
+                        sequence=session.sequence + 1,
                     )
                     session.sequence += 1
                 elif session.card_msg_id:
@@ -610,32 +650,39 @@ class StreamCardController:
                 return True
             except FeishuAPIError as e:
                 _logger.warning(
-                    "cardkit complete attempt %d failed (FeishuAPIError): "
-                    "code=%s msg=%s card_id=%s seq=%d",
-                    attempt, e.code, e,
-                    session.card_id, session.sequence,
+                    "cardkit complete attempt %d failed (FeishuAPIError): code=%s msg=%s card_id=%s seq=%d",
+                    attempt,
+                    e.code,
+                    e,
+                    session.card_id,
+                    session.sequence,
                     exc_info=True,
                 )
                 if session.guard.terminate("_do_complete", e):
                     return False
                 if attempt < 2:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                 continue
             except Exception as e:
                 _logger.warning(
-                    "cardkit complete attempt %d failed: %s: %s "
-                    "card_id=%s card_msg_id=%s seq=%d",
-                    attempt, type(e).__name__, e,
-                    session.card_id, session.card_msg_id, session.sequence,
+                    "cardkit complete attempt %d failed: %s: %s card_id=%s card_msg_id=%s seq=%d",
+                    attempt,
+                    type(e).__name__,
+                    e,
+                    session.card_id,
+                    session.card_msg_id,
+                    session.sequence,
                     exc_info=True,
                 )
                 if attempt < 2:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                 continue
 
         _logger.error(
             "cardkit complete failed after 3 attempts: card_id=%s card_msg_id=%s seq=%d",
-            session.card_id, session.card_msg_id, session.sequence,
+            session.card_id,
+            session.card_msg_id,
+            session.sequence,
         )
         session.state = FAILED
         return False
@@ -653,16 +700,13 @@ class StreamCardController:
 
     def _prune_stale_sessions(self) -> None:
         now = time.time()
-        stale = [
-            mid for mid, s in self._sessions.items()
-            if mid is not None and now - s.created_at > self._session_ttl
-        ]
+        stale = [mid for mid, s in self._sessions.items() if mid is not None and now - s.created_at > self._session_ttl]
         for mid in stale:
             _logger.warning("pruning stale session: msg=%s", mid[:12])
             self._cleanup(mid)
 
     @staticmethod
-    def _on_bg_task_done(fut: asyncio.Future) -> None:
+    def _on_bg_task_done(fut: ConcurrentFuture) -> None:
         try:
             fut.result()
         except Exception:
