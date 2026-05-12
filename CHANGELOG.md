@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.5] - 2026-05-12
+
+### 修复
+
+- 修复 `_do_update_card` 在流式模式关闭后仍调用 `cardkit_stream_element`，产生大量 300309 错误刷屏日志的问题。 Fixes #7. (#9) Thanks @Mxin-9527.
+- 修复 `_do_complete` 重试全失败后会话状态被错误设为 `COMPLETED`，应为 `FAILED`。 Fixes #7. (#9)
+- 修复 markdown 表格降级未应用到所有渲染路径的问题。 (#8) Thanks @Bandersnatch0x.
+
+### 变更
+
+- 新增 ruff lint/format 和 mypy 类型检查，统一代码风格。 (#6)
+
+### Fixes
+
+- Fix `_do_update_card` calling `cardkit_stream_element` after streaming mode closed, causing excessive 300309 errors in logs. Fixes #7. (#9) Thanks @Mxin-9527.
+- Fix `_do_complete` incorrectly setting session state to `COMPLETED` after all retries failed — should be `FAILED`. Fixes #7. (#9)
+- Fix markdown table downgrade not applied to all render paths. (#8) Thanks @Bandersnatch0x.
+
+### Changed
+
+- Add ruff lint/format and mypy type checking for consistent code style. (#6)
+
+---
+
 ## [0.4.3] - 2026-05-12
 
 ### 修复

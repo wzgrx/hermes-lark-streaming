@@ -209,6 +209,16 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 - 插件与 Hermes 内置飞书适配器互补工作：插件负责流式卡片，内置适配器负责消息收发
 - 仅对飞书平台生效，其他平台不受影响
 
+## 贡献者
+
+感谢以下贡献者的 Issue 和 PR：
+
+<a href="https://github.com/Mxin-9527"><img src="https://avatars.githubusercontent.com/u/178271393?v=4&s=64" width="48" height="48" style="border-radius:50%" /></a>
+<a href="https://github.com/gitteeee"><img src="https://avatars.githubusercontent.com/u/128769493?v=4&s=64" width="48" height="48" style="border-radius:50%" /></a>
+<a href="https://github.com/Bandersnatch0x"><img src="https://avatars.githubusercontent.com/u/13325067?v=4&s=64" width="48" height="48" style="border-radius:50%" /></a>
+
+---
+
 ## 许可证
 
 [MIT](LICENSE)
