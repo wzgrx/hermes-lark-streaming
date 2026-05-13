@@ -122,3 +122,39 @@ def on_message_interrupted(
         new_message_id=new_message_id,
         chat_id=chat_id,
     )
+
+
+@_safe_hook(default_return=False)
+def on_command_response(
+    *,
+    ctrl: Any,
+    message_id: str,
+    chat_id: str,
+    command: str,
+    response: str,
+    platform: str,
+) -> bool:
+    """[注入点 8] 命令完成 — 为 /status, /help 等发送卡片.
+
+    Args:
+        message_id: 消息 ID
+        chat_id: 聊天 ID
+        command: 命令名称 (如 "status", "help")
+        response: 命令输出文本
+        platform: 平台名称 (如 "feishu", "telegram")
+
+    Returns:
+        True 如果卡片已发送（调用方应抑制文本响应），False 否则
+    """
+    # 仅在飞书平台发送卡片
+    if platform.lower() not in ("feishu", "lark"):
+        return False
+
+    return bool(
+        ctrl.on_command_response(
+            message_id=message_id,
+            chat_id=chat_id,
+            command=command,
+            response=response,
+        )
+    )

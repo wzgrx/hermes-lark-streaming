@@ -12,7 +12,7 @@ _logger = logging.getLogger("hermes_lark_streaming")
 
 PREFIX = "HERMES_LARK"
 
-_HOOK_NAMES = ["START", "COMPLETE", "TOOL", "ANSWER", "THINKING", "ABORT", "INTERRUPT"]
+_HOOK_NAMES = ["START", "COMPLETE", "TOOL", "ANSWER", "THINKING", "ABORT", "INTERRUPT", "CMD_STATUS", "CMD_HELP"]
 MARKERS: list[tuple[str, str]] = [(f"# {PREFIX}_{n}_BEGIN", f"# {PREFIX}_{n}_END") for n in _HOOK_NAMES]
 
 MK_START, MK_START_END = MARKERS[0]
@@ -22,6 +22,8 @@ MK_ANSWER, MK_ANSWER_END = MARKERS[3]
 MK_THINKING, MK_THINKING_END = MARKERS[4]
 MK_ABORT, MK_ABORT_END = MARKERS[5]
 MK_INTERRUPT, MK_INTERRUPT_END = MARKERS[6]
+MK_CMD_STATUS, MK_CMD_STATUS_END = MARKERS[7]
+MK_CMD_HELP, MK_CMD_HELP_END = MARKERS[8]
 
 _BACKUP_SUFFIX = ".hermes_lark.bak"
 
@@ -167,6 +169,60 @@ def _interrupt_hook(indent: str) -> str:
     )
 
 
+def _cmd_status_hook(indent: str) -> str:
+    """Hook for /status command return — 捕获命令返回值并发送卡片."""
+    return _make_hook(
+        indent,
+        MK_CMD_STATUS,
+        MK_CMD_STATUS_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_command_response",
+            "    _platform = getattr(getattr(event, 'source', None), 'platform', None)",
+            "    _platform_str = getattr(_platform, 'value', str(_platform)) if _platform else ''",
+            "    if on_command_response(",
+            "        message_id=event.message_id,",
+            "        chat_id=source.chat_id,",
+            "        command='status',",
+            "        response='\\n'.join(lines),",
+            "        platform=_platform_str,",
+            "    ):",
+            "        return ''",
+            "except Exception:",
+            "    pass",
+        ],
+    )
+
+
+def _cmd_help_hook(indent: str) -> str:
+    """Hook for /help command return — 捕获命令返回值并发送卡片."""
+    return _make_hook(
+        indent,
+        MK_CMD_HELP,
+        MK_CMD_HELP_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_command_response",
+            "    _platform = getattr(getattr(event, 'source', None), 'platform', None)",
+            "    _platform_str = getattr(_platform, 'value', str(_platform)) if _platform else ''",
+            "    _result = _telegramize_command_mentions(",
+            "        '\\n'.join(lines),",
+            "        getattr(getattr(event, 'source', None), 'platform', None),",
+            "    )",
+            "    if on_command_response(",
+            "        message_id=event.message_id,",
+            "        chat_id=source.chat_id,",
+            "        command='help',",
+            "        response=_result,",
+            "        platform=_platform_str,",
+            "    ):",
+            "        return ''",
+            "except Exception:",
+            "    pass",
+        ],
+    )
+
+
 class PatcherError(RuntimeError):
     pass
 
@@ -268,6 +324,8 @@ class Patcher:
             ("tool", "tool", _find_func_body(tree, lines, "progress_callback")),
             ("answer", "answer", _find_func_body(tree, lines, "_stream_delta_cb")),
             ("thinking", "thinking", _find_func_body(tree, lines, "_interim_assistant_cb")),
+            ("cmd_status", "cmd_status", _find_status_command_return(tree, lines)),
+            ("cmd_help", "cmd_help", _find_help_command_return(tree, lines)),
         ]
 
         sites: list[tuple[int, str, str]] = []
@@ -286,6 +344,8 @@ class Patcher:
             "tool": _tool_hook,
             "answer": _answer_hook,
             "thinking": _thinking_hook,
+            "cmd_status": _cmd_status_hook,
+            "cmd_help": _cmd_help_hook,
         }
         for idx, indent, fn_name in sites:
             hook = _HOOK_FNS[fn_name](indent)
@@ -381,3 +441,61 @@ def _safe_indent(lines: list[str], lineno: int) -> str:
         if lines[i].strip():
             return lines[i][: len(lines[i]) - len(lines[i].lstrip())]
     return ""
+
+
+def _find_command_return(
+    tree: ast.Module,
+    lines: list[str],
+    func_name: str,
+    return_pattern: str | None = None,
+) -> tuple[int, str] | None:
+    """查找命令处理函数的 return 语句位置.
+
+    Args:
+        tree: AST 树
+        lines: 源代码行
+        func_name: 函数名 (如 "_handle_status_command")
+        return_pattern: 可选的 return 语句特征（如 "return '\\n'.join(lines)"）
+
+    Returns:
+        (line_number, indent) 或 None
+    """
+    # 找到函数定义
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name == func_name:
+            # 查找最后一个 return 语句（通常是主返回）
+            returns = [
+                n
+                for n in ast.walk(node)
+                if isinstance(n, ast.Return)
+                and n.value is not None
+                and n.lineno is not None
+            ]
+            if not returns:
+                return None
+
+            # 如果有模式，尝试匹配
+            if return_pattern:
+                for ret in reversed(returns):
+                    lineno = ret.lineno - 1
+                    if 0 <= lineno < len(lines) and return_pattern in lines[lineno]:
+                        indent = _safe_indent(lines, lineno)
+                        return lineno, indent
+
+            # 否则返回最后一个 return
+            target = max(returns, key=lambda x: x.lineno or 0)
+            lineno = target.lineno - 1
+            indent = _safe_indent(lines, lineno)
+            return lineno, indent
+
+    return None
+
+
+def _find_status_command_return(tree: ast.Module, lines: list[str]) -> tuple[int, str] | None:
+    """查找 _handle_status_command 的 return 语句位置."""
+    return _find_command_return(tree, lines, "_handle_status_command", 'return "\\n".join(lines)')
+
+
+def _find_help_command_return(tree: ast.Module, lines: list[str]) -> tuple[int, str] | None:
+    """查找 _handle_help_command 的 return 语句位置."""
+    return _find_command_return(tree, lines, "_handle_help_command", "return _telegramize_command_mentions")

@@ -340,6 +340,65 @@ class StreamCardController:
             if val == old_message_id:
                 self._interrupt_map[key] = new_message_id
 
+    def on_command_response(
+        self,
+        *,
+        message_id: str,
+        chat_id: str,
+        command: str,
+        response: str,
+    ) -> bool:
+        """原生命令响应 — 为 /status, /help 等发送卡片.
+
+        Args:
+            message_id: 消息 ID
+            chat_id: 聊天 ID
+            command: 命令名称
+            response: 命令输出文本
+
+        Returns:
+            True 如果卡片成功发送，False 否则
+        """
+        if not self.enabled:
+            return False
+
+        from .command_cards import build_command_card
+
+        # 仅支持白名单命令
+        card_dict = build_command_card(command, response)
+        if card_dict is None:
+            _logger.debug("on_command_response: cmd=%s not supported, skip", command)
+            return False
+
+        loop = self._get_loop()
+        if loop is None:
+            return False
+
+        # 直接发送静态卡片，不需要创建 session
+        async def _send_command_card() -> None:
+            try:
+                await self._ensure_init()
+                if self._client is None:
+                    return
+
+                # 直接回复卡片到消息
+                await self._client.reply_card(message_id, card_dict)
+                _logger.info(
+                    "on_command_response: sent card for cmd=%s msg=%s",
+                    command,
+                    message_id[:12],
+                )
+            except Exception as exc:
+                _logger.warning(
+                    "on_command_response: failed cmd=%s msg=%s: %s",
+                    command,
+                    message_id[:12],
+                    exc,
+                )
+
+        self._fire_and_forget(_send_command_card(), loop)
+        return True
+
     def on_completed(
         self,
         *,
