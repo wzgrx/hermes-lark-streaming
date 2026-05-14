@@ -20,6 +20,10 @@ $HERMES_PYTHON -m hermes_lark_streaming status     # Show patch status
 $HERMES_PYTHON -m pip install -e .
 $HERMES_PYTHON -m pip install -e ".[dev]"  # test dependencies
 
+# Lint
+$HERMES_PYTHON -m ruff check hermes_lark_streaming/
+$HERMES_PYTHON -m mypy hermes_lark_streaming/
+
 # Run tests (local run.py first, CI auto-downloads from GitHub)
 $HERMES_PYTHON -m pytest tests/ -v
 ```
