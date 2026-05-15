@@ -25,7 +25,7 @@ class Config:
 
     @property
     def show_reasoning(self) -> bool:
-        """是否展示推理过程（display.feishu.show_reasoning → display.show_reasoning）."""
+        """是否展示推理过程（display.platforms.feishu.show_reasoning → display.show_reasoning）."""
         raw = self._load()
         display = raw.get("display")
         if not isinstance(display, dict):

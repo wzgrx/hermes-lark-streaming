@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2026-05-15
+
+### Highlights
+
+- 原生推理流式展示：实时展示模型原生推理过程，打字机效果逐字输出。
+  ![reasoning](assets/reasoning.jpg)
+
+  开启方式（二选一）：
+  - 在 `~/.hermes/config.yaml` 中配置 `display.platforms.feishu.show_reasoning: true`
+  - 在对话中发送 `/reasoning on` 即可临时开启
+
+### 新增
+
+- 新增第 8 个 hook `on_reasoning_delta`，注入 `agent.reasoning_callback`，接收模型原生推理增量。
+- `Config.show_reasoning` 配置项，支持平台级（`display.platforms.feishu.show_reasoning`）和全局（`display.show_reasoning`）两级配置。
+- `build_streaming_card_v2` 新增 `show_reasoning` 参数，启用时预置空 reasoning 面板。
+- reasoning 面板标题：空内容时显示"Thinking/思考中"，有内容后切换为"Thought/思考"。
+
+### 变更
+
+- 统一三处卡片元素顺序为 reasoning → tool → answer。
+- `_build_reasoning_panel` 新增 `expanded`、`element_id` 参数，标题改为 `plain_text` + `text_color: grey` + `text_size: notation`，与工具面板风格一致。
+- IM fallback 路径 reasoning 展示条件从 `if reasoning_text and not text` 改为 `if reasoning_text`，始终展示推理内容。
+
+### Highlights
+
+- Native reasoning streaming: display model's native reasoning process in real-time with typewriter effect.
+  ![reasoning](assets/reasoning.jpg)
+
+  Enable (either option):
+  - Set `display.feishu.show_reasoning: true` in `~/.hermes/config.yaml`
+  - Send `/reasoning on` in the conversation to enable temporarily
+
+### Added
+
+- Add 8th hook `on_reasoning_delta` that injects `agent.reasoning_callback` to receive native reasoning deltas.
+- `Config.show_reasoning` property with platform-level (`display.platforms.feishu.show_reasoning`) and global (`display.show_reasoning`) fallback.
+- `build_streaming_card_v2` gains `show_reasoning` param — when enabled, pre-adds an empty reasoning panel.
+- Reasoning panel title shows "Thinking" when empty, switches to "Thought" when content arrives.
+
+### Changed
+
+- Unify element order to reasoning → tool → answer across all card builders.
+- `_build_reasoning_panel` gains `expanded` and `element_id` params; title changed to `plain_text` + `text_color: grey` + `text_size: notation` to match tool panel style.
+- IM fallback reasoning display condition changed from `if reasoning_text and not text` to `if reasoning_text` — always show reasoning content.
+
+---
+
 ## [0.4.5] - 2026-05-12
 
 ### 修复
