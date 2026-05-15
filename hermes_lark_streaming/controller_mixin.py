@@ -39,8 +39,6 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger("hermes_lark_streaming")
 
-# ── Session state constants ──────────────────────────────────────────────────
-
 IDLE = "idle"
 CREATING = "creating"
 STREAMING = "streaming"

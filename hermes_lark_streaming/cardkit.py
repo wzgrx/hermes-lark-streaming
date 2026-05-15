@@ -20,8 +20,6 @@ _LOADING_ELEMENT_ID = "loading_icon"
 _LOADING_IMG_KEY = "img_v3_02vb_496bec09-4b43-4773-ad6b-0cdd103cd2bg"
 
 
-
-
 def _collapsible_panel(
     *,
     expanded: bool,
