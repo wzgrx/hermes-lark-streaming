@@ -2,7 +2,7 @@
 
 ## Project
 
-Hermes Gateway plugin that injects 7 hooks into `~/.hermes/hermes-agent/gateway/run.py` via AST patching to provide real-time streaming Feishu/Lark CardKit v2.0 cards with typewriter effect.
+Hermes Gateway plugin that injects 8 hooks into `~/.hermes/hermes-agent/gateway/run.py` via AST patching to provide real-time streaming Feishu/Lark CardKit v2.0 cards with typewriter effect.
 
 ## Commands
 
@@ -38,6 +38,7 @@ gateway/run.py (Hermes)
        ├─ on_tool_updated       → controller.on_tool_update()
        ├─ on_answer_delta       → controller.on_answer()
        ├─ on_thinking_delta     → controller.on_thinking()
+       ├─ on_reasoning_delta    → controller.on_reasoning()
        ├─ on_message_interrupted → controller.on_interrupted()
        ├─ on_message_completed  → controller.on_completed()
        └─ on_message_aborted    → controller.on_aborted()
@@ -65,6 +66,6 @@ Card templates (cardkit.py) — builds Feishu card JSON
 - Hermes `>= 0.11.0` (2026.4.23) required. `patcher.py` targets specific function names in Hermes's `gateway/run.py` (`_handle_message_with_agent`, `progress_callback`, `_stream_delta_cb`, `_interim_assistant_cb`). If Hermes changes these, `verify` will catch it.
 - The interrupt hook is injected at the `"Restart typing indicator"` comment in `_run_agent`. It fires when `was_interrupted and next_message_id` are both truthy. The `_interrupt_map` redirects `on_completed(old_id)` to the new session, handling nested interrupts (A→B→C).
 - The `_thinking_hook` has a `not already_streamed` guard (patcher.py:103) — thinking deltas are skipped once answer streaming has begun.
-- Reasoning display depends on upstream providing `<thinking>`/`<thought>`/`<antthinking>` tags or `Reasoning:\n` prefix in text. The Hermes gateway does NOT set `reasoning_callback` on the agent, so native API thinking blocks are not available during streaming.
+- Reasoning display depends on upstream providing `<thinking>`/`<thought>`/`<antthinking>` tags or `Reasoning:\n` prefix in text. Native API reasoning blocks (Anthropic extended thinking, DeepSeek reasoning_content) are available via `on_reasoning_delta` hook when `display.platforms.feishu.show_reasoning` is enabled.
 - CardKit v2.0 elements (collapsible_panel, streaming_mode) only work with `"schema": "2.0"` cards. IM fallback path uses v1 card format.
 - Commit messages: body should use bullet list format (unnumbered `- item`).

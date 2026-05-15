@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   开启方式（二选一）：
   - 在 `~/.hermes/config.yaml` 中配置 `display.platforms.feishu.show_reasoning: true`
-  - 在对话中发送 `/reasoning on` 即可临时开启
+  - 在对话中发送 `/reasoning on` 即可开启
 
 ### 新增
 
