@@ -37,8 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ![reasoning](assets/reasoning.jpg)
 
   Enable (either option):
-  - Set `display.feishu.show_reasoning: true` in `~/.hermes/config.yaml`
-  - Send `/reasoning on` in the conversation to enable temporarily
+  - Set `display.platforms.feishu.show_reasoning: true` in `~/.hermes/config.yaml`
+  - Send `/reasoning on` in the conversation to enable
 
 ### Added
 
