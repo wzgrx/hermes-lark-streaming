@@ -1,6 +1,6 @@
 """AST Patch 注入的 Hook 函数.
 
-这些函数从 gateway/run.py 的 7 个注入点被调用.
+这些函数从 gateway/run.py 的 8 个注入点被调用.
 它们只做一件事：检查配置 → 调用 controller.
 """
 
@@ -104,14 +104,14 @@ def on_thinking_delta(*, ctrl: Any, message_id: str, text: str) -> bool:
 
 @_safe_hook(default_return=False, log_level="debug")
 def on_reasoning_delta(*, ctrl: Any, message_id: str, text: str) -> bool:
-    """[注入点] reasoning_callback — native model reasoning delta."""
+    """[注入点 6] reasoning_callback — native model reasoning delta."""
     ctrl.on_reasoning(message_id=message_id, text=text)
     return True
 
 
 @_safe_hook()
 def on_message_aborted(*, ctrl: Any, message_id: str) -> None:
-    """[注入点 6] stale return None 前 — message.aborted."""
+    """[注入点 7] stale return None 前 — message.aborted."""
     ctrl.on_aborted(message_id=message_id)
 
 
@@ -123,7 +123,7 @@ def on_message_interrupted(
     new_message_id: str,
     chat_id: str,
 ) -> None:
-    """[注入点 7] interrupt 发生 — message.interrupted."""
+    """[注入点 8] interrupt 发生 — message.interrupted."""
     ctrl.on_interrupted(
         old_message_id=message_id,
         new_message_id=new_message_id,
