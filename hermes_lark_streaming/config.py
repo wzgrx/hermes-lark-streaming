@@ -25,9 +25,11 @@ class Config:
 
     @property
     def show_reasoning(self) -> bool:
-        """是否展示推理过程（display.platforms.feishu.show_reasoning → display.show_reasoning）."""
-        raw = self._load()
-        display = raw.get("display")
+        """是否展示推理过程（display.platforms.feishu.show_reasoning → display.show_reasoning）.
+
+        每次都从磁盘重读，因为 /reasoning 命令会在运行时修改配置文件.
+        """
+        display = self._reload().get("display")
         if not isinstance(display, dict):
             return False
         platforms = display.get("platforms")
@@ -124,3 +126,10 @@ class Config:
         else:
             self._raw = {}
         return self._raw
+
+    def _reload(self) -> dict[str, Any]:
+        """从磁盘重新读取配置（不更新缓存），供运行时可变的配置项使用."""
+        if _HERMES_CONFIG_PATH.exists():
+            text = _HERMES_CONFIG_PATH.read_text(encoding="utf-8")
+            return yaml.safe_load(text) or {}
+        return {}

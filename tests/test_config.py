@@ -137,40 +137,46 @@ class TestFeishuBaseURL:
 
 
 class TestShowReasoning:
+    def _make_reasoning_config(self, raw: dict[str, Any]) -> Config:
+        """Create a Config with _reload mocked to return given raw dict."""
+        cfg = Config()
+        cfg._reload = lambda: raw  # type: ignore[assignment]
+        return cfg
+
     def test_platform_level_true(self) -> None:
-        cfg = _make_config({"display": {"platforms": {"feishu": {"show_reasoning": True}}}})
+        cfg = self._make_reasoning_config({"display": {"platforms": {"feishu": {"show_reasoning": True}}}})
         assert cfg.show_reasoning is True
 
     def test_platform_level_false(self) -> None:
-        cfg = _make_config({"display": {"platforms": {"feishu": {"show_reasoning": False}}}})
+        cfg = self._make_reasoning_config({"display": {"platforms": {"feishu": {"show_reasoning": False}}}})
         assert cfg.show_reasoning is False
 
     def test_global_fallback_true(self) -> None:
-        cfg = _make_config({"display": {"show_reasoning": True}})
+        cfg = self._make_reasoning_config({"display": {"show_reasoning": True}})
         assert cfg.show_reasoning is True
 
     def test_global_fallback_false(self) -> None:
-        cfg = _make_config({"display": {"show_reasoning": False}})
+        cfg = self._make_reasoning_config({"display": {"show_reasoning": False}})
         assert cfg.show_reasoning is False
 
     def test_default_false(self) -> None:
-        cfg = _make_config({})
+        cfg = self._make_reasoning_config({})
         assert cfg.show_reasoning is False
 
     def test_display_not_dict(self) -> None:
-        cfg = _make_config({"display": "invalid"})
+        cfg = self._make_reasoning_config({"display": "invalid"})
         assert cfg.show_reasoning is False
 
     def test_platforms_not_dict(self) -> None:
-        cfg = _make_config({"display": {"platforms": "invalid"}})
+        cfg = self._make_reasoning_config({"display": {"platforms": "invalid"}})
         assert cfg.show_reasoning is False
 
     def test_feishu_section_missing_key(self) -> None:
-        cfg = _make_config({"display": {"platforms": {"feishu": {"other": True}}}})
+        cfg = self._make_reasoning_config({"display": {"platforms": {"feishu": {"other": True}}}})
         assert cfg.show_reasoning is False
 
     def test_platform_takes_priority_over_global(self) -> None:
-        cfg = _make_config({
+        cfg = self._make_reasoning_config({
             "display": {
                 "platforms": {"feishu": {"show_reasoning": False}},
                 "show_reasoning": True,
@@ -179,7 +185,7 @@ class TestShowReasoning:
         assert cfg.show_reasoning is False
 
     def test_no_display_section(self) -> None:
-        cfg = _make_config({"streaming": {"enabled": True}})
+        cfg = self._make_reasoning_config({"streaming": {"enabled": True}})
         assert cfg.show_reasoning is False
 
 
