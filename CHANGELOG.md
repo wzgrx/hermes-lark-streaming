@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.2] - 2026-05-15
+
+### 变更
+
+- 拆分 `cardkit.py`（646 行）为 `cardkit.py` + `cardkit_md.py` + `cardkit_i18n.py`，按职责分离。
+- 拆分 `controller.py`（797 行）为 `controller.py` + `controller_mixin.py`，异步卡片操作提取为 `ControllerMixin`。
+
+### 修复
+
+- `show_reasoning` 配置项改为每次访问时重新读取配置文件，支持运行时热更新，无需重启。
+
+### Changed
+
+- Split `cardkit.py` (646 lines) into `cardkit.py` + `cardkit_md.py` + `cardkit_i18n.py` by responsibility.
+- Split `controller.py` (797 lines) into `controller.py` + `controller_mixin.py`, extracting async card operations into `ControllerMixin`.
+
+### Fixed
+
+- `show_reasoning` config now re-reads the config file on every access, allowing runtime hot-reload without restart.
+
+---
+
 ## [0.5.0] - 2026-05-15
 
 ### Highlights
