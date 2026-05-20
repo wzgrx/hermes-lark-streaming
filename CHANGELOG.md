@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-05-20
+
+### Highlights
+
+- 线性模式：按事件顺序动态渲染思考、工具调用、回答内容（推理、工具调用不再收纳置顶）
+  ![linear](assets/linear.jpg)
+- 开启方式：在 `~/.hermes/config.yaml` 中添加：
+  ```yaml
+  streaming:
+    enabled: true
+    linear: true
+  ```
+- 注意：线性模式将在稳定后作为默认模式
+
+### 新增
+
+- `LinearState` 扁平段管理器，按事件顺序管理 reasoning / answer / tool 段。
+- `_do_linear_flush` 三步流水线：batch 创建元素 → stream 文本 → batch 更新 tool 面板。
+- `build_linear_complete_card` 按段顺序渲染完成态卡片。
+
+### Highlights
+
+- Linear single-card mode: dynamically renders reasoning / answer / tool elements within one CardKit v2.0 card in event arrival order, supporting multi-round conversations with typewriter effect throughout.
+  ![linear](assets/linear.jpg)
+- Enable by adding to `~/.hermes/config.yaml`:
+  ```yaml
+  streaming:
+    enabled: true
+    linear: true
+  ```
+- Note: Linear mode will become the default mode once stabilized
+
+### Added
+
+- `LinearState` flat segment manager for reasoning / answer / tool segments in event arrival order.
+- `_do_linear_flush` three-step pipeline: batch create elements → stream text → batch update tool panels.
+- `build_linear_complete_card` renders completion card in segment order.
+
+---
+
 ## [0.5.2] - 2026-05-15
 
 ### 变更
