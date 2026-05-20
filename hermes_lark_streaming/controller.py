@@ -18,6 +18,7 @@ from concurrent.futures import Future as ConcurrentFuture
 from typing import TYPE_CHECKING, Any
 
 from .config import Config
+from .controller_linear_mixin import LinearControllerMixin
 from .controller_mixin import (
     _TERMINAL,
     ABORTED,
@@ -30,6 +31,7 @@ from .feishu import (
     FeishuClientConfig,
 )
 from .flush import PATCH_MS, FlushController
+from .linear import LinearState
 from .text import TextState, split_reasoning_text, strip_reasoning_tags
 from .tooluse import ToolUseTracker
 from .unavailable_guard import UnavailableGuard
@@ -54,6 +56,8 @@ class CardSession:
         "guard",
         "image_resolver",
         "last_tool_use_update",
+        "linear",
+        "linear_state",
         "message_id",
         "reasoning_dirty",
         "reasoning_panel_added",
@@ -100,9 +104,11 @@ class CardSession:
 
         self.image_resolver: ImageResolver | None = None
         self.tool_panel_added = False
+        self.linear = False
+        self.linear_state: LinearState | None = None
 
 
-class StreamCardController(ControllerMixin):
+class StreamCardController(ControllerMixin, LinearControllerMixin):
     """流式卡片控制器 — 管理多条消息的卡片生命周期."""
 
     def __init__(self) -> None:
@@ -200,7 +206,10 @@ class StreamCardController(ControllerMixin):
         self._sessions[message_id] = session
         _logger.info("session created: msg=%s chat=%s", message_id[:12], chat_id[:12])
 
-        self._fire_and_forget(self._do_create_card(session), loop)
+        if self._cfg.linear:
+            self._fire_and_forget(self._do_create_linear_card(session), loop)
+        else:
+            self._fire_and_forget(self._do_create_card(session), loop)
 
     def on_thinking(self, *, message_id: str, text: str) -> None:
         """思考内容增量."""
@@ -208,6 +217,10 @@ class StreamCardController(ControllerMixin):
             return
         session = self._get_active_session(message_id)
         if session is None or session.guard.should_skip("on_thinking"):
+            return
+
+        if session.linear and session.linear_state:
+            self._linear_on_thinking(session, text)
             return
 
         split = split_reasoning_text(text)
@@ -233,6 +246,11 @@ class StreamCardController(ControllerMixin):
             return
         session = self._get_active_session(message_id)
         if session is None or session.guard.should_skip("on_reasoning"):
+            return
+
+        if session.linear and session.linear_state:
+            session.linear_state.on_reasoning_delta(text)
+            self._schedule_linear_flush(session)
             return
 
         if not session.reasoning_start:
@@ -272,6 +290,11 @@ class StreamCardController(ControllerMixin):
                 output="" if is_error else detail,
             )
 
+        if session.linear and session.linear_state:
+            session.linear_state.on_tool_event(len(session.tool_use.build_display_steps()))
+            self._schedule_linear_flush(session)
+            return
+
         if session.use_cardkit and session.card_id:
             self._schedule_tool_use_status_update(session)
         else:
@@ -283,6 +306,13 @@ class StreamCardController(ControllerMixin):
             return
         session = self._get_active_session(message_id)
         if session is None or session.guard.should_skip("on_answer"):
+            return
+
+        if session.linear and session.linear_state:
+            answer_text = strip_reasoning_tags(text)
+            if answer_text:
+                session.linear_state.on_answer_delta(answer_text)
+                self._schedule_linear_flush(session)
             return
 
         split = split_reasoning_text(text)
@@ -310,7 +340,7 @@ class StreamCardController(ControllerMixin):
         session.flush.mark_completed()
         _logger.info("on_aborted: msg=%s state=ABORTED", message_id[:12])
 
-        self._fire_and_forget(self._do_complete(session), session._loop)
+        self._complete_session(session)
 
     def on_interrupted(
         self,
@@ -331,7 +361,7 @@ class StreamCardController(ControllerMixin):
                 "on_interrupted: abort old msg=%s",
                 old_message_id[:12],
             )
-            self._fire_and_forget(self._do_complete(old_session), old_session._loop)
+            self._complete_session(old_session)
 
         if new_message_id not in self._sessions:
             loop = self._get_loop()
@@ -343,7 +373,10 @@ class StreamCardController(ControllerMixin):
                     new_message_id[:12],
                     chat_id[:12],
                 )
-                self._fire_and_forget(self._do_create_card(session), loop)
+                if self._cfg.linear:
+                    self._fire_and_forget(self._do_create_linear_card(session), loop)
+                else:
+                    self._fire_and_forget(self._do_create_card(session), loop)
 
         self._interrupt_map[old_message_id] = new_message_id
         for key, val in list(self._interrupt_map.items()):
@@ -403,7 +436,7 @@ class StreamCardController(ControllerMixin):
             **({"context_max": context.get("max_tokens")} if context else {}),
         }
 
-        self._fire_and_forget(self._do_complete(session), session._loop)
+        self._complete_session(session)
         return True
 
     def _schedule_card_update(self, session: CardSession) -> None:
@@ -440,6 +473,14 @@ class StreamCardController(ControllerMixin):
         session.flush.mark_completed()
         if session.image_resolver:
             session.image_resolver.cancel_pending()
+
+    def _complete_session(self, session: CardSession) -> None:
+        """根据 session 线性/非线性选择完成路径."""
+        session.flush.mark_completed()
+        if session.linear and session.linear_state:
+            self._fire_and_forget(self._do_linear_complete(session), session._loop)
+        else:
+            self._fire_and_forget(self._do_complete(session), session._loop)
 
     def _prune_stale_sessions(self) -> None:
         now = time.time()

@@ -24,6 +24,12 @@ class Config:
         return bool(sec.get("enabled", False))
 
     @property
+    def linear(self) -> bool:
+        """是否启用线性单卡模式，按事件顺序动态更新卡片元素."""
+        sec = self._streaming_sec()
+        return bool(sec.get("linear", False))
+
+    @property
     def show_reasoning(self) -> bool:
         """是否展示推理过程（display.platforms.feishu.show_reasoning → display.show_reasoning）.
 

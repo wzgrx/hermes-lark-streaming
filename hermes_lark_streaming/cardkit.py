@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .cardkit_i18n import _LOCALES, _T, _i18n, _t
 from .cardkit_md import (
@@ -11,6 +11,9 @@ from .cardkit_md import (
     _split_long_text,
     optimize_markdown_style,
 )
+
+if TYPE_CHECKING:
+    from .linear import Segment
 
 STREAMING_ELEMENT_ID = "streaming_content"
 REASONING_ELEMENT_ID = "reasoning_content"
@@ -52,14 +55,14 @@ def _collapsible_panel(
     }
 
 
-def _streaming_element(content: str = "") -> dict:
+def _streaming_element(content: str = "", *, element_id: str = STREAMING_ELEMENT_ID) -> dict:
     return {
         "tag": "markdown",
         "content": content,
         "text_align": "left",
         "text_size": "normal_v2",
         "margin": "0px 0px 0px 0px",
-        "element_id": STREAMING_ELEMENT_ID,
+        "element_id": element_id,
     }
 
 
@@ -76,7 +79,13 @@ def _loading_element() -> dict:
     }
 
 
-def _build_tool_panel(steps: list[dict], elapsed_ms: float = 0, *, expanded: bool = True) -> dict:
+def _build_tool_panel(
+    steps: list[dict],
+    elapsed_ms: float = 0,
+    *,
+    expanded: bool = True,
+    element_id: str | None = TOOL_PANEL_ELEMENT_ID,
+) -> dict:
     en_t, zh_t = _T["tool_use"]
     en_parts, zh_parts = [en_t], [zh_t]
     if steps:
@@ -102,7 +111,8 @@ def _build_tool_panel(steps: list[dict], elapsed_ms: float = 0, *, expanded: boo
         },
         elements=children,
     )
-    panel["element_id"] = TOOL_PANEL_ELEMENT_ID
+    if element_id:
+        panel["element_id"] = element_id
     return panel
 
 
@@ -210,6 +220,7 @@ def _escape_md(value: str) -> str:
 
 def _build_reasoning_panel(
     text: str, elapsed_ms: float = 0, *, expanded: bool = False, element_id: str | None = None,
+    text_element_id: str | None = REASONING_TEXT_ELEMENT_ID,
 ) -> dict:
     if elapsed_ms > 0:
         d = _format_elapsed(elapsed_ms)
@@ -231,7 +242,7 @@ def _build_reasoning_panel(
             "tag": "markdown",
             "content": text,
             "text_size": "notation",
-            "element_id": REASONING_TEXT_ELEMENT_ID,
+            **({"element_id": text_element_id} if text_element_id else {}),
         }],
         vertical_spacing="8px",
     )
@@ -369,6 +380,7 @@ def build_streaming_card_v2(
     elapsed_ms: float = 0,
     show_tool_use: bool = True,
     show_reasoning: bool = False,
+    show_streaming_element: bool = True,
 ) -> dict[str, Any]:
     """CardKit 2.0 流式占位卡片 — 含工具面板 + streaming + loading 元素."""
     elements: list[dict] = []
@@ -384,7 +396,8 @@ def build_streaming_card_v2(
         else:
             elements.append(build_streaming_tool_use_pending_panel())
 
-    elements.append(_streaming_element())
+    if show_streaming_element:
+        elements.append(_streaming_element())
     elements.append(_loading_element())
 
     return {
@@ -515,4 +528,71 @@ def build_complete_card(
     else:
         card["elements"] = elements
 
+    return card
+
+
+def build_linear_complete_card(
+    *,
+    segments: list[Segment],
+    all_tool_steps: list[dict],
+    footer_data: dict | None = None,
+    is_error: bool = False,
+    is_aborted: bool = False,
+    footer_fields: list[list[str]] | None = None,
+    footer_show_label: bool = True,
+) -> dict[str, Any]:
+    """线性模式完成态卡片 — 按 segments 顺序渲染."""
+    elements: list[dict] = []
+    has_answer = False
+
+    for seg in segments:
+        if seg.type == "reasoning":
+            if seg.text:
+                elements.append(_build_reasoning_panel(
+                    seg.text, seg.elapsed_ms, expanded=True,
+                    element_id=None, text_element_id=None,
+                ))
+        elif seg.type == "tool":
+            start = seg.tool_offset
+            end = seg.tool_end_offset if seg.tool_end_offset else len(all_tool_steps)
+            steps = all_tool_steps[start:end]
+            if steps:
+                elements.append(_build_tool_panel(steps, expanded=True, element_id=None))
+        elif seg.type == "answer" and seg.text:
+            has_answer = True
+            content = _downgrade_tables(optimize_markdown_style(seg.text))
+            for chunk in _split_long_text(content):
+                elements.append({"tag": "markdown", "content": chunk})
+
+    if not has_answer:
+        elements.append({"tag": "markdown", "content": _T["done"][0]})
+
+    elements.extend(
+        _build_footer_elements(
+            footer_data,
+            is_error,
+            is_aborted,
+            fields=footer_fields,
+            show_label=footer_show_label,
+        )
+    )
+
+    summary_text = ""
+    for seg in reversed(segments):
+        if seg.type in ("answer", "reasoning") and seg.text:
+            summary_text = seg.text
+            break
+    summary = summary_text[:120].replace("\n", " ").replace("```", "").strip()
+
+    card: dict[str, Any] = {
+        "schema": "2.0",
+        "config": {
+            "wide_screen_mode": True,
+            "update_multi": True,
+            "locales": _LOCALES,
+        },
+    }
+    if summary:
+        card["config"]["summary"] = {"content": summary}
+    card["body"] = {"elements": elements}
     return card
