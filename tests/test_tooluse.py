@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import patch
 
 import pytest
@@ -339,6 +340,7 @@ class TestToolUseTracker:
     def test_elapsed_ms_positive_after_start(self) -> None:
         tracker = ToolUseTracker()
         tracker.record_start("read", "f")
+        time.sleep(0.001)
         assert tracker.elapsed_ms > 0.0
 
     def test_detail_sanitized(self) -> None:
