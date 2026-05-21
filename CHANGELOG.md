@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.2] - 2026-05-21
+
+### 修复
+
+- 延迟自我进化消息（background review）到卡片完成后再发送，避免流式卡片被新消息打断。需要重新安装插件：
+  ```bash
+  HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
+  $HERMES_PYTHON -m pip install -e .
+  $HERMES_PYTHON -m hermes_lark_streaming uninstall
+  $HERMES_PYTHON -m hermes_lark_streaming install
+  ```
+
+### 变更
+
+- 线性模式 flush 从 3 步（step1 reasoning/answer → step2 text → step3 tool）合并为 2 步（step1 按 segment 顺序处理所有结构性变更 → step2 text），减少 1 次 API 调用。
+- `print_frequency_ms` 从 35 调整为 15，提升打字机渲染流畅度。
+
+### Fixed
+
+- Defer self-evolution messages (background review) until card completion, preventing streaming card from being interrupted by new messages. Requires reinstall:
+  ```bash
+  HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
+  $HERMES_PYTHON -m pip install -e .
+  $HERMES_PYTHON -m hermes_lark_streaming uninstall
+  $HERMES_PYTHON -m hermes_lark_streaming install
+  ```
+
+### Changed
+
+- Linear mode flush merged from 3 steps into 2, process structural changes in segment order, reducing API calls.
+- `print_frequency_ms` adjusted from 35 to 15 for smoother typewriter rendering.
+
+---
+
 ## [0.6.0] - 2026-05-20
 
 ### Highlights
