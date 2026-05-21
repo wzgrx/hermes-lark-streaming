@@ -171,7 +171,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 
 ## How It Works
 
-The plugin injects **8 hook calls** into `gateway/run.py` via AST patching. All business logic lives in the `hermes_lark_streaming` package:
+The plugin injects **9 hook calls** into `gateway/run.py` via AST patching. All business logic lives in the `hermes_lark_streaming` package:
 
 | Hook | Injection Target | Description |
 |------|-----------------|-------------|
@@ -180,6 +180,7 @@ The plugin injects **8 hook calls** into `gateway/run.py` via AST patching. All 
 | `on_answer_delta` | `_stream_delta_cb` | Streams answer text to the card |
 | `on_thinking_delta` | `_interim_assistant_cb` | Displays reasoning/thinking process |
 | `on_reasoning_delta` | After `agent.reasoning_config` assignment | Streams native model reasoning |
+| `on_background_review_message` | At `background_review_callback` assignment | Defers self-evolution messages until card completion |
 | `on_message_aborted` | Before stale `return None` | Handles `/stop` abort |
 | `on_message_interrupted` | Before recursive `_run_agent` call | Handles message interrupts, terminates old card and creates new session |
 | `on_message_completed` | Before `return response` | Sends completion card |

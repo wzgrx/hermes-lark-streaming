@@ -171,7 +171,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 
 ## 工作原理
 
-插件通过 AST 注入在 `gateway/run.py` 的 **8 个位置**插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成：
+插件通过 AST 注入在 `gateway/run.py` 的 **9 个位置**插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成：
 
 | Hook | 注入位置 | 说明 |
 |------|----------|------|
@@ -180,6 +180,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 | `on_answer_delta` | `_stream_delta_cb` 内部 | 流式更新回答文本 |
 | `on_thinking_delta` | `_interim_assistant_cb` 内部 | 显示思考/推理过程 |
 | `on_reasoning_delta` | `agent.reasoning_config` 赋值之后 | 流式展示模型原生推理 |
+| `on_background_review_message` | `background_review_callback` 赋值处 | 延迟自我进化消息到卡片完成后再发送 |
 | `on_message_aborted` | stale `return None` 之前 | 处理 `/stop` 中断 |
 | `on_message_interrupted` | `_run_agent` 递归调用前 | 处理消息打断，终止旧卡片并创建新会话 |
 | `on_message_completed` | `return response` 之前 | 发送终态卡片 |
