@@ -151,7 +151,7 @@ class LinearControllerMixin:
             session.state = FAILED
 
     async def _do_linear_flush(self, session: CardSession) -> None:
-        """线性模式幂等 flush：batch_update 结构变更 → stream 文本 → batch_update tool 面板."""
+        """线性模式幂等 flush：按 segment 顺序处理结构性变更，再刷脏文本."""
         if session.state in _TERMINAL or not session.card_id:
             return
         linear_state = session.linear_state
@@ -162,87 +162,117 @@ class LinearControllerMixin:
         segments = linear_state.segments
         all_steps = session.tool_use.build_display_steps()
 
-        # ── 步骤 1: batch_update — 创建元素 + reasoning 标题 ──
-        step1_actions: list[dict[str, Any]] = []
+        # ── 步骤 1: batch_update — 按 segment 顺序处理结构性变更 ──
+        actions: list[dict[str, Any]] = []
         new_el_ids: set[str] = set()
+        updated_tool_segs: list[Segment] = []
 
-        # 1a: add_elements 创建 reasoning + answer 元素（tool 延迟到步骤 3）
         for seg in segments:
-            if seg.created or seg.type == "tool":
-                continue
-            new_el_ids.add(seg.el_id)
-            if seg.type == "reasoning":
-                panel = _build_reasoning_panel(
-                    " ",
+            if not seg.created:
+                new_el_ids.add(seg.el_id)
+                if seg.type == "reasoning":
+                    panel = _build_reasoning_panel(
+                        " ",
+                        seg.elapsed_ms,
+                        expanded=True,
+                        element_id=seg.el_id,
+                        text_element_id=seg.text_el_id,
+                    )
+                    actions.append({
+                        "action": "add_elements",
+                        "params": {
+                            "type": "insert_before",
+                            "target_element_id": _LOADING_ELEMENT_ID,
+                            "elements": [panel],
+                        },
+                    })
+                elif seg.type == "answer":
+                    el = _streaming_element(element_id=seg.el_id)
+                    actions.append({
+                        "action": "add_elements",
+                        "params": {
+                            "type": "insert_before",
+                            "target_element_id": _LOADING_ELEMENT_ID,
+                            "elements": [el],
+                        },
+                    })
+                elif seg.type == "tool":
+                    start = seg.tool_offset
+                    end = seg.tool_end_offset if seg.tool_end_offset else len(all_steps)
+                    panel = _build_tool_panel(all_steps[start:end], element_id=seg.el_id)
+                    actions.append({
+                        "action": "add_elements",
+                        "params": {
+                            "type": "insert_before",
+                            "target_element_id": _LOADING_ELEMENT_ID,
+                            "elements": [panel],
+                        },
+                    })
+                    updated_tool_segs.append(seg)
+            elif seg.type == "reasoning" and seg.elapsed_ms > 0 and not seg.reasoning_finalized:
+                _logger.info(
+                    "linear reasoning finalize: msg=%s el=%s elapsed=%.0fms seq=%d",
+                    session.message_id[:12],
+                    seg.el_id,
                     seg.elapsed_ms,
-                    expanded=True,
-                    element_id=seg.el_id,
-                    text_element_id=seg.text_el_id,
+                    session.sequence + 1,
                 )
-                step1_actions.append({
-                    "action": "add_elements",
+                d = _format_elapsed(seg.elapsed_ms)
+                en_label = _T["thought_for"][0].format(d)
+                zh_label = _T["thought_for"][1].format(d)
+                actions.append({
+                    "action": "partial_update_element",
                     "params": {
-                        "type": "insert_before",
-                        "target_element_id": _LOADING_ELEMENT_ID,
-                        "elements": [panel],
+                        "element_id": seg.el_id,
+                        "partial_element": {
+                            "header": {
+                                "title": {
+                                    "tag": "plain_text",
+                                    "content": f"💭 {en_label}",
+                                    "i18n_content": _i18n(f"💭 {en_label}", f"💭 {zh_label}"),
+                                    "text_color": "grey",
+                                    "text_size": "notation",
+                                },
+                            },
+                        },
                     },
                 })
-            elif seg.type == "answer":
-                el = _streaming_element(element_id=seg.el_id)
-                step1_actions.append({
-                    "action": "add_elements",
+            elif seg.type == "tool" and seg.dirty:
+                if seg.tool_end_offset > 0:
+                    start, end = seg.tool_offset, seg.tool_end_offset
+                else:
+                    start, end = seg.tool_offset, len(all_steps)
+                panel = _build_tool_panel(all_steps[start:end])
+                actions.append({
+                    "action": "partial_update_element",
                     "params": {
-                        "type": "insert_before",
-                        "target_element_id": _LOADING_ELEMENT_ID,
-                        "elements": [el],
+                        "element_id": seg.el_id,
+                        "partial_element": {
+                            "elements": panel["elements"],
+                            "header": panel["header"],
+                        },
                     },
                 })
+                updated_tool_segs.append(seg)
 
-        # 1b: partial_update_element 更新已创建 reasoning 的标题
-        for seg in segments:
-            if seg.type != "reasoning" or not seg.created:
-                continue
-            if seg.elapsed_ms <= 0 or seg.reasoning_finalized:
-                continue
-            _logger.info(
-                "linear reasoning finalize: msg=%s el=%s elapsed=%.0fms seq=%d",
-                session.message_id[:12],
-                seg.el_id,
-                seg.elapsed_ms,
-                session.sequence + 1,
-            )
-            d = _format_elapsed(seg.elapsed_ms)
-            en_label = _T["thought_for"][0].format(d)
-            zh_label = _T["thought_for"][1].format(d)
-            partial = {
-                "header": {
-                    "title": {
-                        "tag": "plain_text",
-                        "content": f"💭 {en_label}",
-                        "i18n_content": _i18n(f"💭 {en_label}", f"💭 {zh_label}"),
-                        "text_color": "grey",
-                        "text_size": "notation",
-                    },
-                },
-            }
-            step1_actions.append({
-                "action": "partial_update_element",
-                "params": {"element_id": seg.el_id, "partial_element": partial},
-            })
-
-        if step1_actions:
+        if actions:
             session.sequence += 1
-            _logger.debug(
-                "linear flush step1: msg=%s seq=%d actions=%d",
+            _logger.info(
+                "linear flush: msg=%s seq=%d actions=%d",
                 session.message_id[:12],
                 session.sequence,
-                len(step1_actions),
+                len(actions),
             )
-            pre_flush_reasoning_elapsed = {seg.el_id: seg.elapsed_ms for seg in segments if seg.type == "reasoning"}
+            pre_flush_reasoning_elapsed = {
+                seg.el_id: seg.elapsed_ms for seg in segments if seg.type == "reasoning"
+            }
+            pre_flush_tool_offsets = {
+                seg.el_id: seg.tool_end_offset for seg in updated_tool_segs
+            }
             try:
                 await self._client.cardkit_batch_update(
                     session.card_id,
-                    step1_actions,
+                    actions,
                     sequence=session.sequence,
                 )
                 for seg in segments:
@@ -257,8 +287,12 @@ class LinearControllerMixin:
                             continue
                         if seg.type in ("reasoning", "answer") and seg.text:
                             seg.dirty = True
+                for seg in updated_tool_segs:
+                    offset_ok = pre_flush_tool_offsets.get(seg.el_id, -1) == seg.tool_end_offset
+                    if seg.created and offset_ok and seg.tool_end_offset > 0:
+                        seg.dirty = False
             except FeishuAPIError as e:
-                _logger.debug("linear batch update step1 failed: %s", e, exc_info=True)
+                _logger.warning("linear batch update failed: %s", e, exc_info=True)
                 self._handle_linear_flush_error(session, e)
                 return
 
@@ -270,6 +304,12 @@ class LinearControllerMixin:
                 if seg.type == "reasoning":
                     content = optimize_markdown_style(seg.text) or " "
                     session.sequence += 1
+                    _logger.info(
+                        "linear stream: msg=%s seq=%d type=reasoning len=%d",
+                        session.message_id[:12],
+                        session.sequence,
+                        len(content),
+                    )
                     await self._client.cardkit_stream_element(
                         session.card_id,
                         seg.text_el_id,
@@ -283,6 +323,12 @@ class LinearControllerMixin:
                         content = session.image_resolver.resolve_images(content)
                     content = _downgrade_tables(optimize_markdown_style(content)) or " "
                     session.sequence += 1
+                    _logger.info(
+                        "linear stream: msg=%s seq=%d type=answer len=%d",
+                        session.message_id[:12],
+                        session.sequence,
+                        len(content),
+                    )
                     await self._client.cardkit_stream_element(
                         session.card_id,
                         seg.el_id,
@@ -292,81 +338,6 @@ class LinearControllerMixin:
                     seg.dirty = False
             except Exception as e:
                 _logger.debug("linear stream failed: %s el=%s", e, seg.el_id, exc_info=True)
-
-        # ── 步骤 3: batch_update — 创建 tool 元素 + 更新 tool 面板 ──
-        step3_actions: list[dict[str, Any]] = []
-        new_tool_ids: set[str] = set()
-        step3_dirty_segs: list[Segment] = []
-
-        for seg in segments:
-            if seg.type != "tool":
-                continue
-            if not seg.created:
-                new_tool_ids.add(seg.el_id)
-                start = seg.tool_offset
-                end = seg.tool_end_offset if seg.tool_end_offset else len(all_steps)
-                panel = _build_tool_panel(all_steps[start:end], element_id=seg.el_id)
-                step3_actions.append({
-                    "action": "add_elements",
-                    "params": {
-                        "type": "insert_before",
-                        "target_element_id": _LOADING_ELEMENT_ID,
-                        "elements": [panel],
-                    },
-                })
-                step3_dirty_segs.append(seg)
-            elif seg.dirty:
-                if seg.tool_end_offset > 0:
-                    start = seg.tool_offset
-                    end = seg.tool_end_offset
-                else:
-                    start = seg.tool_offset
-                    end = len(all_steps)
-                steps_slice = all_steps[start:end]
-                panel = _build_tool_panel(steps_slice)
-                step3_actions.append({
-                    "action": "partial_update_element",
-                    "params": {
-                        "element_id": seg.el_id,
-                        "partial_element": {
-                            "elements": panel["elements"],
-                            "header": panel["header"],
-                        },
-                    },
-                })
-                step3_dirty_segs.append(seg)
-
-        pre_flush_offsets = {seg.el_id: seg.tool_end_offset for seg in segments if seg.type == "tool"}
-
-        if step3_actions:
-            session.sequence += 1
-            _logger.info(
-                "linear tool update: msg=%s seq=%d actions=%d created=%d updated=%d",
-                session.message_id[:12],
-                session.sequence,
-                len(step3_actions),
-                len(new_tool_ids),
-                len(step3_dirty_segs) - len(new_tool_ids),
-            )
-            try:
-                await self._client.cardkit_batch_update(
-                    session.card_id,
-                    step3_actions,
-                    sequence=session.sequence,
-                )
-                for seg in segments:
-                    if seg.el_id in new_tool_ids:
-                        seg.created = True
-                for seg in step3_dirty_segs:
-                    if pre_flush_offsets.get(seg.el_id, -1) == seg.tool_end_offset and seg.tool_end_offset > 0:
-                        seg.dirty = False
-            except FeishuAPIError as e:
-                _logger.warning(
-                    "linear tool update failed: msg=%s seq=%d code=%s",
-                    session.message_id[:12],
-                    session.sequence,
-                    e.code,
-                )
 
     def _handle_linear_flush_error(self, session: CardSession, e: FeishuAPIError) -> None:
         if e.code == CARDKIT_RATE_LIMITED:

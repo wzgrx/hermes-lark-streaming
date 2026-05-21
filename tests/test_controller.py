@@ -374,7 +374,7 @@ class TestDoLinearFlush:
             nonlocal batch_counter
             await original_batch(card_id, actions, **kw)
             batch_counter += 1
-            if batch_counter == 2 and tool_seg_ref is not None and tool_seg_ref.tool_end_offset == 0:
+            if batch_counter == 1 and tool_seg_ref is not None and tool_seg_ref.tool_end_offset == 0:
                 tool_seg_ref.tool_end_offset = 5
 
         ctrl._client.cardkit_batch_update = batch_with_race

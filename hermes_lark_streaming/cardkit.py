@@ -405,7 +405,7 @@ def build_streaming_card_v2(
         "config": {
             "streaming_mode": True,
             "streaming_config": {
-                "print_frequency_ms": {"default": 35},
+                "print_frequency_ms": {"default": 15},
                 "print_step": {"default": 1},
                 "print_strategy": "fast",
             },
