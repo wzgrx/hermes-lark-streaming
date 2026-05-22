@@ -2,7 +2,7 @@
 
 ## Project
 
-Hermes Gateway plugin that injects hooks into `~/.hermes/hermes-agent/gateway/run.py` via AST patching to provide real-time streaming Feishu/Lark CardKit v2.0 cards with typewriter effect.
+Hermes Gateway plugin that injects hooks into `~/.hermes/hermes-agent/gateway/run.py` and `cron/scheduler.py` via AST patching to provide real-time streaming Feishu/Lark CardKit v2.0 cards with typewriter effect.
 
 ## Commands
 
@@ -11,9 +11,9 @@ Hermes Gateway plugin that injects hooks into `~/.hermes/hermes-agent/gateway/ru
 HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
 
 $HERMES_PYTHON -m hermes_lark_streaming verify     # Check compatibility (safe, no file changes)
-$HERMES_PYTHON -m hermes_lark_streaming install    # Inject hooks into run.py
+$HERMES_PYTHON -m hermes_lark_streaming install    # Inject hooks into run.py and cron/scheduler.py
 $HERMES_PYTHON -m hermes_lark_streaming uninstall  # Remove hooks
-$HERMES_PYTHON -m hermes_lark_streaming restore    # Restore run.py from .hermes_lark.bak
+$HERMES_PYTHON -m hermes_lark_streaming restore    # Restore from .hermes_lark.bak backup
 $HERMES_PYTHON -m hermes_lark_streaming status     # Show patch status
 
 # Install for development
@@ -45,6 +45,10 @@ gateway/run.py (Hermes)
        ├─ on_message_completed  → controller.on_completed()
        └─ on_message_aborted    → controller.on_aborted()
 
+cron/scheduler.py (Hermes)
+  └─ CronPatcher (patcher.py) injects on_cron_deliver into _deliver_result
+       └─ intercepts feishu/lark targets → build_cron_card → send_card_to_chat
+
 StreamCardController (singleton, controller.py)
   ├─ CardSession per message (state machine: IDLE→CREATING→STREAMING→COMPLETED/FAILED/ABORTED)
   │   └─ linear mode: CardSession.linear + CardSession.linear_state (LinearState)
@@ -72,7 +76,7 @@ Card templates (cardkit.py) — builds Feishu card JSON
 
 ## Key Constraints
 
-- Hermes `>= 0.11.0` (2026.4.23) required. `patcher.py` targets specific function names in Hermes's `gateway/run.py` (`_handle_message_with_agent`, `progress_callback`, `_stream_delta_cb`, `_interim_assistant_cb`). If Hermes changes these, `verify` will catch it.
+- Hermes `>= 0.11.0` (2026.4.23) required. `patcher.py` targets specific function names in Hermes's `gateway/run.py` (`_handle_message_with_agent`, `progress_callback`, `_stream_delta_cb`, `_interim_assistant_cb`) and `cron/scheduler.py` (`_deliver_result`). If Hermes changes these, `verify` will catch it.
 - The interrupt hook is injected at the `"Restart typing indicator"` comment in `_run_agent`. It fires when `was_interrupted and next_message_id` are both truthy. The `_interrupt_map` redirects `on_completed(old_id)` to the new session, handling nested interrupts (A→B→C).
 - The `_thinking_hook` has a `not already_streamed` guard (patcher.py:103) — thinking deltas are skipped once answer streaming has begun.
 - The NORMALIZE hook (`on_feishu_normalize`) is injected at `source = event.source` in `_handle_message`, before any other processing. It detects Feishu quoted messages with a false `thread_id` (set by the Feishu adapter but absent in raw event) and clears it, preventing `_reply_anchor_for_event` from returning the wrong ID.

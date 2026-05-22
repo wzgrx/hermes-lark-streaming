@@ -24,6 +24,7 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 - **Message guard** — Auto-terminates updates when message is deleted/recalled
 - **Image resolution** — Detects markdown image references, downloads and re-uploads as Feishu img_key
 - **Abort handling** — Gracefully handles `/stop` command and message interrupts with aborted state card and automatic new session
+- **Cron card delivery** — Delivers scheduled job results as Feishu cards, preserving Markdown rendering
 - **i18n** — Built-in Chinese/English bilingual card text (status, tool panel, thinking labels, etc.) that auto-switches based on Feishu client language
 
 ---
@@ -134,7 +135,7 @@ HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
 $HERMES_PYTHON -m hermes_lark_streaming verify     # Verify compatibility (no file changes)
 $HERMES_PYTHON -m hermes_lark_streaming install    # Inject hooks
 $HERMES_PYTHON -m hermes_lark_streaming uninstall  # Remove hooks
-$HERMES_PYTHON -m hermes_lark_streaming restore    # Restore original run.py from backup
+$HERMES_PYTHON -m hermes_lark_streaming restore    # Restore original files from backup
 $HERMES_PYTHON -m hermes_lark_streaming status     # Show status
 ```
 
@@ -167,7 +168,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 
 ## How It Works
 
-The plugin injects hook calls into `gateway/run.py` via AST patching. All business logic lives in the `hermes_lark_streaming` package:
+The plugin injects hook calls into `gateway/run.py` and `cron/scheduler.py` via AST patching. All business logic lives in the `hermes_lark_streaming` package:
 
 | Hook | Injection Target | Description |
 |------|-----------------|-------------|
@@ -181,6 +182,7 @@ The plugin injects hook calls into `gateway/run.py` via AST patching. All busine
 | `on_message_aborted` | Before stale `return None` | Handles `/stop` abort |
 | `on_message_interrupted` | Before recursive `_run_agent` call | Handles message interrupts, terminates old card and creates new session |
 | `on_message_completed` | Before `return response` | Sends completion card |
+| `on_cron_deliver` | After `delivered = False` in `_deliver_result` | Intercepts Feishu cron delivery, sends as card |
 
 **Message flow:**
 
@@ -217,7 +219,7 @@ If a message is deleted/recalled, UnavailableGuard auto-terminates further updat
 
 ## Notes
 
-- `install` modifies `~/.hermes/hermes-agent/gateway/run.py` and creates a `.hermes_lark.bak` backup
+- `install` modifies `~/.hermes/hermes-agent/gateway/run.py` and `cron/scheduler.py`, and creates `.hermes_lark.bak` backups
 - Re-run `verify` + `install` after Hermes updates
 - The plugin complements the built-in Feishu adapter: plugin handles streaming cards, built-in adapter handles message routing
 - Only affects Feishu/Lark platform — other platforms are unaffected
