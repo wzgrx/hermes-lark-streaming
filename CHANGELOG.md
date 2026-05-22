@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.8] - 2026-05-22
+
+### 修复
+
+- 修复飞书引用消息的虚假 thread_id 导致卡片回复到错误消息的问题
+- 新增 NORMALIZE hook，在消息处理前修正飞书引用消息的 thread_id
+- 引入 anchor_id 机制，分离会话标识和卡片投递目标
+
+### Fixed
+
+- Fix card replying to the quoted message instead of the user's new message on Feishu quote
+- Add NORMALIZE hook to clear false thread_id on Feishu quoted messages before processing
+- Introduce anchor_id mechanism to separate session identity from card delivery target
+
+---
+
 ## [0.6.7] - 2026-05-22
 
 ### 变更
