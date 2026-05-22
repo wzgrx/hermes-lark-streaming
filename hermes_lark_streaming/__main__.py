@@ -6,7 +6,7 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .patcher import Patcher
+    from .patcher import CronPatcher, Patcher
 
 
 def main() -> int:
@@ -37,11 +37,11 @@ def _print_usage() -> None:
     print("Usage: python -m hermes_lark_streaming <command>")
     print()
     print("Commands:")
-    print("  install    Apply AST patch to gateway/run.py")
-    print("  uninstall  Remove AST patch from gateway/run.py")
-    print("  restore    Restore run.py from backup")
+    print("  install    Apply AST patch to gateway/run.py and cron/scheduler.py")
+    print("  uninstall  Remove AST patch")
+    print("  restore    Restore from backup")
     print("  status     Show current patch status")
-    print("  verify     Verify run.py compatibility without patching")
+    print("  verify     Verify compatibility without patching")
 
 
 def _get_patcher() -> Patcher | None:
@@ -54,6 +54,15 @@ def _get_patcher() -> Patcher | None:
         return None
 
 
+def _get_cron_patcher() -> CronPatcher | None:
+    from .patcher import CronPatcher, PatcherError
+
+    try:
+        return CronPatcher()
+    except PatcherError:
+        return None
+
+
 def _cmd_install() -> int:
     patcher = _get_patcher()
     if patcher is None:
@@ -61,23 +70,32 @@ def _cmd_install() -> int:
 
     if patcher.is_fully_patched():
         print("Already patched.")
-        return 0
+    else:
+        print("Verifying target compatibility...")
+        try:
+            patcher.verify_target()
+        except Exception as e:
+            print(f"Verification failed: {e}")
+            return 1
+        print("Target compatible.")
 
-    print("Verifying target compatibility...")
-    try:
-        patcher.verify_target()
-    except Exception as e:
-        print(f"Verification failed: {e}")
-        return 1
-    print("Target compatible.")
+        print("Applying patch...")
+        try:
+            patcher.apply()
+        except Exception as e:
+            print(f"Patch failed: {e}")
+            return 1
+        print("Patch applied successfully.")
 
-    print("Applying patch...")
-    try:
-        patcher.apply()
-    except Exception as e:
-        print(f"Patch failed: {e}")
-        return 1
-    print("Patch applied successfully.")
+    cron_patcher = _get_cron_patcher()
+    if cron_patcher is not None and not cron_patcher.is_patched():
+        try:
+            cron_patcher.verify_target()
+            cron_patcher.apply()
+            print("Cron hook applied.")
+        except Exception as e:
+            print(f"Cron hook skipped: {e}")
+
     return 0
 
 
@@ -85,6 +103,14 @@ def _cmd_uninstall() -> int:
     patcher = _get_patcher()
     if patcher is None:
         return 1
+
+    cron_patcher = _get_cron_patcher()
+    if cron_patcher is not None and cron_patcher.is_patched():
+        try:
+            cron_patcher.remove()
+            print("Cron hook removed.")
+        except Exception as e:
+            print(f"Cron hook remove failed: {e}")
 
     if not patcher.is_patched():
         print("Not patched.")
@@ -104,6 +130,14 @@ def _cmd_restore() -> int:
     patcher = _get_patcher()
     if patcher is None:
         return 1
+
+    cron_patcher = _get_cron_patcher()
+    if cron_patcher is not None:
+        try:
+            cron_patcher.restore()
+            print("Cron hook restored.")
+        except Exception:
+            pass
 
     print("Restoring from backup...")
     try:
@@ -133,6 +167,10 @@ def _cmd_status() -> int:
             label = begin.replace("# HERMES_LARK_", "").replace("_BEGIN", "").lower()
             print(f"  {label}: {'installed' if found else 'missing'}")
 
+    cron_patcher = _get_cron_patcher()
+    if cron_patcher is not None:
+        print(f"Cron hook: {'installed' if cron_patcher.is_patched() else 'not installed'}")
+
     # Check config
     from .config import Config
 
@@ -155,6 +193,17 @@ def _cmd_verify() -> int:
         print(f"Incompatible: {e}")
         return 1
     print("Compatible.")
+
+    cron_patcher = _get_cron_patcher()
+    if cron_patcher is not None:
+        print(f"Cron target: {cron_patcher.cron_path}")
+        try:
+            cron_patcher.verify_target()
+        except Exception as e:
+            print(f"Cron incompatible: {e}")
+            return 1
+        print("Cron target compatible.")
+
     return 0
 
 

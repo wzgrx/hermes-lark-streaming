@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -938,3 +938,63 @@ class TestLinearOnThinking:
 
         assert len(session.linear_state.segments) == 1
         assert session.linear_state.segments[0].type == "reasoning"
+
+
+class TestCronDeliver:
+    def test_returns_false_when_disabled(self) -> None:
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = False
+        assert ctrl.on_cron_deliver(chat_id="c1", content="text", loop=MagicMock()) is False
+
+    def test_returns_false_on_empty_content(self) -> None:
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        assert ctrl.on_cron_deliver(chat_id="c1", content="", loop=MagicMock()) is False
+
+    def test_sends_card_on_success(self) -> None:
+        import threading
+
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+
+        mock_client = AsyncMock()
+        mock_client.send_card_to_chat.return_value = "msg_123"
+        ctrl._client = mock_client
+        ctrl._initialized = True
+
+        loop = asyncio.new_event_loop()
+        threading.Thread(target=loop.run_forever, daemon=True).start()
+        try:
+            result = ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=loop)
+            assert result is True
+            mock_client.send_card_to_chat.assert_called_once()
+            args = mock_client.send_card_to_chat.call_args[0]
+            assert args[0] == "c1"
+            card = args[1]
+            assert card["schema"] == "2.0"
+            assert "hello" in card["body"]["elements"][0]["content"]
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+
+    def test_returns_false_on_send_failure(self) -> None:
+        import threading
+
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+
+        mock_client = AsyncMock()
+        mock_client.send_card_to_chat.side_effect = RuntimeError("API error")
+        ctrl._client = mock_client
+        ctrl._initialized = True
+
+        loop = asyncio.new_event_loop()
+        threading.Thread(target=loop.run_forever, daemon=True).start()
+        try:
+            result = ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=loop)
+            assert result is False
+        finally:
+            loop.call_soon_threadsafe(loop.stop)

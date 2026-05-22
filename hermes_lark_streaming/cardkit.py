@@ -596,3 +596,21 @@ def build_linear_complete_card(
         card["config"]["summary"] = {"content": summary}
     card["body"] = {"elements": elements}
     return card
+
+
+def build_cron_card(content: str) -> dict[str, Any]:
+    """Cron 推送用的极简静态卡片 — schema 2.0，仅 markdown 内容."""
+    card: dict[str, Any] = {
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True, "locales": _LOCALES},
+        "body": {"elements": []},
+    }
+    if not content.strip():
+        return card
+    summary = content[:120].replace("\n", " ").replace("```", "").strip()
+    if summary:
+        card["config"]["summary"] = {"content": summary}
+    for chunk in _split_long_text(optimize_markdown_style(content)):
+        if chunk.strip():
+            card["body"]["elements"].append({"tag": "markdown", "content": chunk})
+    return card

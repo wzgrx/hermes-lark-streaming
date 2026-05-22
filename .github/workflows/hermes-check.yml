@@ -18,11 +18,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Fetch Hermes run.py
+      - name: Fetch Hermes sources
         run: |
           curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/gateway/run.py" -o hermes_run.py
           if [ ! -s hermes_run.py ]; then
             echo "::error::Failed to fetch run.py"
+            exit 1
+          fi
+          curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/cron/scheduler.py" -o hermes_scheduler.py
+          if [ ! -s hermes_scheduler.py ]; then
+            echo "::error::Failed to fetch scheduler.py"
             exit 1
           fi
 
@@ -40,9 +45,12 @@ jobs:
         run: |
           python -c "
           import pathlib
-          from hermes_lark_streaming.patcher import Patcher
+          from hermes_lark_streaming.patcher import Patcher, CronPatcher
           p = Patcher(pathlib.Path('hermes_run.py'))
           p.verify_target()
+          cp = CronPatcher(pathlib.Path('hermes_scheduler.py'))
+          cp.verify_target()
+          print('Both targets compatible.')
           "
 
       - name: Open issue on failure
@@ -52,7 +60,7 @@ jobs:
           script: |
             const label = 'hermes-compat';
             const title = 'Hermes compatibility check failed';
-            const body = `The daily Hermes \`gateway/run.py\` compatibility check failed.\n\nPlease check if Hermes has updated function names or injection anchors.\n\nWorkflow run: ${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const body = `The daily Hermes compatibility check failed.\n\nPlease check if Hermes has updated function names or injection anchors in \`gateway/run.py\` or \`cron/scheduler.py\`.\n\nWorkflow run: ${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
             // Ensure label exists
             try {

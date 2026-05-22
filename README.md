@@ -24,6 +24,7 @@
 - **消息保护** — 消息被删除/撤回后自动终止更新，避免无效 API 调用
 - **图片解析** — 自动识别 markdown 图片引用，下载上传后替换为飞书 img_key
 - **中断处理** — 处理 `/stop` 命令和消息打断，展示中断状态卡片并自动开启新会话
+- **Cron 卡片推送** — 定时任务结果以飞书卡片形式推送，保留 Markdown 渲染
 - **多语言** — 卡片文本（状态、工具面板、思考标签等）内置中英双语，根据飞书客户端语言自动切换
 
 ---
@@ -134,7 +135,7 @@ HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
 $HERMES_PYTHON -m hermes_lark_streaming verify     # 验证兼容性（不修改文件）
 $HERMES_PYTHON -m hermes_lark_streaming install    # 注入 hook
 $HERMES_PYTHON -m hermes_lark_streaming uninstall  # 移除 hook
-$HERMES_PYTHON -m hermes_lark_streaming restore    # 从备份恢复原始 run.py
+$HERMES_PYTHON -m hermes_lark_streaming restore    # 从备份恢复原始文件
 $HERMES_PYTHON -m hermes_lark_streaming status     # 查看状态
 ```
 
@@ -167,7 +168,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 
 ## 工作原理
 
-插件通过 AST 注入在 `gateway/run.py` 插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成：
+插件通过 AST 注入在 `gateway/run.py` 和 `cron/scheduler.py` 插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成：
 
 | Hook | 注入位置 | 说明 |
 |------|----------|------|
@@ -181,6 +182,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 | `on_message_aborted` | stale `return None` 之前 | 处理 `/stop` 中断 |
 | `on_message_interrupted` | `_run_agent` 递归调用前 | 处理消息打断，终止旧卡片并创建新会话 |
 | `on_message_completed` | `return response` 之前 | 发送终态卡片 |
+| `on_cron_deliver` | `_deliver_result` 中 `delivered = False` 之后 | 拦截飞书 Cron 推送，以卡片形式发送 |
 
 **消息处理流程：**
 
@@ -217,7 +219,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 
 ## 注意事项
 
-- `install` 会修改 `~/.hermes/hermes-agent/gateway/run.py`，自动创建 `.hermes_lark.bak` 备份
+- `install` 会修改 `~/.hermes/hermes-agent/gateway/run.py` 和 `cron/scheduler.py`，自动创建 `.hermes_lark.bak` 备份
 - Hermes 更新后需重新运行 `verify` + `install`
 - 插件与 Hermes 内置飞书适配器互补工作：插件负责流式卡片，内置适配器负责消息收发
 - 仅对飞书平台生效，其他平台不受影响
