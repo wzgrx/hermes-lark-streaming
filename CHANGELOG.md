@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2026-05-22
+
+### Highlights
+
+- Cron 卡片推送：定时任务结果以飞书 CardKit v2.0 卡片形式发送，保留 Markdown 渲染。修复 #15. (#20)
+
+### 新增
+
+- 完成态面板折叠配置：`streaming.panel_expanded` 控制推理面板和工具面板在完成态卡片中的展开/折叠，默认折叠。修复 #28. (#29)
+
+### 变更
+
+- 线性模式完成态卡片中工具面板和推理面板默认折叠
+- 非线性模式完成态卡片中推理面板默认折叠（此前为展开）
+
+### Highlights
+
+- Cron card delivery: scheduled job results sent as Feishu CardKit v2.0 cards, preserving Markdown rendering. Fixes #15. (#20)
+
+### Added
+
+- `streaming.panel_expanded` config option to control reasoning and tool panel state in completion cards, collapsed by default. Fixes #28. (#29)
+
+### Changed
+
+- Tool and reasoning panels in linear completion card now collapsed by default
+- Reasoning panel in non-linear completion card now collapsed by default (previously expanded)
+
+---
+
 ## [0.6.8] - 2026-05-22
 
 ### 修复
