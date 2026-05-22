@@ -27,7 +27,7 @@ class Config:
     def linear(self) -> bool:
         """是否启用线性单卡模式，按事件顺序动态更新卡片元素."""
         sec = self._streaming_sec()
-        return bool(sec.get("linear", False))
+        return bool(sec.get("linear", True))
 
     @property
     def show_reasoning(self) -> bool:
