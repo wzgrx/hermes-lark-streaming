@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.7] - 2026-05-22
+
+### 变更
+
+- 线性模式默认开启（`streaming.linear` 默认值改为 `true`）
+
+### 修复
+
+- 修复飞书群聊中引用消息时，卡片仅显示 Done. 的问题。修复 #24. (#25)
+- 需要重新安装插件：
+  ```bash
+  HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
+  $HERMES_PYTHON -m pip install -e .
+  $HERMES_PYTHON -m hermes_lark_streaming uninstall
+  $HERMES_PYTHON -m hermes_lark_streaming install
+  ```
+
+### Changed
+
+- Linear mode now enabled by default (`streaming.linear` defaults to `true`)
+
+### Fixed
+
+- Fix Feishu quoted messages showing only Done. in the card. Fixes #24. (#25)
+- Requires reinstall:
+  ```bash
+  HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
+  $HERMES_PYTHON -m pip install -e .
+  $HERMES_PYTHON -m hermes_lark_streaming uninstall
+  $HERMES_PYTHON -m hermes_lark_streaming install
+  ```
+
+---
+
 ## [0.6.5] - 2026-05-22
 
 ### Highlights
