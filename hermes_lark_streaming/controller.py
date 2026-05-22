@@ -464,6 +464,27 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
         self._complete_session(session)
         return True
 
+    def on_cron_deliver(
+        self,
+        *,
+        chat_id: str,
+        content: str,
+        loop: asyncio.AbstractEventLoop,
+    ) -> bool:
+        """Cron 推送 — 包装为静态卡片发送，成功返回 True."""
+        if not self.enabled or not content or not chat_id:
+            return False
+        future = asyncio.run_coroutine_threadsafe(
+            self._do_cron_deliver(chat_id, content), loop
+        )
+        try:
+            future.result(timeout=30)
+            _logger.info("cron card delivered: chat=%s len=%d", chat_id[:12], len(content))
+            return True
+        except Exception:
+            _logger.warning("cron card delivery failed", exc_info=True)
+            return False
+
     def defer_background_review(
         self,
         *,

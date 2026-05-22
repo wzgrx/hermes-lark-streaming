@@ -14,6 +14,7 @@ from .cardkit import (
     TOOL_PANEL_ELEMENT_ID,
     _build_tool_panel,
     build_complete_card,
+    build_cron_card,
     build_im_fallback_card,
     build_streaming_card,
     build_streaming_card_v2,
@@ -374,3 +375,9 @@ class ControllerMixin:
         )
         session.state = FAILED
         return False
+
+    async def _do_cron_deliver(self, chat_id: str, content: str) -> None:
+        await self._ensure_init()
+        assert self._client is not None
+        card = build_cron_card(content)
+        await self._client.send_card_to_chat(chat_id, card)

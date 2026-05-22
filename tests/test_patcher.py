@@ -11,10 +11,19 @@ import shutil
 import textwrap
 import urllib.request
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hermes_lark_streaming.patcher import MARKERS, Patcher, PatcherError
+from hermes_lark_streaming.patcher import (
+    MARKERS,
+    MK_CRON_DELIVER,
+    MK_CRON_DELIVER_END,
+    CronPatcher,
+    Patcher,
+    PatcherError,
+    _remove_block,
+)
 
 RUN_SRC = Path.home() / ".hermes" / "hermes-agent" / "gateway" / "run.py"
 RUN_BAK = RUN_SRC.with_suffix(RUN_SRC.suffix + ".hermes_lark.bak")
@@ -22,7 +31,11 @@ SAMPLES_DIR = Path(__file__).parent / "samples"
 SAMPLE_RUN = SAMPLES_DIR / "run.py"
 
 _RUN_URL = "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/gateway/run.py"
+_CRON_URL = "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/cron/scheduler.py"
 
+CRON_SRC = Path.home() / ".hermes" / "hermes-agent" / "cron" / "scheduler.py"
+CRON_BAK = CRON_SRC.with_suffix(CRON_SRC.suffix + ".hermes_lark.bak")
+SAMPLE_CRON = SAMPLES_DIR / "scheduler.py"
 
 def _ensure_sample() -> Path:
     src = RUN_BAK if RUN_BAK.exists() else RUN_SRC
@@ -48,8 +61,35 @@ def run_copy(tmp_path: Path) -> Path:
     return dst
 
 
+def _ensure_cron_sample() -> Path:
+    src = CRON_BAK if CRON_BAK.exists() else CRON_SRC
+    SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
+    if src.exists():
+        shutil.copy2(src, SAMPLE_CRON)
+        return SAMPLE_CRON
+    try:
+        urllib.request.urlretrieve(_CRON_URL, SAMPLE_CRON)
+    except Exception as exc:
+        pytest.skip(f"scheduler.py not found locally and download failed: {exc}")
+    if not SAMPLE_CRON.exists() or SAMPLE_CRON.stat().st_size == 0:
+        pytest.skip("scheduler.py download returned empty file")
+    return SAMPLE_CRON
+
+
+@pytest.fixture()
+def scheduler_copy(tmp_path: Path) -> Path:
+    src = _ensure_cron_sample()
+    dst = tmp_path / "scheduler.py"
+    shutil.copy2(src, dst)
+    return dst
+
+
 def _patcher(path: Path) -> Patcher:
     return Patcher(run_path=path)
+
+
+def _cron_patcher(path: Path) -> CronPatcher:
+    return CronPatcher(cron_path=path)
 
 
 class TestVerify:
@@ -147,7 +187,7 @@ class TestApplyRemove:
         patcher = _patcher(run_copy)
         patcher.apply()
         begin, end = next(pair for pair in MARKERS if "BACKGROUND_REVIEW" in pair[0])
-        content = patcher._remove_block(run_copy.read_text(encoding="utf-8"), begin, end)
+        content = _remove_block(run_copy.read_text(encoding="utf-8"), begin, end)
         run_copy.write_text(content, encoding="utf-8")
 
         patcher.apply()
@@ -204,3 +244,119 @@ class TestBackupRestore:
         patcher = _patcher(run_copy)
         with pytest.raises(PatcherError, match="No backup found"):
             patcher.restore()
+
+
+# --- CronPatcher ---
+
+
+class TestCronVerify:
+    def test_verify_passes(self, scheduler_copy: Path) -> None:
+        _cron_patcher(scheduler_copy).verify_target()
+
+    def test_verify_fails_missing_delivered_false(self, tmp_path: Path) -> None:
+        p = tmp_path / "scheduler.py"
+        p.write_text("cleaned_delivery_content = ''\n")
+        with pytest.raises(PatcherError, match="delivered = False"):
+            _cron_patcher(p).verify_target()
+
+    def test_verify_fails_missing_cleaned_content(self, tmp_path: Path) -> None:
+        p = tmp_path / "scheduler.py"
+        p.write_text("    delivered = False\n")
+        with pytest.raises(PatcherError, match="cleaned_delivery_content"):
+            _cron_patcher(p).verify_target()
+
+
+class TestCronApplyRemove:
+    def test_apply_injects_markers(self, scheduler_copy: Path) -> None:
+        cp = _cron_patcher(scheduler_copy)
+        cp.apply()
+        content = scheduler_copy.read_text(encoding="utf-8")
+        assert MK_CRON_DELIVER in content
+        assert MK_CRON_DELIVER_END in content
+
+    def test_apply_produces_valid_python(self, scheduler_copy: Path) -> None:
+        cp = _cron_patcher(scheduler_copy)
+        cp.apply()
+        content = scheduler_copy.read_text(encoding="utf-8")
+        compile(content, str(scheduler_copy), "exec")
+
+    def test_apply_idempotent(self, scheduler_copy: Path) -> None:
+        cp = _cron_patcher(scheduler_copy)
+        cp.apply()
+        first = scheduler_copy.read_text(encoding="utf-8")
+        cp.apply()
+        assert scheduler_copy.read_text(encoding="utf-8") == first
+
+    def test_remove_restores_original(self, scheduler_copy: Path) -> None:
+        cp = _cron_patcher(scheduler_copy)
+        original = scheduler_copy.read_text(encoding="utf-8")
+        cp.apply()
+        cp.remove()
+        assert scheduler_copy.read_text(encoding="utf-8") == original
+
+    def test_remove_on_unpatched_is_noop(self, scheduler_copy: Path) -> None:
+        cp = _cron_patcher(scheduler_copy)
+        original = scheduler_copy.read_text(encoding="utf-8")
+        cp.remove()
+        assert scheduler_copy.read_text(encoding="utf-8") == original
+
+    def test_injected_hook_references_on_cron_deliver(self, scheduler_copy: Path) -> None:
+        cp = _cron_patcher(scheduler_copy)
+        cp.apply()
+        content = scheduler_copy.read_text(encoding="utf-8")
+        assert "on_cron_deliver" in content
+        assert "platform_name.lower()" in content
+        assert "delivered = True" in content
+
+
+class TestCronBackupRestore:
+    def test_backup_created_on_apply(self, scheduler_copy: Path) -> None:
+        cp = _cron_patcher(scheduler_copy)
+        cp.apply()
+        backup = scheduler_copy.with_suffix(scheduler_copy.suffix + ".hermes_lark.bak")
+        assert backup.exists()
+
+    def test_restore_recovers_original(self, scheduler_copy: Path) -> None:
+        cp = _cron_patcher(scheduler_copy)
+        original = scheduler_copy.read_text(encoding="utf-8")
+        cp.apply()
+        cp.restore()
+        assert scheduler_copy.read_text(encoding="utf-8") == original
+
+    def test_restore_fails_without_backup(self, scheduler_copy: Path) -> None:
+        cp = _cron_patcher(scheduler_copy)
+        with pytest.raises(PatcherError, match="No backup found"):
+            cp.restore()
+
+
+class TestOnCronDeliverHook:
+    def test_returns_false_when_disabled(self) -> None:
+        from hermes_lark_streaming.patch import on_cron_deliver
+
+        with patch("hermes_lark_streaming.patch.get_controller") as mock_get:
+            ctrl = MagicMock()
+            ctrl.enabled = False
+            mock_get.return_value = ctrl
+            assert on_cron_deliver(chat_id="c1", content="text", loop=MagicMock()) is False
+
+    def test_returns_false_when_no_loop(self) -> None:
+        from hermes_lark_streaming.patch import on_cron_deliver
+
+        with patch("hermes_lark_streaming.patch.get_controller") as mock_get:
+            ctrl = MagicMock()
+            ctrl.enabled = True
+            mock_get.return_value = ctrl
+            assert on_cron_deliver(chat_id="c1", content="text", loop=None) is False
+
+    def test_delegates_to_controller(self) -> None:
+        from hermes_lark_streaming.patch import on_cron_deliver
+
+        loop = MagicMock()
+        with patch("hermes_lark_streaming.patch.get_controller") as mock_get:
+            ctrl = MagicMock()
+            ctrl.enabled = True
+            ctrl.on_cron_deliver.return_value = True
+            mock_get.return_value = ctrl
+            result = on_cron_deliver(chat_id="c1", content="hello", loop=loop)
+            assert result is True
+            ctrl.on_cron_deliver.assert_called_once_with(chat_id="c1", content="hello", loop=loop)

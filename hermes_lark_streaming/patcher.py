@@ -40,6 +40,10 @@ MK_INTERRUPT, MK_INTERRUPT_END = MARKERS[9]
 _BACKUP_SUFFIX = ".hermes_lark.bak"
 
 _RUN_PATH = Path.home() / ".hermes" / "hermes-agent" / "gateway" / "run.py"
+_CRON_PATH = Path.home() / ".hermes" / "hermes-agent" / "cron" / "scheduler.py"
+
+MK_CRON_DELIVER = f"# {PREFIX}_CRON_DELIVER_BEGIN"
+MK_CRON_DELIVER_END = f"# {PREFIX}_CRON_DELIVER_END"
 
 
 def _make_hook(indent: str, begin: str, end: str, body_lines: list[str]) -> str:
@@ -253,6 +257,39 @@ def _interrupt_hook(indent: str) -> str:
     )
 
 
+def _cron_deliver_hook(indent: str) -> str:
+    return _make_hook(
+        indent,
+        MK_CRON_DELIVER,
+        MK_CRON_DELIVER_END,
+        [
+            "try:",
+            "    if platform_name.lower() in ('feishu', 'lark'):",
+            "        from hermes_lark_streaming.patch import on_cron_deliver",
+            "        if on_cron_deliver(chat_id=chat_id, content=cleaned_delivery_content.strip(), loop=loop):",
+            "            delivered = True",
+            "            continue",
+            "except Exception:",
+            "    pass",
+        ],
+    )
+
+
+def _remove_block(content: str, begin: str, end: str) -> str:
+    lines = content.splitlines(keepends=True)
+    begin_idx = end_idx = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == begin:
+            begin_idx = i
+        if stripped == end:
+            end_idx = i
+            break
+    if begin_idx is not None and end_idx is not None:
+        return "".join(lines[:begin_idx] + lines[end_idx + 1 :])
+    return content
+
+
 class PatcherError(RuntimeError):
     pass
 
@@ -339,7 +376,7 @@ class Patcher:
         content = self.run_path.read_text(encoding="utf-8")
         if self.is_patched():
             for begin, end in self.MARKERS:
-                content = self._remove_block(content, begin, end)
+                content = _remove_block(content, begin, end)
         else:
             self._backup()
         content = self._inject_all(content)
@@ -350,7 +387,7 @@ class Patcher:
         if not any(begin in content for begin, _ in self.MARKERS):
             return
         for begin, end in self.MARKERS:
-            content = self._remove_block(content, begin, end)
+            content = _remove_block(content, begin, end)
         self.run_path.write_text(content, encoding="utf-8")
 
     def restore(self) -> None:
@@ -406,21 +443,6 @@ class Patcher:
             lines[idx:idx] = hook.splitlines(keepends=True)
 
         return "".join(lines)
-
-    def _remove_block(self, content: str, begin: str, end: str) -> str:
-        lines = content.splitlines(keepends=True)
-        begin_idx = end_idx = None
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped == begin:
-                begin_idx = i
-            if stripped == end:
-                end_idx = i
-                break
-
-        if begin_idx is not None and end_idx is not None:
-            return "".join(lines[:begin_idx] + lines[end_idx + 1 :])
-        return content
 
 
 def _find_func_body(tree: ast.Module, lines: list[str], name: str) -> tuple[int, str] | None:
@@ -528,3 +550,60 @@ def _safe_indent(lines: list[str], lineno: int) -> str:
         if lines[i].strip():
             return lines[i][: len(lines[i]) - len(lines[i].lstrip())]
     return ""
+
+
+class CronPatcher:
+    """注入 CRON_DELIVER hook 到 cron/scheduler.py 的 _deliver_result."""
+
+    def __init__(self, cron_path: Path = _CRON_PATH) -> None:
+        self.cron_path = cron_path
+        if not cron_path.exists():
+            raise PatcherError(f"scheduler.py not found: {cron_path}")
+
+    def is_patched(self) -> bool:
+        return MK_CRON_DELIVER in self.cron_path.read_text(encoding="utf-8")
+
+    def verify_target(self) -> None:
+        content = self.cron_path.read_text(encoding="utf-8")
+        if "delivered = False" not in content:
+            raise PatcherError("Cannot find 'delivered = False' anchor in scheduler.py")
+        if "cleaned_delivery_content" not in content:
+            raise PatcherError("Cannot find 'cleaned_delivery_content' in scheduler.py")
+
+    def apply(self) -> None:
+        if self.is_patched():
+            return
+        self.verify_target()
+        self._backup()
+        lines = self.cron_path.read_text(encoding="utf-8").splitlines(keepends=True)
+
+        inject_idx = None
+        for i, line in enumerate(lines):
+            if line.strip() == "delivered = False":
+                inject_idx = i
+                break
+        if inject_idx is None:
+            raise PatcherError("Cannot find 'delivered = False' anchor")
+
+        indent = _safe_indent(lines, inject_idx)
+        hook = _cron_deliver_hook(indent)
+        lines[inject_idx + 1 : inject_idx + 1] = hook.splitlines(keepends=True)
+        self.cron_path.write_text("".join(lines), encoding="utf-8")
+
+    def remove(self) -> None:
+        content = self.cron_path.read_text(encoding="utf-8")
+        if MK_CRON_DELIVER not in content:
+            return
+        content = _remove_block(content, MK_CRON_DELIVER, MK_CRON_DELIVER_END)
+        self.cron_path.write_text(content, encoding="utf-8")
+
+    def restore(self) -> None:
+        backup = self.cron_path.with_suffix(self.cron_path.suffix + _BACKUP_SUFFIX)
+        if not backup.exists():
+            raise PatcherError(f"No backup found: {backup}")
+        shutil.copy2(backup, self.cron_path)
+
+    def _backup(self) -> None:
+        backup = self.cron_path.with_suffix(self.cron_path.suffix + _BACKUP_SUFFIX)
+        if not backup.exists():
+            shutil.copy2(self.cron_path, backup)

@@ -583,3 +583,34 @@ class TestBuildLinearCompleteCard:
         )
         summary = card["config"].get("summary", {}).get("content", "")
         assert len(summary) <= 120
+
+
+class TestBuildCronCard:
+    def test_basic_card_structure(self) -> None:
+        from hermes_lark_streaming.cardkit import build_cron_card
+
+        card = build_cron_card("Hello **world**")
+        assert card["schema"] == "2.0"
+        assert card["body"]["elements"][0]["tag"] == "markdown"
+        assert "Hello **world**" in card["body"]["elements"][0]["content"]
+
+    def test_summary_from_content(self) -> None:
+        from hermes_lark_streaming.cardkit import build_cron_card
+
+        card = build_cron_card("Line 1\nLine 2\n" + "x" * 200)
+        summary = card["config"]["summary"]["content"]
+        assert summary.startswith("Line 1 Line 2")
+        assert len(summary) <= 120
+
+    def test_empty_content(self) -> None:
+        from hermes_lark_streaming.cardkit import build_cron_card
+
+        card = build_cron_card("")
+        assert card["body"]["elements"] == []
+
+    def test_table_content_preserved(self) -> None:
+        from hermes_lark_streaming.cardkit import build_cron_card
+
+        content = "| A | B |\n|---|---|\n| 1 | 2 |"
+        card = build_cron_card(content)
+        assert "| A | B |" in card["body"]["elements"][0]["content"]
