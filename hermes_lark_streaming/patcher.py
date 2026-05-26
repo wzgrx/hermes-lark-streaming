@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import logging
+import os
 import shutil
 from pathlib import Path
 
@@ -39,8 +40,9 @@ MK_INTERRUPT, MK_INTERRUPT_END = MARKERS[9]
 
 _BACKUP_SUFFIX = ".hermes_lark.bak"
 
-_RUN_PATH = Path.home() / ".hermes" / "hermes-agent" / "gateway" / "run.py"
-_CRON_PATH = Path.home() / ".hermes" / "hermes-agent" / "cron" / "scheduler.py"
+_HERMES_HOME = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
+_RUN_PATH = _HERMES_HOME / "hermes-agent" / "gateway" / "run.py"
+_CRON_PATH = _HERMES_HOME / "hermes-agent" / "cron" / "scheduler.py"
 
 MK_CRON_DELIVER = f"# {PREFIX}_CRON_DELIVER_BEGIN"
 MK_CRON_DELIVER_END = f"# {PREFIX}_CRON_DELIVER_END"
