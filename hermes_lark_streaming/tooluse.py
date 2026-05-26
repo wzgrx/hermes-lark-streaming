@@ -148,6 +148,7 @@ _TOOL_DESCRIPTORS: list[dict[str, Any]] = [
     {"aliases": ["agent", "task", "spawn"], "icon": "robot_outlined", "title": "Run sub-agent"},
     {"aliases": ["check", "determine", "verify"], "icon": "list-check_outlined", "title": "Check"},
     {"aliases": ["summarize", "analyze", "prepare"], "icon": "report_outlined", "title": "Analyze"},
+    {"aliases": ["clarify"], "icon": "chat_outlined", "title": "Clarify", "no_result": True},
 ]
 
 
