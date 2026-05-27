@@ -7,96 +7,20 @@ import logging
 import time
 from collections.abc import Callable, Coroutine
 from concurrent.futures import Future as ConcurrentFuture
-from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .config import Config
-from .controller_mixin import (
-    _TERMINAL,
-    ABORTED,
-    FAILED,
-    IDLE,
-    ControllerMixin,
-)
+from .controller_mixin import ControllerMixin
 from .feishu import (
     FeishuClient,
     FeishuClientConfig,
 )
-from .flush import CARDKIT_MS, FlushController
-from .segments import SegmentState
+from .segments import SegmentType
+from .session import CardSession, SessionState
 from .text import strip_reasoning_tags
-from .tooluse import ToolUseTracker
-from .unavailable_guard import UnavailableGuard
-
-if TYPE_CHECKING:
-    from .image import ImageResolver
 
 _logger = logging.getLogger("hermes_lark_streaming")
 _CARD_CREATION_WAIT_SEC = 10.0
-
-
-class CardSession:
-    """单条消息的卡片会话状态."""
-
-    __slots__ = (
-        "_loop",
-        "anchor_id",
-        "card_id",
-        "card_msg_id",
-        "chat_id",
-        "create_task",
-        "created_at",
-        "deferred_background_review_closed",
-        "deferred_background_review_lock",
-        "deferred_background_reviews",
-        "element_count",
-        "flush",
-        "footer",
-        "guard",
-        "image_resolver",
-        "message_id",
-        "segment_state",
-        "sequence",
-        "split_disabled",
-        "split_index",
-        "state",
-        "tool_use",
-    )
-
-    def __init__(
-        self,
-        message_id: str,
-        chat_id: str,
-        loop: asyncio.AbstractEventLoop,
-    ) -> None:
-        self.message_id = message_id
-        self.anchor_id: str | None = None
-        self.chat_id = chat_id
-        self.create_task: asyncio.Future[Any] | ConcurrentFuture | None = None
-        self.state = IDLE
-        self.card_msg_id: str | None = None
-        self.card_id: str | None = None
-        self.tool_use = ToolUseTracker()
-        self.flush = FlushController(throttle_ms=CARDKIT_MS)
-        self.footer: dict[str, Any] = {}
-        self.sequence = 1
-        self._loop = loop
-        self.created_at = time.time()
-        self.deferred_background_review_closed = False
-        self.deferred_background_reviews: list[tuple[str, Callable[[str], Any]]] = []
-        self.deferred_background_review_lock = Lock()
-
-        self.guard = UnavailableGuard(
-            reply_to_message_id=message_id,
-            get_card_message_id=lambda: self.card_msg_id,
-            on_terminate=lambda: setattr(self, "state", FAILED),
-        )
-
-        self.image_resolver: ImageResolver | None = None
-        self.segment_state: SegmentState | None = SegmentState()
-        self.element_count: int = 0
-        self.split_disabled = False
-        self.split_index: int = 0
 
 
 class StreamCardController(ControllerMixin):
@@ -158,7 +82,7 @@ class StreamCardController(ControllerMixin):
     def _get_active_session(self, message_id: str) -> CardSession | None:
         """获取非终态的活跃 session，不存在或已终态返回 None."""
         session = self._sessions.get(message_id)
-        if session is None or session.state in _TERMINAL:
+        if session is None or session.state.is_terminal:
             return None
         return session
 
@@ -297,7 +221,7 @@ class StreamCardController(ControllerMixin):
         if session is None:
             return
 
-        session.state = ABORTED
+        session.state = SessionState.ABORTED
         session.flush.mark_completed()
         _logger.info("on_aborted: msg=%s state=ABORTED", message_id[:12])
 
@@ -317,7 +241,7 @@ class StreamCardController(ControllerMixin):
 
         old_session = self._get_active_session(old_message_id)
         if old_session is not None:
-            old_session.state = ABORTED
+            old_session.state = SessionState.ABORTED
             old_session.flush.mark_completed()
             _logger.info(
                 "on_interrupted: abort old msg=%s",
@@ -366,7 +290,7 @@ class StreamCardController(ControllerMixin):
         message_id = session.message_id
 
         # 卡片创建失败 → 交回 gateway 正常回复
-        if session.state == FAILED:
+        if session.state == SessionState.FAILED:
             _logger.info("on_completed: msg=%s state=FAILED, yielding to gateway", message_id[:12])
             self._cleanup(message_id)
             return False
@@ -374,7 +298,7 @@ class StreamCardController(ControllerMixin):
         _logger.info(
             "on_completed: msg=%s has_card=%s state=%s",
             message_id[:12],
-            bool(session.card_msg_id),
+            session.has_card,
             session.state,
         )
 
@@ -413,12 +337,12 @@ class StreamCardController(ControllerMixin):
             self._cleanup(message_id)
             return False
 
-        if session.state == FAILED:
+        if session.state == SessionState.FAILED:
             _logger.info("on_completed_wait: msg=%s state=FAILED, yielding to gateway", message_id[:12])
             self._cleanup(message_id)
             return False
 
-        if not session.card_msg_id and not session.card_id:
+        if not session.has_card:
             _logger.info("on_completed_wait: msg=%s has no card, yielding to gateway", message_id[:12])
             self._cleanup(message_id)
             return False
@@ -426,7 +350,7 @@ class StreamCardController(ControllerMixin):
         _logger.info(
             "on_completed_wait: msg=%s has_card=%s state=%s",
             message_id[:12],
-            bool(session.card_msg_id),
+            session.has_card,
             session.state,
         )
 
@@ -512,7 +436,7 @@ class StreamCardController(ControllerMixin):
 
     def _completion_session(self, message_id: str) -> CardSession | None:
         session = self._sessions.get(message_id)
-        if session is not None and (session.state not in _TERMINAL or session.state == FAILED):
+        if session is not None and (not session.state.is_terminal or session.state == SessionState.FAILED):
             return session
 
         redirected_id = self._interrupt_map.pop(message_id, None)
@@ -523,7 +447,7 @@ class StreamCardController(ControllerMixin):
                 redirected_id[:12],
             )
             redirected = self._sessions.get(redirected_id)
-            if redirected is not None and redirected.state not in _TERMINAL:
+            if redirected is not None and not redirected.state.is_terminal:
                 return redirected
         return None
 
@@ -544,10 +468,10 @@ class StreamCardController(ControllerMixin):
                 _CARD_CREATION_WAIT_SEC,
             )
             task.cancel()
-            session.state = FAILED
+            session.mark_failed()
             return False
         except asyncio.CancelledError:
-            session.state = FAILED
+            session.mark_failed()
             return False
         except Exception:
             _logger.debug("card creation task failed", exc_info=True)
@@ -564,7 +488,7 @@ class StreamCardController(ControllerMixin):
         context: dict | None,
     ) -> None:
         if answer and session.segment_state and not any(
-            seg.type == "answer" for seg in session.segment_state.segments
+            seg.type == SegmentType.ANSWER for seg in session.segment_state.segments
         ):
             final_answer = strip_reasoning_tags(answer)
             if final_answer:

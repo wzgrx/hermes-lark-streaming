@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .cardkit_i18n import _LOCALES, _T, _i18n, _t
 from .cardkit_md import (
@@ -11,9 +11,8 @@ from .cardkit_md import (
     _split_long_text,
     optimize_markdown_style,
 )
-
-if TYPE_CHECKING:
-    from .segments import Segment
+from .segments import Segment, SegmentType
+from .tooluse import ToolDisplayStep
 
 STREAMING_ELEMENT_ID = "streaming_content"
 REASONING_ELEMENT_ID = "reasoning_content"
@@ -80,7 +79,7 @@ def _loading_element() -> dict:
 
 
 def _build_tool_panel(
-    steps: list[dict],
+    steps: list[ToolDisplayStep],
     elapsed_ms: float = 0,
     *,
     expanded: bool = True,
@@ -116,7 +115,7 @@ def _build_tool_panel(
     return panel
 
 
-def _build_tool_step_elements(step: dict) -> list[dict]:
+def _build_tool_step_elements(step: ToolDisplayStep) -> list[dict]:
     elements: list[dict] = [_build_tool_step_title(step)]
     detail = _build_tool_step_detail(step)
     if detail:
@@ -127,7 +126,7 @@ def _build_tool_step_elements(step: dict) -> list[dict]:
     return elements
 
 
-def _build_tool_step_title(step: dict) -> dict:
+def _build_tool_step_title(step: ToolDisplayStep) -> dict:
     status = step.get("status", "running")
     status_info = _tool_status_info(status)
     title = step.get("title", step.get("name", "tool"))
@@ -147,7 +146,7 @@ def _build_tool_step_title(step: dict) -> dict:
     }
 
 
-def _build_tool_step_detail(step: dict) -> dict | None:
+def _build_tool_step_detail(step: ToolDisplayStep) -> dict | None:
     detail = step.get("detail", "").strip()
     if not detail:
         return None
@@ -163,7 +162,7 @@ def _build_tool_step_detail(step: dict) -> dict | None:
     }
 
 
-def _build_tool_step_output(step: dict) -> dict | None:
+def _build_tool_step_output(step: ToolDisplayStep) -> dict | None:
     error_block = step.get("error_block")
     result_block = step.get("result_block")
 
@@ -376,7 +375,7 @@ def build_streaming_tool_use_pending_panel() -> dict[str, Any]:
 
 def build_streaming_card_v2(
     *,
-    tool_steps: list[dict] | None = None,
+    tool_steps: list[ToolDisplayStep] | None = None,
     elapsed_ms: float = 0,
     show_tool_use: bool = True,
     show_reasoning: bool = False,
@@ -422,7 +421,7 @@ def build_streaming_card_v2(
 def build_complete_card(
     *,
     segments: list[Segment],
-    all_tool_steps: list[dict],
+    all_tool_steps: list[ToolDisplayStep],
     footer_data: dict | None = None,
     is_error: bool = False,
     is_aborted: bool = False,
@@ -435,19 +434,19 @@ def build_complete_card(
     has_answer = False
 
     for seg in segments:
-        if seg.type == "reasoning":
+        if seg.type == SegmentType.REASONING:
             if seg.text:
                 elements.append(_build_reasoning_panel(
                     seg.text, seg.elapsed_ms, expanded=panel_expanded,
                     element_id=None, text_element_id=None,
                 ))
-        elif seg.type == "tool":
+        elif seg.type == SegmentType.TOOL:
             start = seg.tool_offset
             end = seg.tool_end_offset if seg.tool_end_offset else len(all_tool_steps)
             steps = all_tool_steps[start:end]
             if steps:
                 elements.append(_build_tool_panel(steps, expanded=panel_expanded, element_id=None))
-        elif seg.type == "answer" and seg.text:
+        elif seg.type == SegmentType.ANSWER and seg.text:
             has_answer = True
             content = _downgrade_tables(optimize_markdown_style(seg.text))
             for chunk in _split_long_text(content):
@@ -468,7 +467,7 @@ def build_complete_card(
 
     summary_text = ""
     for seg in reversed(segments):
-        if seg.type in ("answer", "reasoning") and seg.text:
+        if seg.type in (SegmentType.ANSWER, SegmentType.REASONING) and seg.text:
             summary_text = seg.text
             break
     summary = summary_text[:120].replace("\n", " ").replace("```", "").strip()

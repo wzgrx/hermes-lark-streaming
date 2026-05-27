@@ -9,16 +9,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hermes_lark_streaming.controller import CardSession, StreamCardController
+from hermes_lark_streaming.controller import StreamCardController
 from hermes_lark_streaming.controller_mixin import (
-    ABORTED,
-    COMPLETED,
-    FAILED,
-    STREAMING,
     _estimate_segment_elements,
 )
 from hermes_lark_streaming.feishu import FeishuAPIError, FeishuClient
 from hermes_lark_streaming.segments import Segment, SegmentState
+from hermes_lark_streaming.session import CardSession, SessionState
 
 
 def _enable(ctrl: StreamCardController) -> None:
@@ -80,7 +77,7 @@ def test_on_interrupted_uses_new_message_id_and_anchor_alias() -> None:
     assert ctrl._sessions["quoted"] is session
     assert session.anchor_id == "quoted"
     assert ctrl._interrupt_map["old"] == "new"
-    assert ctrl._sessions["old"].state == ABORTED
+    assert ctrl._sessions["old"].state == SessionState.ABORTED
 
 
 def test_prune_stale_sessions_ignores_none_key_and_prunes_valid_key() -> None:
@@ -109,7 +106,7 @@ def test_prune_stale_sessions_ignores_none_key_and_prunes_valid_key() -> None:
 async def test_background_review_deferred_until_complete() -> None:
     ctrl = _setup_ctrl()
     session = _make_session("msg_bg")
-    session.state = STREAMING
+    session.state = SessionState.STREAMING
     session.card_msg_id = "card_msg"
     ctrl._sessions["msg_bg"] = session
     sent: list[str] = []
@@ -184,7 +181,7 @@ class TestAwaitedCompletion:
             await ready.wait()
             session.card_id = "card_wait"
             session.card_msg_id = "card_msg_wait"
-            session.state = STREAMING
+            session.state = SessionState.STREAMING
 
         session.create_task = asyncio.create_task(finish_create())
 
@@ -208,14 +205,14 @@ class TestAwaitedCompletion:
         with patch("hermes_lark_streaming.controller._CARD_CREATION_WAIT_SEC", 0.01):
             assert await ctrl.on_completed_wait(message_id="msg_timeout", answer="ok") is False
 
-        assert session.state == FAILED
+        assert session.state == SessionState.FAILED
         assert "msg_timeout" not in ctrl._sessions
 
     @pytest.mark.asyncio
     async def test_finalization_failure_yields_to_gateway(self) -> None:
         ctrl = _setup_ctrl()
         session = CardSession("msg_fail", "chat", asyncio.get_running_loop())
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_fail"
         session.card_msg_id = "card_msg_fail"
         ctrl._sessions["msg_fail"] = session
@@ -227,7 +224,7 @@ class TestAwaitedCompletion:
     async def test_short_reply_adds_final_answer_segment(self) -> None:
         ctrl = _setup_ctrl()
         session = CardSession("msg_short", "chat", asyncio.get_running_loop())
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.segment_state = SegmentState()
         session.card_id = "card_short"
         session.card_msg_id = "card_msg_short"
@@ -323,7 +320,7 @@ class TestDispatch:
     def test_completed_dispatches(self) -> None:
         ctrl = _setup_ctrl()
         session = _make_session("msg_c")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_123"
         ctrl._sessions["msg_c"] = session
         with (
@@ -355,7 +352,7 @@ class TestDispatch:
     def test_guard_skips_terminal(self) -> None:
         ctrl = _setup_ctrl()
         session = _make_session("msg_term")
-        session.state = COMPLETED
+        session.state = SessionState.COMPLETED
         ctrl._sessions["msg_term"] = session
         assert ctrl.on_answer(message_id="msg_term", text="late text") is False
         assert len(session.segment_state.segments) == 0
@@ -384,7 +381,7 @@ class TestDoCreateCard:
 
         assert session.segment_state is not None
         assert session.card_id == "card_id_abc"
-        assert session.state == STREAMING
+        assert session.state == SessionState.STREAMING
 
     @pytest.mark.asyncio
     async def test_cardkit_failure_yields_to_gateway(self) -> None:
@@ -397,7 +394,7 @@ class TestDoCreateCard:
         await ctrl._do_create_card(session)
 
         assert session.segment_state is not None
-        assert session.state == FAILED
+        assert session.state == SessionState.FAILED
         assert await ctrl.on_completed_wait(message_id="msg_fallback", answer="plain") is False
         assert "msg_fallback" not in ctrl._sessions
 
@@ -410,7 +407,7 @@ class TestDoCreateCard:
 
         await ctrl._do_create_card(session)
 
-        assert session.state == FAILED
+        assert session.state == SessionState.FAILED
 
     @pytest.mark.asyncio
     async def test_segment_state_set_before_await(self) -> None:
@@ -456,7 +453,7 @@ class TestDoFlush:
         """step1 创建元素 → step2 刷文本 → step3 创建 tool 面板."""
         ctrl = _setup_ctrl()
         session = _make_session("msg_flush")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_flush"
         session.segment_state.on_reasoning_delta("think")
         session.segment_state.on_answer_delta("hello world")
@@ -484,7 +481,7 @@ class TestDoFlush:
         """低于阈值时仍是原来的单卡 flush：只 batch/stream 当前 card，不触发拆卡 API."""
         ctrl = _setup_ctrl()
         session = _make_session("msg_no_split")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_no_split"
         session.element_count = 1
         session.segment_state.on_reasoning_delta("think")
@@ -511,7 +508,7 @@ class TestDoFlush:
         calls = _capture_split_calls(ctrl)
 
         session = _make_session("msg_split")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_old"
         session.card_msg_id = "msg_old"
         session.element_count = 174
@@ -551,7 +548,7 @@ class TestDoFlush:
         )
 
         session = _make_session("msg_tool_roll")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_tool_old"
         session.card_msg_id = "msg_tool_old"
         session.tool_use.record_start("read", "file0")
@@ -594,7 +591,7 @@ class TestDoFlush:
         )
 
         session = _make_session("msg_tool_many")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_tool_page_1"
         session.card_msg_id = "msg_tool_page_1"
         session.element_count = 1
@@ -637,7 +634,7 @@ class TestDoFlush:
         client = ctrl._client
 
         session = _make_session("msg_tool_roll_fallback")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_tool_current"
         session.card_msg_id = "msg_tool_current"
         session.tool_use.record_start("read", "file0")
@@ -673,7 +670,7 @@ class TestDoFlush:
         client = ctrl._client
 
         session = _make_session("msg_split_fallback")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_current"
         session.card_msg_id = "msg_current"
         session.element_count = 174
@@ -714,7 +711,7 @@ class TestDoFlush:
     async def test_reasoning_finalized_snapshot(self) -> None:
         ctrl = _setup_ctrl()
         session = _make_session("msg_snap")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_snap"
         session.segment_state.on_reasoning_delta("think")
         session.segment_state.on_answer_delta("reply")
@@ -737,7 +734,7 @@ class TestDoFlush:
         ctrl._client.cardkit_batch_update = capture_batch
 
         session = _make_session("msg_title")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_title"
         session.segment_state.on_reasoning_delta("think")
         session.segment_state.on_answer_delta("reply")
@@ -770,7 +767,7 @@ class TestDoFlush:
         ctrl._client.cardkit_batch_update = batch_with_race
 
         session = _make_session("msg_tool_snap")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_snap"
         session.segment_state.on_answer_delta("text")
         session.tool_use.record_start("read", "f")
@@ -788,7 +785,7 @@ class TestDoFlush:
         ctrl = _setup_ctrl()
         ctrl._client.cardkit_stream_element = AsyncMock(side_effect=RuntimeError("stream fail"))
         session = _make_session("msg_exc")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_exc"
         session.segment_state.on_answer_delta("text")
         session.tool_use.record_start("read", "f")
@@ -806,7 +803,7 @@ class TestDoFlush:
         ctrl = _setup_ctrl()
         ctrl._client.cardkit_batch_update = AsyncMock(side_effect=FeishuAPIError("e", code=code))
         session = _make_session("msg_err")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_e"
         session.segment_state.on_reasoning_delta("think")
         ctrl._sessions["msg_err"] = session
@@ -820,20 +817,20 @@ class TestDoFlush:
 
         # 终态
         s1 = _make_session("m1")
-        s1.state = COMPLETED
+        s1.state = SessionState.COMPLETED
         ctrl._sessions["m1"] = s1
         await ctrl._do_flush(s1)
 
         # 无 card_id
         s2 = _make_session("m2")
-        s2.state = STREAMING
+        s2.state = SessionState.STREAMING
         s2.card_id = None
         ctrl._sessions["m2"] = s2
         await ctrl._do_flush(s2)
 
         # 无 dirty
         s3 = _make_session("m3")
-        s3.state = STREAMING
+        s3.state = SessionState.STREAMING
         s3.card_id = "c"
         s3.segment_state.on_reasoning_delta("t")
         s3.segment_state.segments[0].created = True
@@ -858,13 +855,13 @@ class TestDoCompleteCard:
         client.cardkit_update = AsyncMock(side_effect=lambda *a, **k: call_order.append("update"))
 
         session = _make_session("msg_comp")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_comp"
         session.card_msg_id = "msg_comp_reply"
         ctrl._sessions["msg_comp"] = session
 
         assert await ctrl._do_complete_card(session) is True
-        assert session.state == COMPLETED
+        assert session.state == SessionState.COMPLETED
         assert call_order == ["close", "update"]
 
     @pytest.mark.asyncio
@@ -885,7 +882,7 @@ class TestDoCompleteCard:
         client.cardkit_update = flaky_update
 
         session = _make_session("msg_retry")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_retry"
         session.card_msg_id = "msg_retry_reply"
         ctrl._sessions["msg_retry"] = session
@@ -900,19 +897,19 @@ class TestDoCompleteCard:
         ctrl._client.cardkit_close_streaming = AsyncMock(side_effect=FeishuAPIError("fail", code=99999))
 
         session = _make_session("msg_3fail")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_3fail"
         ctrl._sessions["msg_3fail"] = session
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
             assert await ctrl._do_complete_card(session) is False
-        assert session.state == FAILED
+        assert session.state == SessionState.FAILED
 
     @pytest.mark.asyncio
     async def test_finalize_and_cleanup(self) -> None:
         ctrl = _setup_ctrl()
         session = _make_session("msg_fc")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_fc"
         session.segment_state.on_reasoning_delta("think")
         time.sleep(0.001)
@@ -927,12 +924,12 @@ class TestDoCompleteCard:
     async def test_no_card_id_skips_close(self) -> None:
         ctrl = _setup_ctrl()
         session = _make_session("msg_nocard")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = None
         ctrl._sessions["msg_nocard"] = session
 
         assert await ctrl._do_complete_card(session) is True
-        assert session.state == COMPLETED
+        assert session.state == SessionState.COMPLETED
         ctrl._client.cardkit_close_streaming.assert_not_called()
 
     @pytest.mark.asyncio
@@ -942,7 +939,7 @@ class TestDoCompleteCard:
 
         ctrl = _setup_ctrl()
         session = _make_session("msg_img")
-        session.state = STREAMING
+        session.state = SessionState.STREAMING
         session.card_id = "card_img"
         session.segment_state.on_answer_delta("![a](http://x.com/img.png)")
         session.segment_state.on_reasoning_delta("mid")

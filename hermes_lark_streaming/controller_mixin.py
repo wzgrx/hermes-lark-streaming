@@ -31,36 +31,29 @@ from .feishu import (
 )
 from .flush import CARDKIT_MS
 from .image import ImageResolver
-from .segments import Segment, SegmentState
+from .segments import Segment, SegmentState, SegmentType
+from .session import SessionState
 from .text import split_reasoning_text
+from .tooluse import ToolDisplayStep
 
 if TYPE_CHECKING:
     from .config import Config
-    from .controller import CardSession
     from .feishu import FeishuClient
+    from .session import CardSession
 
 _logger = logging.getLogger("hermes_lark_streaming")
-
-IDLE = "idle"
-CREATING = "creating"
-STREAMING = "streaming"
-COMPLETED = "completed"
-FAILED = "failed"
-ABORTED = "aborted"
-
-_TERMINAL = {COMPLETED, FAILED, ABORTED}
 
 _ELEMENT_THRESHOLD = 180  # 拆卡阈值（飞书硬上限 200，预留 20 给 footer + 波动）
 _FOOTER_RESERVE = 2  # footer 元素预留（hr + markdown）
 
 
-def _estimate_segment_elements(seg: Segment, all_steps: list[dict[str, Any]]) -> int:
+def _estimate_segment_elements(seg: Segment, all_steps: list[ToolDisplayStep]) -> int:
     """估算单个 segment 新增的卡片元素数."""
-    if seg.type == "reasoning":
+    if seg.type == SegmentType.REASONING:
         return 4  # collapsible_panel + plain_text + standard_icon + markdown
-    elif seg.type == "answer":
+    elif seg.type == SegmentType.ANSWER:
         return 1
-    elif seg.type == "tool":
+    elif seg.type == SegmentType.TOOL:
         return _estimate_tool_elements(
             seg.tool_offset,
             _tool_segment_end(seg, all_steps),
@@ -69,11 +62,11 @@ def _estimate_segment_elements(seg: Segment, all_steps: list[dict[str, Any]]) ->
     return 0
 
 
-def _tool_segment_end(seg: Segment, all_steps: list[dict[str, Any]]) -> int:
+def _tool_segment_end(seg: Segment, all_steps: list[ToolDisplayStep]) -> int:
     return seg.tool_end_offset if seg.tool_end_offset else len(all_steps)
 
 
-def _estimate_tool_elements(start: int, end: int, all_steps: list[dict[str, Any]]) -> int:
+def _estimate_tool_elements(start: int, end: int, all_steps: list[ToolDisplayStep]) -> int:
     """估算 tool panel 在 [start, end) step 区间内的元素数."""
     steps = all_steps[start:end]
     count = 3  # panel/header 基础元素
@@ -96,7 +89,7 @@ class ControllerMixin:
     _flush_deferred_background_reviews: Callable[[CardSession], None]
 
     def _schedule_flush(self, session: CardSession) -> None:
-        if session.state == IDLE or session.state in _TERMINAL:
+        if session.state == SessionState.IDLE or session.state.is_terminal:
             return
         if session.guard.should_skip("_schedule_flush"):
             return
@@ -121,9 +114,9 @@ class ControllerMixin:
 
     async def _do_create_card(self, session: CardSession) -> None:
         """创建只有 loading 的流式占位卡片."""
-        if session.state != IDLE:
+        if session.state != SessionState.IDLE:
             return
-        session.state = CREATING
+        session.state = SessionState.CREATING
         if session.segment_state is None:
             session.segment_state = SegmentState()
 
@@ -142,8 +135,7 @@ class ControllerMixin:
                 reply_to_message_id,
                 card_id,
             )
-            session.card_id = card_id
-            session.card_msg_id = card_msg_id
+            session.set_card(card_id=card_id, card_msg_id=card_msg_id)
             session.element_count = 1  # loading element
             session.flush.set_throttle(CARDKIT_MS)
 
@@ -154,8 +146,8 @@ class ControllerMixin:
                 )
 
             session.flush.set_card_message_ready(True)
-            if session.state == CREATING:
-                session.state = STREAMING
+            if session.state == SessionState.CREATING:
+                session.state = SessionState.STREAMING
             if session.segment_state and session.segment_state.has_dirty:
                 self._schedule_flush(session)
             _logger.info(
@@ -165,14 +157,14 @@ class ControllerMixin:
             )
         except FeishuAPIError:
             _logger.info("CardKit create failed, yielding to gateway", exc_info=True)
-            session.state = FAILED
+            session.mark_failed()
         except Exception:
             _logger.exception("_do_create_card failed")
-            session.state = FAILED
+            session.mark_failed()
 
     async def _do_flush(self, session: CardSession) -> None:
         """幂等 flush：按 segment 顺序处理结构性变更，超阈值时拆卡."""
-        if session.state in _TERMINAL or not session.card_id:
+        if session.state.is_terminal or not session.card_id:
             return
         segment_state = session.segment_state
         if segment_state is None:
@@ -196,7 +188,7 @@ class ControllerMixin:
             if not seg.created:
                 estimated = _estimate_segment_elements(seg, all_steps)
                 if (
-                    seg.type == "tool"
+                    seg.type == SegmentType.TOOL
                     and session.element_count + new_el_total + estimated + _FOOTER_RESERVE > _ELEMENT_THRESHOLD
                     and not session.split_disabled
                 ):
@@ -224,7 +216,7 @@ class ControllerMixin:
                     updated_tool_segs = []
                     new_el_total = 0
 
-                if seg.type == "reasoning":
+                if seg.type == SegmentType.REASONING:
                     el = _build_reasoning_panel(
                         " ",
                         seg.elapsed_ms,
@@ -232,9 +224,9 @@ class ControllerMixin:
                         element_id=seg.el_id,
                         text_element_id=seg.text_el_id,
                     )
-                elif seg.type == "answer":
+                elif seg.type == SegmentType.ANSWER:
                     el = _streaming_element(element_id=seg.el_id)
-                elif seg.type == "tool":
+                elif seg.type == SegmentType.TOOL:
                     start = seg.tool_offset
                     end = seg.tool_end_offset if seg.tool_end_offset else len(all_steps)
                     el = _build_tool_panel(all_steps[start:end], element_id=seg.el_id)
@@ -251,9 +243,9 @@ class ControllerMixin:
                     },
                 })
                 if (
-                    seg.type == "tool"
+                    seg.type == SegmentType.TOOL
                     and i + 1 < len(segments)
-                    and segments[i + 1].type == "tool"
+                    and segments[i + 1].type == SegmentType.TOOL
                     and segments[i + 1].tool_offset == seg.tool_end_offset
                     and not session.split_disabled
                 ):
@@ -267,7 +259,7 @@ class ControllerMixin:
                     new_el_estimates = {}
                     updated_tool_segs = []
                     new_el_total = 0
-            elif seg.type == "reasoning" and seg.elapsed_ms > 0 and not seg.reasoning_finalized:
+            elif seg.type == SegmentType.REASONING and seg.elapsed_ms > 0 and not seg.reasoning_finalized:
                 _logger.info(
                     "CardKit reasoning finalized: msg=%s el=%s elapsed=%.0fms seq=%d",
                     session.message_id[:12],
@@ -295,7 +287,7 @@ class ControllerMixin:
                         },
                     },
                 })
-            elif seg.type == "tool" and seg.dirty:
+            elif seg.type == SegmentType.TOOL and seg.dirty:
                 if seg.tool_end_offset > 0:
                     start, end = seg.tool_offset, seg.tool_end_offset
                 else:
@@ -345,7 +337,7 @@ class ControllerMixin:
             if not seg.created or not seg.dirty:
                 continue
             try:
-                if seg.type == "reasoning":
+                if seg.type == SegmentType.REASONING:
                     content = optimize_markdown_style(seg.text) or " "
                     session.sequence += 1
                     _logger.info(
@@ -361,7 +353,7 @@ class ControllerMixin:
                         sequence=session.sequence,
                     )
                     seg.dirty = False
-                elif seg.type == "answer":
+                elif seg.type == SegmentType.ANSWER:
                     content = seg.text
                     if session.image_resolver:
                         content = session.image_resolver.resolve_images(content)
@@ -403,7 +395,7 @@ class ControllerMixin:
             len(actions),
         )
         pre_flush_reasoning_elapsed = {
-            seg.el_id: seg.elapsed_ms for seg in segments if seg.type == "reasoning"
+            seg.el_id: seg.elapsed_ms for seg in segments if seg.type == SegmentType.REASONING
         }
         pre_flush_tool_offsets = {
             seg.el_id: seg.tool_end_offset for seg in updated_tool_segs
@@ -421,13 +413,13 @@ class ControllerMixin:
                     seg.element_estimate = estimate
                     session.element_count += estimate
             for seg in segments:
-                if seg.type == "reasoning" and pre_flush_reasoning_elapsed.get(seg.el_id, 0) > 0:
+                if seg.type == SegmentType.REASONING and pre_flush_reasoning_elapsed.get(seg.el_id, 0) > 0:
                     seg.reasoning_finalized = True
             if new_el_ids:
                 for seg in segments:
                     if seg.el_id in new_el_ids or not seg.created:
                         continue
-                    if seg.type in ("reasoning", "answer") and seg.text:
+                    if seg.type in (SegmentType.REASONING, SegmentType.ANSWER) and seg.text:
                         seg.dirty = True
             for seg in updated_tool_segs:
                 offset_ok = pre_flush_tool_offsets.get(seg.el_id, -1) == seg.tool_end_offset
@@ -447,7 +439,7 @@ class ControllerMixin:
         self,
         base_count: int,
         seg: Segment,
-        all_steps: list[dict[str, Any]],
+        all_steps: list[ToolDisplayStep],
     ) -> int | None:
         """寻找 tool step 拆分点，让当前卡保留尽可能多的 steps."""
         start = seg.tool_offset
@@ -467,7 +459,7 @@ class ControllerMixin:
         segment_state: SegmentState,
         index: int,
         seg: Segment,
-        all_steps: list[dict[str, Any]],
+        all_steps: list[ToolDisplayStep],
         actions: list[dict[str, Any]],
         new_el_ids: set[str],
         new_el_estimates: dict[str, int],
@@ -541,7 +533,7 @@ class ControllerMixin:
         seal_segments = [s for s in segments[:split_idx] if s.created]
         if session.image_resolver:
             for seg in seal_segments:
-                if seg.type == "answer" and seg.text:
+                if seg.type == SegmentType.ANSWER and seg.text:
                     try:
                         seg.text = await session.image_resolver.resolve_await(seg.text)
                     except Exception:
@@ -584,8 +576,7 @@ class ControllerMixin:
                 exc_info=True,
             )
 
-        session.card_id = new_card_id
-        session.card_msg_id = new_msg_id
+        session.set_card(card_id=new_card_id, card_msg_id=new_msg_id)
         session.element_count = 1  # loading
         session.sequence = 1
         session.split_disabled = False
@@ -624,20 +615,18 @@ class ControllerMixin:
         session.flush.mark_completed()
 
         segment_state = session.segment_state
-        is_error = session.state == FAILED
-        is_aborted = session.state == ABORTED
+        is_error = session.state == SessionState.FAILED
+        is_aborted = session.state == SessionState.ABORTED
         all_tool_steps = session.tool_use.build_display_steps()
 
         if segment_state is not None:
             segment_state.finalize_segments(len(all_tool_steps))
 
-        active_segments = (
-            segment_state.segments[session.split_index:] if segment_state is not None else []
-        )
+        active_segments = session.active_segments()
 
         if session.image_resolver:
             for seg in active_segments:
-                if seg.type == "answer" and seg.text:
+                if seg.type == SegmentType.ANSWER and seg.text:
                     try:
                         seg.text = await session.image_resolver.resolve_await(seg.text)
                     except Exception:
@@ -672,7 +661,7 @@ class ControllerMixin:
                         card,
                         sequence=session.sequence,
                     )
-                session.state = COMPLETED
+                session.state = SessionState.COMPLETED
                 return True
             except FeishuAPIError as e:
                 _logger.warning(
@@ -708,7 +697,7 @@ class ControllerMixin:
             session.card_id,
             session.sequence,
         )
-        session.state = FAILED
+        session.mark_failed()
         return False
 
     async def _do_cron_deliver(self, chat_id: str, content: str) -> None:

@@ -31,8 +31,6 @@ from lark_oapi.api.im.v1 import (
     CreateImageRequestBody,
     CreateMessageRequest,
     CreateMessageRequestBody,
-    PatchMessageRequest,
-    PatchMessageRequestBody,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
@@ -133,20 +131,6 @@ class FeishuClient:
             return str(resp.data.message_id)
         raise FeishuAPIError("send_card_to_chat: response missing message_id")
 
-    async def reply_card(self, message_id: str, card: dict[str, Any]) -> str:
-        """回复消息，返回 message_id."""
-        request = (
-            ReplyMessageRequest.builder()
-            .message_id(message_id)
-            .request_body(ReplyMessageRequestBody.builder().msg_type("interactive").content(self._dumps(card)).build())
-            .build()
-        )
-        resp = await self._client.im.v1.message.areply(request)
-        self._check(resp, "reply_card")
-        if resp.data and resp.data.message_id:
-            return str(resp.data.message_id)
-        raise FeishuAPIError("reply_card: response missing message_id")
-
     async def reply_card_by_id(self, message_id: str, card_id: str) -> str:
         """通过 card_id 回复 CardKit 卡片消息，返回 message_id."""
         request = (
@@ -165,17 +149,6 @@ class FeishuClient:
         if resp.data and resp.data.message_id:
             return str(resp.data.message_id)
         raise FeishuAPIError("reply_card_by_id: response missing message_id")
-
-    async def update_card(self, message_id: str, card: dict[str, Any]) -> None:
-        """PATCH 更新已发送的卡片（IM 降级通道）."""
-        request = (
-            PatchMessageRequest.builder()
-            .message_id(message_id)
-            .request_body(PatchMessageRequestBody.builder().content(self._dumps(card)).build())
-            .build()
-        )
-        resp = await self._client.im.v1.message.apatch(request)
-        self._check(resp, "update_card")
 
     async def cardkit_create(self, card: dict[str, Any]) -> str:
         """创建 CardKit 实体，返回 card_id."""

@@ -7,18 +7,44 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from enum import StrEnum
+from typing import Any, TypedDict
+
+
+class ToolStatus(StrEnum):
+    RUNNING = "running"
+    SUCCESS = "success"
+    ERROR = "error"
+
+
+class ToolBlock(TypedDict):
+    language: str
+    content: str
+    fenced: str
+
+
+class ToolDisplayStep(TypedDict):
+    name: str
+    title: str
+    status: str
+    detail: str
+    output: str
+    error: str
+    icon: str
+    elapsed_ms: float
+    result_block: ToolBlock | None
+    error_block: ToolBlock | None
 
 
 @dataclass
 class ToolStep:
     name: str
-    status: str  # running | success | error
+    status: ToolStatus
     detail: str = ""
     output: str = ""
     error: str = ""
-    result_block: dict[str, Any] | None = None  # {"language": "json"|"text", "content": str}
-    error_block: dict[str, Any] | None = None
+    result_block: ToolBlock | None = None
+    error_block: ToolBlock | None = None
     started_at: float = 0.0
     elapsed_ms: float = 0.0
 
@@ -179,7 +205,7 @@ def _build_display_block(
     fallback_lang: str = "json",
     *,
     sanitizer: str | None = None,
-) -> dict[str, Any] | None:
+) -> ToolBlock | None:
     """构建结果/错误的显示块 — 返回 {language, content, fenced} 含 markdown 代码围栏."""
     if value is None:
         return None
@@ -206,7 +232,7 @@ def _build_display_block(
     return _fenced_block("text", normalized) if normalized else None
 
 
-def _fenced_block(language: str, content: str) -> dict[str, Any]:
+def _fenced_block(language: str, content: str) -> ToolBlock:
     fence = "`" * max(3, max((len(m) for m in re.findall(r"`+", content)), default=0) + 1)
     return {"language": language, "content": content, "fenced": f"{fence}{language}\n{content}\n{fence}"}
 
@@ -235,7 +261,7 @@ class ToolUseTracker:
         self._session.steps.append(
             ToolStep(
                 name=name,
-                status="running",
+                status=ToolStatus.RUNNING,
                 detail=detail,
                 started_at=time.time(),
             )
@@ -248,8 +274,8 @@ class ToolUseTracker:
         desc = _resolve_tool_descriptor(name)
         sanitizer = desc.get("sanitizer") if desc else None
         for step in reversed(self._session.steps):
-            if step.name == name and step.status == "running":
-                step.status = "error" if error else "success"
+            if step.name == name and step.status == ToolStatus.RUNNING:
+                step.status = ToolStatus.ERROR if error else ToolStatus.SUCCESS
                 step.error = error
                 step.output = output
                 step.elapsed_ms = (time.time() - step.started_at) * 1000
@@ -261,7 +287,7 @@ class ToolUseTracker:
         self._session.steps.append(
             ToolStep(
                 name=name,
-                status="error" if error else "success",
+                status=ToolStatus.ERROR if error else ToolStatus.SUCCESS,
                 detail=error or output,
                 output=output,
                 error=error,
@@ -271,11 +297,11 @@ class ToolUseTracker:
             )
         )
 
-    def build_display_steps(self) -> list[dict[str, Any]]:
+    def build_display_steps(self) -> list[ToolDisplayStep]:
         """构建用于卡片渲染的步骤列表."""
         if self._session is None:
             return []
-        steps = []
+        steps: list[ToolDisplayStep] = []
         for s in self._session.steps:
             desc = _resolve_tool_descriptor(s.name)
             base_title = desc["title"] if desc else _humanize_tool_name(s.name)
@@ -287,7 +313,7 @@ class ToolUseTracker:
                 {
                     "name": s.name,
                     "title": base_title,
-                    "status": s.status,
+                    "status": s.status.value,
                     "detail": detail,
                     "output": s.output,
                     "error": s.error,

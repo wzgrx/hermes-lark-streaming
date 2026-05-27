@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -16,21 +17,24 @@ def main() -> int:
         return 0
 
     cmd = args[0]
-
-    if cmd == "install":
-        return _cmd_install()
-    if cmd == "uninstall":
-        return _cmd_uninstall()
-    if cmd == "status":
-        return _cmd_status()
-    if cmd == "verify":
-        return _cmd_verify()
-    if cmd == "restore":
-        return _cmd_restore()
+    commands = _commands()
+    handler = commands.get(cmd)
+    if handler is not None:
+        return handler()
 
     print(f"Unknown command: {cmd}")
     _print_usage()
     return 1
+
+
+def _commands() -> dict[str, Callable[[], int]]:
+    return {
+        "install": _cmd_install,
+        "uninstall": _cmd_uninstall,
+        "restore": _cmd_restore,
+        "status": _cmd_status,
+        "verify": _cmd_verify,
+    }
 
 
 def _print_usage() -> None:
