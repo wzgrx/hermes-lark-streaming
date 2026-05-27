@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.0] - 2026-05-27
+
+### 变更
+
+- 移除非线性模式，简化插件逻辑
+- 移除 `streaming.linear` 配置项，所有会话统一走 CardKit 流式路径
+- CardKit 创建失败时直接交回 gateway 默认回复，不再降级到 IM PATCH
+
+### Changed
+
+- Remove non-linear mode to simplify plugin logic
+- Remove `streaming.linear` config option; all sessions now use CardKit streaming path
+- CardKit creation failure now yields to gateway default reply instead of falling back to IM PATCH
+
+---
+
 ## [0.7.3] - 2026-05-26
 
 ### 修复
