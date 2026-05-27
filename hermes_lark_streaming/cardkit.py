@@ -13,7 +13,7 @@ from .cardkit_md import (
 )
 
 if TYPE_CHECKING:
-    from .linear import Segment
+    from .segments import Segment
 
 STREAMING_ELEMENT_ID = "streaming_content"
 REASONING_ELEMENT_ID = "reasoning_content"
@@ -419,120 +419,7 @@ def build_streaming_card_v2(
     }
 
 
-def build_im_fallback_card() -> dict[str, Any]:
-    return {
-        "config": {
-            "wide_screen_mode": True,
-            "update_multi": True,
-            "locales": _LOCALES,
-        },
-        "elements": [
-            {
-                "tag": "markdown",
-                "content": _T["processing_prefix"][0],
-                "i18n_content": _t("processing_prefix"),
-            },
-        ],
-    }
-
-
-def build_streaming_card(
-    *,
-    tool_steps: list[dict] | None = None,
-    reasoning_text: str = "",
-    text: str = "",
-) -> dict[str, Any]:
-    """IM PATCH 降级路径的流式更新卡片."""
-    elements: list[dict] = []
-
-    if reasoning_text:
-        elements.append(
-            {
-                "tag": "markdown",
-                "content": f"{_T['thinking'][0]}\n\n{reasoning_text}",
-                "i18n_content": _i18n(
-                    f"{_T['thinking'][0]}\n\n{reasoning_text}",
-                    f"{_T['thinking'][1]}\n\n{reasoning_text}",
-                ),
-            }
-        )
-
-    if tool_steps:
-        elements.append(_build_tool_panel(tool_steps))
-
-    elements.append({"tag": "markdown", "content": _downgrade_tables(optimize_markdown_style(text)) if text else " "})
-
-    return {
-        "config": {
-            "wide_screen_mode": True,
-            "update_multi": True,
-            "locales": _LOCALES,
-        },
-        "elements": elements,
-    }
-
-
 def build_complete_card(
-    *,
-    text: str = "",
-    reasoning_text: str = "",
-    reasoning_elapsed_ms: float = 0,
-    tool_steps: list[dict] | None = None,
-    tool_elapsed_ms: float = 0,
-    footer_data: dict | None = None,
-    has_cardkit: bool = False,
-    is_error: bool = False,
-    is_aborted: bool = False,
-    footer_fields: list[list[str]] | None = None,
-    footer_show_label: bool = True,
-    panel_expanded: bool = False,
-) -> dict[str, Any]:
-    """完成态卡片 — 含 header、reasoning 面板、footer."""
-    elements: list[dict] = []
-
-    if reasoning_text:
-        elements.append(_build_reasoning_panel(reasoning_text, reasoning_elapsed_ms, expanded=panel_expanded))
-
-    if tool_steps:
-        elements.append(_build_tool_panel(tool_steps, tool_elapsed_ms, expanded=panel_expanded))
-
-    content = _downgrade_tables(optimize_markdown_style(text or _T["done"][0]))
-    for chunk in _split_long_text(content):
-        elements.append({"tag": "markdown", "content": chunk})
-
-    elements.extend(
-        _build_footer_elements(
-            footer_data,
-            is_error,
-            is_aborted,
-            fields=footer_fields,
-            show_label=footer_show_label,
-        )
-    )
-
-    summary = (text or reasoning_text or "")[:120]
-    summary = summary.replace("\n", " ").replace("```", "").strip()
-
-    card: dict[str, Any] = {
-        "config": {
-            "wide_screen_mode": True,
-            "update_multi": True,
-            "locales": _LOCALES,
-        },
-    }
-    if summary:
-        card["config"]["summary"] = {"content": summary}
-
-    if has_cardkit:
-        card["schema"] = "2.0"
-        card["body"] = {"elements": elements}
-    else:
-        card["elements"] = elements
-
-    return card
-
-
-def build_linear_complete_card(
     *,
     segments: list[Segment],
     all_tool_steps: list[dict],
@@ -543,7 +430,7 @@ def build_linear_complete_card(
     footer_show_label: bool = True,
     panel_expanded: bool = False,
 ) -> dict[str, Any]:
-    """线性模式完成态卡片 — 按 segments 顺序渲染."""
+    """完成态流式卡片 — 按 segments 顺序渲染."""
     elements: list[dict] = []
     has_answer = False
 

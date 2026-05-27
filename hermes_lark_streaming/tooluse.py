@@ -1,4 +1,4 @@
-"""工具调用追踪与可视化 — 与 openclaw-lark 工具展示对齐."""
+"""工具调用追踪与可视化."""
 
 from __future__ import annotations
 
@@ -272,7 +272,7 @@ class ToolUseTracker:
         )
 
     def build_display_steps(self) -> list[dict[str, Any]]:
-        """构建用于卡片渲染的步骤列表 — 与 openclaw 结构对齐."""
+        """构建用于卡片渲染的步骤列表."""
         if self._session is None:
             return []
         steps = []

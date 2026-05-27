@@ -1,9 +1,4 @@
-"""异步图片解析 — 下载远程图片 → 上传飞书 → 替换 URL.
-
-与 openclaw-lark 对齐：
-- 同步 resolve_images：缓存命中替换、新 URL strip + 触发异步上传
-- 上传完成回调触发 re-flush
-"""
+"""异步图片解析 — 下载远程图片 → 上传飞书 → 替换 URL."""
 
 from __future__ import annotations
 

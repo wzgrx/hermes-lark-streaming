@@ -73,39 +73,3 @@ def _clean_reasoning_prefix(text: str) -> str:
         line.replace("_", "") if line.startswith("_") and line.endswith("_") else line for line in cleaned.split("\n")
     )
     return cleaned.strip()
-
-
-class TextState:
-    """追踪流式文本的增量累积状态."""
-
-    def __init__(self) -> None:
-        self.completed_text = ""
-        self.accumulated = ""
-        self.last_flushed = ""
-
-    @property
-    def display_text(self) -> str:
-        if self.accumulated:
-            return self.accumulated
-        return self.completed_text or ""
-
-    def on_partial(self, text: str) -> None:
-        if not text:
-            return
-        self.accumulated += text
-
-    def on_deliver(self, text: str) -> None:
-        text = strip_reasoning_tags(text)
-        if self.completed_text:
-            self.completed_text += "\n\n" + text
-        else:
-            self.completed_text = text
-        if not self.accumulated:
-            self.accumulated = text
-
-    def is_dirty(self, new_text: str | None = None) -> bool:
-        check = new_text if new_text is not None else self.display_text
-        return check != self.last_flushed
-
-    def mark_flushed(self, text: str) -> None:
-        self.last_flushed = text

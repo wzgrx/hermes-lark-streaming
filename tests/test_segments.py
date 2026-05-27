@@ -1,4 +1,4 @@
-"""linear.py 测试 — LinearState 段管理、边界条件、多轮集成."""
+"""segments.py 测试 — SegmentState 段管理、边界条件、多轮集成."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-from hermes_lark_streaming import linear as linear_module
-from hermes_lark_streaming.linear import LinearState, Segment
+from hermes_lark_streaming import segments as segments_module
+from hermes_lark_streaming.segments import Segment, SegmentState
 
 
 class TestSegmentDefaults:
@@ -36,14 +36,14 @@ class TestSegmentDefaults:
 
 class TestOnReasoningDelta:
     def test_appends_or_creates(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_reasoning_delta("hello ")
         state.on_reasoning_delta("world")
         assert len(state.segments) == 1
         assert state.segments[0].text == "hello world"
 
     def test_new_segment_when_last_is_answer(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_answer_delta("answer")
         state.on_reasoning_delta("thoughts")
         assert len(state.segments) == 2
@@ -53,14 +53,14 @@ class TestOnReasoningDelta:
 
 class TestOnAnswerDelta:
     def test_appends_or_creates(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_answer_delta("hello ")
         state.on_answer_delta("world")
         assert len(state.segments) == 1
         assert state.segments[0].text == "hello world"
 
     def test_new_segment_when_last_is_reasoning(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_reasoning_delta("thinking")
         state.on_answer_delta("reply")
         assert len(state.segments) == 2
@@ -68,14 +68,14 @@ class TestOnAnswerDelta:
         assert state.segments[1].type == "answer"
 
     def test_finalizes_prev_reasoning_elapsed(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_reasoning_delta("thinking")
         time.sleep(0.01)
         state.on_answer_delta("reply")
         assert state.segments[0].elapsed_ms > 0
 
     def test_does_not_finalize_already_finalized(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_reasoning_delta("a")
         state.on_answer_delta("b")
         elapsed_1 = state.segments[0].elapsed_ms
@@ -87,12 +87,12 @@ class TestOnAnswerDelta:
 class TestOnToolEvent:
     @pytest.mark.parametrize("count", [0, -1])
     def test_non_positive_returns_early(self, count: int) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_tool_event(count)
         assert state.segments == []
 
     def test_creates_and_marks_dirty(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_tool_event(3)
         assert len(state.segments) == 1
         assert state.segments[0].type == "tool"
@@ -100,7 +100,7 @@ class TestOnToolEvent:
         assert state.segments[0].dirty is True
 
     def test_same_type_marks_dirty(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_tool_event(1)
         state.segments[0].dirty = False
         state.on_tool_event(2)
@@ -108,7 +108,7 @@ class TestOnToolEvent:
         assert state.segments[0].dirty is True
 
     def test_cross_type_creates_new_and_finalizes_prev(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_tool_event(2)  # tool1: offset=1
         state.on_answer_delta("intermediate")
         state.on_tool_event(5)  # tool2: offset=4, tool1.end=4
@@ -121,7 +121,7 @@ class TestOnToolEvent:
 
 class TestFinalizeSegments:
     def test_finalizes_last_tool_and_reasoning(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_tool_event(1)
         state.on_reasoning_delta("thinking")
         time.sleep(0.001)
@@ -130,11 +130,11 @@ class TestFinalizeSegments:
         assert state.segments[1].elapsed_ms > 0
 
     def test_no_segments_no_error(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.finalize_segments(0)
 
     def test_already_finalized_not_overwritten(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_tool_event(2)
         state.on_answer_delta("mid")
         state.on_tool_event(5)
@@ -154,7 +154,7 @@ class TestFinalizeSegments:
 
 class TestHasDirty:
     def test_dirty_lifecycle(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         assert state.has_dirty is False
         state.on_reasoning_delta("a")
         assert state.has_dirty is True
@@ -167,7 +167,7 @@ class TestHasDirty:
 
 class TestMultiRound:
     def test_two_rounds(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_reasoning_delta("think 1")
         state.on_answer_delta("reply 1")
         state.on_tool_event(2)
@@ -177,7 +177,7 @@ class TestMultiRound:
         assert types == ["reasoning", "answer", "tool", "reasoning", "answer"]
 
     def test_el_id_naming_persists(self) -> None:
-        state = LinearState()
+        state = SegmentState()
         state.on_reasoning_delta("a")  # 0
         state.on_answer_delta("b")  # 1
         state.on_tool_event(1)  # 2
@@ -190,9 +190,9 @@ class TestMultiRound:
 
     def test_finalize_complex_scenario(self, monkeypatch: pytest.MonkeyPatch) -> None:
         times = iter(float(i) for i in range(100, 108))
-        monkeypatch.setattr(linear_module.time, "time", lambda: next(times))
+        monkeypatch.setattr(segments_module.time, "time", lambda: next(times))
 
-        state = LinearState()
+        state = SegmentState()
         state.on_reasoning_delta("r1")
         state.on_answer_delta("a1")
         state.on_tool_event(2)  # tool1: offset=1

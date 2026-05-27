@@ -162,34 +162,32 @@ def on_tool_updated(
     detail: str = "",
 ) -> bool:
     """[注入点 3] progress_callback — tool.updated."""
-    ctrl.on_tool_update(
-        message_id=message_id,
-        tool_name=tool_name,
-        status=status,
-        detail=detail,
+    return bool(
+        ctrl.on_tool_update(
+            message_id=message_id,
+            tool_name=tool_name,
+            status=status,
+            detail=detail,
+        )
     )
-    return True
 
 
 @_safe_hook(default_return=False, log_level="debug")
 def on_answer_delta(*, ctrl: Any, message_id: str, text: str) -> bool:
     """[注入点 4] _stream_delta_cb — answer.delta."""
-    ctrl.on_answer(message_id=message_id, text=text)
-    return True
+    return bool(ctrl.on_answer(message_id=message_id, text=text))
 
 
 @_safe_hook(default_return=False, log_level="debug")
 def on_thinking_delta(*, ctrl: Any, message_id: str, text: str) -> bool:
     """[注入点 5] _interim_assistant_cb — thinking.delta."""
-    ctrl.on_thinking(message_id=message_id, text=text)
-    return True
+    return bool(ctrl.on_thinking(message_id=message_id, text=text))
 
 
 @_safe_hook(default_return=False, log_level="debug")
 def on_reasoning_delta(*, ctrl: Any, message_id: str, text: str) -> bool:
     """[注入点 6] reasoning_callback — native model reasoning delta."""
-    ctrl.on_reasoning(message_id=message_id, text=text)
-    return True
+    return bool(ctrl.on_reasoning(message_id=message_id, text=text))
 
 
 @_safe_hook(default_return=False, log_level="debug")

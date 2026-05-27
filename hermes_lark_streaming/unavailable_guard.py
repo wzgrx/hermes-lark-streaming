@@ -1,7 +1,4 @@
-"""消息不可用保护 — 检测消息被删除/撤回后停止更新.
-
-与 openclaw-lark UnavailableGuard 对齐.
-"""
+"""消息不可用保护 — 检测消息被删除/撤回后停止更新."""
 
 from __future__ import annotations
 

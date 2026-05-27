@@ -1,9 +1,8 @@
-"""text.py 测试 — reasoning 标签解析与 TextState 状态追踪."""
+"""text.py 测试 — reasoning 标签解析."""
 
 from __future__ import annotations
 
 from hermes_lark_streaming.text import (
-    TextState,
     extract_thinking_content,
     split_reasoning_text,
     strip_reasoning_tags,
@@ -110,66 +109,3 @@ class TestStripReasoningTags:
     def test_reasoning_prefix_clears_all(self) -> None:
         result = strip_reasoning_tags("Reasoning:\nsome content")
         assert result.strip() == ""
-
-
-class TestTextState:
-    def test_initial_state(self) -> None:
-        ts = TextState()
-        assert ts.display_text == ""
-        assert ts.completed_text == ""
-        assert not ts.is_dirty()
-
-    def test_on_partial_accumulates(self) -> None:
-        ts = TextState()
-        ts.on_partial("hello ")
-        ts.on_partial("world")
-        assert ts.display_text == "hello world"
-
-    def test_on_partial_empty_ignored(self) -> None:
-        ts = TextState()
-        ts.on_partial("")
-        assert ts.display_text == ""
-
-    def test_on_deliver_first(self) -> None:
-        ts = TextState()
-        ts.on_deliver("first block")
-        assert ts.completed_text == "first block"
-        assert ts.accumulated == "first block"
-
-    def test_on_deliver_appends_with_separator(self) -> None:
-        ts = TextState()
-        ts.on_deliver("first")
-        ts.on_deliver("second")
-        assert ts.completed_text == "first\n\nsecond"
-
-    def test_on_deliver_strips_reasoning_tags(self) -> None:
-        ts = TextState()
-        ts.on_deliver("<thinking>reasoning</thinking>answer")
-        assert "<thinking>" not in ts.completed_text
-
-    def test_display_text_prefers_accumulated(self) -> None:
-        # on_deliver 在 accumulated 为空时设置它，之后 on_partial 追加
-        ts = TextState()
-        ts.on_deliver("delivered")
-        ts.on_partial("partial")
-        assert ts.display_text == "deliveredpartial"
-
-    def test_display_text_fallback_to_completed(self) -> None:
-        ts = TextState()
-        ts.on_deliver("delivered")
-        ts.accumulated = ""
-        assert ts.display_text == "delivered"
-
-    def test_is_dirty_tracking(self) -> None:
-        ts = TextState()
-        assert not ts.is_dirty()
-        ts.on_partial("new text")
-        assert ts.is_dirty()
-        ts.mark_flushed("new text")
-        assert not ts.is_dirty()
-
-    def test_is_dirty_with_explicit_text(self) -> None:
-        ts = TextState()
-        ts.mark_flushed("old")
-        assert ts.is_dirty("new")
-        assert not ts.is_dirty("old")

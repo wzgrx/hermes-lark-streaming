@@ -1,12 +1,4 @@
-"""StreamCardController — 流式卡片主控制器（单例）.
-
-与 openclaw-lark 对齐：
-- UnavailableGuard 消息不可用保护
-- 修复的 FlushController（wait_for_flush, card_message_ready）
-- TextState 回复边界检测 + reasoning 处理
-- ImageResolver 同步 strip + re-flush
-- 工具状态预回答更新
-"""
+"""StreamCardController — 流式卡片主控制器（单例）."""
 
 from __future__ import annotations
 
@@ -19,7 +11,6 @@ from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 from .config import Config
-from .controller_linear_mixin import LinearControllerMixin
 from .controller_mixin import (
     _TERMINAL,
     ABORTED,
@@ -31,9 +22,9 @@ from .feishu import (
     FeishuClient,
     FeishuClientConfig,
 )
-from .flush import PATCH_MS, FlushController
-from .linear import LinearState
-from .text import TextState, split_reasoning_text, strip_reasoning_tags
+from .flush import CARDKIT_MS, FlushController
+from .segments import SegmentState
+from .text import strip_reasoning_tags
 from .tooluse import ToolUseTracker
 from .unavailable_guard import UnavailableGuard
 
@@ -63,22 +54,13 @@ class CardSession:
         "footer",
         "guard",
         "image_resolver",
-        "last_tool_use_update",
-        "linear",
-        "linear_state",
         "message_id",
-        "reasoning_dirty",
-        "reasoning_panel_added",
-        "reasoning_start",
-        "reasoning_text",
+        "segment_state",
         "sequence",
         "split_disabled",
         "split_index",
         "state",
-        "text",
-        "tool_panel_added",
         "tool_use",
-        "use_cardkit",
     )
 
     def __init__(
@@ -94,18 +76,11 @@ class CardSession:
         self.state = IDLE
         self.card_msg_id: str | None = None
         self.card_id: str | None = None
-        self.use_cardkit: bool = False
-        self.text = TextState()
         self.tool_use = ToolUseTracker()
-        self.flush = FlushController(throttle_ms=PATCH_MS)
-        self.reasoning_text = ""
-        self.reasoning_start: float = 0.0
-        self.reasoning_dirty = False
-        self.reasoning_panel_added = False
+        self.flush = FlushController(throttle_ms=CARDKIT_MS)
         self.footer: dict[str, Any] = {}
         self.sequence = 1
         self._loop = loop
-        self.last_tool_use_update = 0.0
         self.created_at = time.time()
         self.deferred_background_review_closed = False
         self.deferred_background_reviews: list[tuple[str, Callable[[str], Any]]] = []
@@ -118,15 +93,13 @@ class CardSession:
         )
 
         self.image_resolver: ImageResolver | None = None
-        self.tool_panel_added = False
-        self.linear = False
-        self.linear_state: LinearState | None = None
+        self.segment_state: SegmentState | None = SegmentState()
         self.element_count: int = 0
         self.split_disabled = False
         self.split_index: int = 0
 
 
-class StreamCardController(ControllerMixin, LinearControllerMixin):
+class StreamCardController(ControllerMixin):
     """流式卡片控制器 — 管理多条消息的卡片生命周期."""
 
     def __init__(self) -> None:
@@ -236,64 +209,36 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
             self._sessions[anchor_id] = session
         _logger.info("session created: msg=%s chat=%s anchor=%s", message_id[:12], chat_id[:12], (anchor_id or "")[:12])
 
-        if self._cfg.linear:
-            session.create_task = self._fire_and_forget(self._do_create_linear_card(session), loop)
-        else:
-            session.create_task = self._fire_and_forget(self._do_create_card(session), loop)
+        session.create_task = self._fire_and_forget(self._do_create_card(session), loop)
 
-    def on_thinking(self, *, message_id: str, text: str) -> None:
+    def on_thinking(self, *, message_id: str, text: str) -> bool:
         """思考内容增量."""
         if not self.enabled:
-            return
+            return False
         session = self._get_active_session(message_id)
         if session is None or session.guard.should_skip("on_thinking"):
-            return
+            return False
 
-        if session.linear and session.linear_state:
-            self._linear_on_thinking(session, text)
-            return
+        if session.segment_state is None:
+            return False
+        return self._on_thinking_segment(session, text)
 
-        split = split_reasoning_text(text)
-
-        if split.get("reasoning_text") and not split.get("answer_text"):
-            session.reasoning_text = split["reasoning_text"] or ""
-            if not session.reasoning_start:
-                session.reasoning_start = time.time()
-        elif split.get("answer_text"):
-            if split.get("reasoning_text"):
-                session.reasoning_text = split["reasoning_text"] or ""
-                if not session.reasoning_start:
-                    session.reasoning_start = time.time()
-            session.text.on_partial(split["answer_text"] or "")
-
-        self._schedule_card_update(session)
-
-    def on_reasoning(self, *, message_id: str, text: str) -> None:
+    def on_reasoning(self, *, message_id: str, text: str) -> bool:
         """Native model reasoning delta (incremental append)."""
         if not self.enabled:
-            return
+            return False
         if not self._cfg.show_reasoning:
-            return
+            return False
         session = self._get_active_session(message_id)
         if session is None or session.guard.should_skip("on_reasoning"):
-            return
+            return False
 
-        if session.linear and session.linear_state:
-            session.linear_state.on_reasoning_delta(text)
-            self._schedule_linear_flush(session)
-            return
+        if session.segment_state is None:
+            return False
 
-        if not session.reasoning_start:
-            session.reasoning_start = time.time()
-            _logger.info("reasoning started: msg=%s", message_id[:12])
-
-        session.reasoning_text += text
-        session.reasoning_dirty = True
-
-        if session.use_cardkit and session.card_id:
-            self._schedule_reasoning_update(session)
-        else:
-            self._schedule_card_update(session)
+        session.segment_state.on_reasoning_delta(text)
+        self._schedule_flush(session)
+        return True
 
     def on_tool_update(
         self,
@@ -302,13 +247,15 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
         tool_name: str,
         status: str,
         detail: str = "",
-    ) -> None:
+    ) -> bool:
         """工具调用事件."""
         if not self.enabled:
-            return
+            return False
         session = self._get_active_session(message_id)
         if session is None or session.guard.should_skip("on_tool_update"):
-            return
+            return False
+        if session.segment_state is None:
+            return False
 
         if status in ("running", "started", "tool.started"):
             session.tool_use.record_start(tool_name, detail)
@@ -320,43 +267,27 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
                 output="" if is_error else detail,
             )
 
-        if session.linear and session.linear_state:
-            session.linear_state.on_tool_event(len(session.tool_use.build_display_steps()))
-            self._schedule_linear_flush(session)
-            return
+        session.segment_state.on_tool_event(len(session.tool_use.build_display_steps()))
+        self._schedule_flush(session)
+        return True
 
-        if session.use_cardkit and session.card_id:
-            self._schedule_tool_use_status_update(session)
-        else:
-            self._schedule_card_update(session)
-
-    def on_answer(self, *, message_id: str, text: str) -> None:
+    def on_answer(self, *, message_id: str, text: str) -> bool:
         """答案文本增量（流式）."""
         if not self.enabled:
-            return
+            return False
         session = self._get_active_session(message_id)
         if session is None or session.guard.should_skip("on_answer"):
-            return
+            return False
+        if session.segment_state is None:
+            return False
 
-        if session.linear and session.linear_state:
-            answer_text = strip_reasoning_tags(text)
-            if answer_text:
-                session.linear_state.on_answer_delta(answer_text)
-                self._schedule_linear_flush(session)
-            return
-
-        split = split_reasoning_text(text)
-        if split.get("reasoning_text"):
-            session.reasoning_text = split["reasoning_text"] or ""
-            if not session.reasoning_start:
-                session.reasoning_start = time.time()
-
-        answer_text = split.get("answer_text") or strip_reasoning_tags(text)
+        answer_text = strip_reasoning_tags(text)
         if not answer_text:
-            return
+            return False
 
-        session.text.on_partial(answer_text)
-        self._schedule_card_update(session)
+        session.segment_state.on_answer_delta(answer_text)
+        self._schedule_flush(session)
+        return True
 
     def on_aborted(self, *, message_id: str) -> None:
         """用户 /stop 导致消息被中断."""
@@ -409,10 +340,7 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
                     chat_id[:12],
                     (reply_anchor_id or new_message_id)[:12],
                 )
-                if self._cfg.linear:
-                    session.create_task = self._fire_and_forget(self._do_create_linear_card(session), loop)
-                else:
-                    session.create_task = self._fire_and_forget(self._do_create_card(session), loop)
+                session.create_task = self._fire_and_forget(self._do_create_card(session), loop)
 
         self._interrupt_map[old_message_id] = new_message_id
         for key, val in list(self._interrupt_map.items()):
@@ -432,19 +360,10 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
         """消息处理完成 — 构建终端卡片."""
         if not self.enabled:
             return False
-        session = self._get_active_session(message_id)
+        session = self._completion_session(message_id)
         if session is None:
-            redirected_id = self._interrupt_map.pop(message_id, None)
-            if redirected_id is not None:
-                _logger.info(
-                    "on_completed: redirect msg=%s -> msg=%s",
-                    message_id[:12],
-                    redirected_id[:12],
-                )
-                session = self._get_active_session(redirected_id)
-            if session is None:
-                return False
-            message_id = redirected_id or message_id
+            return False
+        message_id = session.message_id
 
         # 卡片创建失败 → 交回 gateway 正常回复
         if session.state == FAILED:
@@ -453,11 +372,10 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
             return False
 
         _logger.info(
-            "on_completed: msg=%s has_card=%s state=%s use_cardkit=%s",
+            "on_completed: msg=%s has_card=%s state=%s",
             message_id[:12],
             bool(session.card_msg_id),
             session.state,
-            session.use_cardkit,
         )
 
         self._apply_completion_payload(
@@ -506,11 +424,10 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
             return False
 
         _logger.info(
-            "on_completed_wait: msg=%s has_card=%s state=%s use_cardkit=%s",
+            "on_completed_wait: msg=%s has_card=%s state=%s",
             message_id[:12],
             bool(session.card_msg_id),
             session.state,
-            session.use_cardkit,
         )
 
         self._apply_completion_payload(
@@ -579,30 +496,6 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
             except Exception:
                 _logger.debug("background review sender failed", exc_info=True)
 
-    def _schedule_card_update(self, session: CardSession) -> None:
-        if session.state == IDLE or session.state in _TERMINAL:
-            return
-        if session.guard.should_skip("_schedule_card_update"):
-            return
-
-        session.flush.schedule_update(lambda: self._do_update_card(session))
-
-    def _schedule_tool_use_status_update(self, session: CardSession) -> None:
-        if not session.use_cardkit or not session.card_id:
-            return
-        now = time.time()
-        if now - session.last_tool_use_update < 1.5:
-            return
-        session.last_tool_use_update = now
-        session.flush.schedule_update(lambda: self._do_tool_use_status_update(session))
-
-    def _schedule_reasoning_update(self, session: CardSession) -> None:
-        if not session.use_cardkit or not session.card_id:
-            return
-        if not session.reasoning_dirty:
-            return
-        session.flush.schedule_update(lambda: self._do_reasoning_update(session))
-
     def _cleanup(self, message_id: str) -> None:
         session = self._sessions.pop(message_id, None)
         if session is None:
@@ -618,17 +511,21 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
             session.image_resolver.cancel_pending()
 
     def _completion_session(self, message_id: str) -> CardSession | None:
-        session = self._get_active_session(message_id)
-        if session is None:
-            redirected_id = self._interrupt_map.pop(message_id, None)
-            if redirected_id is not None:
-                _logger.info(
-                    "on_completed: redirect msg=%s -> msg=%s",
-                    message_id[:12],
-                    redirected_id[:12],
-                )
-                session = self._get_active_session(redirected_id)
-        return session
+        session = self._sessions.get(message_id)
+        if session is not None and (session.state not in _TERMINAL or session.state == FAILED):
+            return session
+
+        redirected_id = self._interrupt_map.pop(message_id, None)
+        if redirected_id is not None:
+            _logger.info(
+                "on_completed: redirect msg=%s -> msg=%s",
+                message_id[:12],
+                redirected_id[:12],
+            )
+            redirected = self._sessions.get(redirected_id)
+            if redirected is not None and redirected.state not in _TERMINAL:
+                return redirected
+        return None
 
     async def _wait_for_card_creation(self, session: CardSession) -> bool:
         task = session.create_task
@@ -666,14 +563,12 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
         tokens: dict | None,
         context: dict | None,
     ) -> None:
-        if answer:
-            if session.linear and session.linear_state and not any(
-                seg.type == "answer" for seg in session.linear_state.segments
-            ):
-                final_answer = strip_reasoning_tags(answer)
-                if final_answer:
-                    session.linear_state.on_answer_delta(final_answer)
-            session.text.on_deliver(answer)
+        if answer and session.segment_state and not any(
+            seg.type == "answer" for seg in session.segment_state.segments
+        ):
+            final_answer = strip_reasoning_tags(answer)
+            if final_answer:
+                session.segment_state.on_answer_delta(final_answer)
 
         session.footer = {
             "duration": duration,
@@ -685,19 +580,14 @@ class StreamCardController(ControllerMixin, LinearControllerMixin):
         }
 
     def _complete_session(self, session: CardSession) -> None:
-        """根据 session 线性/非线性选择完成路径."""
+        """异步完成当前流式卡片."""
         session.flush.mark_completed()
-        if session.linear and session.linear_state:
-            self._fire_and_forget(self._do_linear_complete(session), session._loop)
-        else:
-            self._fire_and_forget(self._do_complete(session), session._loop)
+        self._fire_and_forget(self._do_complete_card(session), session._loop)
 
     async def _complete_session_wait(self, session: CardSession) -> bool:
-        """根据 session 线性/非线性完成，并等待最终 API 结果."""
+        """完成当前流式卡片，并等待最终 API 结果."""
         session.flush.mark_completed()
-        if session.linear and session.linear_state:
-            return await self._do_linear_complete(session)
-        return await self._do_complete(session)
+        return await self._do_complete_card(session)
 
     def _prune_stale_sessions(self) -> None:
         now = time.time()

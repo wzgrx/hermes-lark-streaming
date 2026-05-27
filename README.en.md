@@ -16,16 +16,26 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 ## Features
 
 - **Streaming output** — AI responses rendered in real-time interactive cards with typewriter effect
-- **Linear mode** — Dynamically renders thinking, tool calls, and answer elements in event arrival order within a single card
+- **Streaming cards** — Dynamically renders thinking, tool calls, and answer elements in event arrival order within a single card
 - **Reasoning display** — Shows model thinking/reasoning content
 - **Tool use tracking** — Live tool call status with standard icons, result/error blocks
-- **CardKit v2.0** — Prefers Feishu CardKit streaming API, auto-fallback to IM PATCH
+- **CardKit v2.0** — Uses Feishu CardKit streaming API; card creation failures yield to the Hermes Gateway default reply
 - **Completion card** — Final card with token usage, duration, and context info
 - **Message guard** — Auto-terminates updates when message is deleted/recalled
 - **Image resolution** — Detects markdown image references, downloads and re-uploads as Feishu img_key
 - **Abort handling** — Gracefully handles `/stop` command and message interrupts with aborted state card and automatic new session
 - **Cron card delivery** — Delivers scheduled job results as Feishu cards, preserving Markdown rendering
 - **i18n** — Built-in Chinese/English bilingual card text (status, tool panel, thinking labels, etc.) that auto-switches based on Feishu client language
+
+---
+
+## Card Rendering
+
+The plugin dynamically renders thinking, tool call, and answer elements in event arrival order, keeping multi-round content in its actual order.
+
+When long conversations or excessive tool steps cause the card to approach Feishu's 200-element limit, it automatically splits into multiple cards: the old card is sealed with complete data, a new card continues output, and only the last card includes the footer. Oversized tool panels are also split at step boundaries.
+
+![](assets/streaming.jpg)
 
 ---
 
@@ -76,7 +86,6 @@ Add to `~/.hermes/config.yaml`:
 ```yaml
 streaming:
   enabled: true
-  # linear mode is enabled by default, no configuration needed
 ```
 
 ### Credentials
@@ -129,14 +138,6 @@ streaming:
   enabled: true
   panel_expanded: true
 ```
-
-### Linear Mode (Default)
-
-The plugin dynamically renders thinking, tool call, and answer elements in event arrival order. Reasoning and tool calls are no longer collapsed to the top — multi-round content is displayed in actual order.
-
-When long conversations or excessive tool steps cause the card to approach Feishu's 200-element limit, it automatically splits into multiple cards: the old card is sealed with complete data, a new card continues streaming, and only the last card includes the footer. Oversized tool panels are also split at step boundaries.
-
-![](assets/linear.jpg)
 
 ---
 
@@ -218,14 +219,14 @@ If a message is deleted/recalled, UnavailableGuard auto-terminates further updat
 
 ![](assets/interrupt.jpg)
 
-**Degradation strategy:**
+**Failure handling:**
 
-| Strategy | Interval | Trigger |
-|----------|----------|---------|
-| CardKit streaming (preferred) | 100ms | Default |
-| IM PATCH (fallback) | 1.5s | CardKit creation failure, table limit exceeded |
-| Rate limiting | — | Skips current frame, no channel degradation |
-| Completion failure | — | Gateway falls back to default text reply |
+| Scenario | Handling |
+|----------|----------|
+| CardKit streaming | 100ms throttled updates |
+| CardKit creation failure | Gateway falls back to the default text reply |
+| Rate limiting | Skips current frame, no channel switch |
+| Completion failure | Gateway falls back to the default text reply |
 
 ---
 

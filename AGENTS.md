@@ -51,27 +51,24 @@ cron/scheduler.py (Hermes)
 
 StreamCardController (singleton, controller.py)
   ├─ CardSession per message (state machine: IDLE→CREATING→STREAMING→COMPLETED/FAILED/ABORTED)
-  │   └─ linear mode: CardSession.linear + CardSession.linear_state (LinearState)
+  │   └─ stream segments: CardSession.segment_state (SegmentState)
   ├─ _interrupt_map — old_message_id → new_message_id mapping for interrupt redirect
-  ├─ FlushController (flush.py) — throttles card updates (100ms CardKit / 1.5s IM fallback)
-  ├─ TextState (text.py) — accumulates streaming text, tracks dirty state
+  ├─ FlushController (flush.py) — throttles CardKit updates (100ms)
   ├─ ToolUseTracker (tooluse.py) — tracks tool call lifecycle with icon/status mapping
   ├─ UnavailableGuard — auto-terminates on message delete/recall
   └─ ImageResolver (image.py) — async download + re-upload markdown images as Feishu img_key
 
-Linear mode (controller_linear_mixin.py + linear.py)
-  ├─ LinearState — flat segment list (reasoning / answer / tool), same-type appends, cross-type creates new
-  ├─ _do_linear_flush — 3-step pipeline: batch add elements → stream text → batch update tool panels
-  └─ _do_linear_complete — close streaming + full card rebuild (retry + streaming_closed idempotency)
+Streaming card segment flow (controller_mixin.py + segments.py)
+  ├─ SegmentState — flat segment list (reasoning / answer / tool), same-type appends, cross-type creates new
+  ├─ _do_flush — 3-step pipeline: batch add elements → stream text → batch update tool panels
+  └─ _do_complete_card — close streaming + full card rebuild (retry + streaming_closed idempotency)
 
 FeishuClient (feishu.py) — lark-oapi SDK wrapper
-  ├─ CardKit streaming API (preferred) — update single elements at 100ms intervals
-  └─ IM PATCH fallback — rebuild entire card at 1.5s intervals
+  ├─ CardKit streaming API — update single elements at 100ms intervals
 
 Card templates (cardkit.py) — builds Feishu card JSON
-  ├─ build_streaming_card / build_streaming_card_v2 — during generation
-  ├─ build_complete_card — final card with reasoning panel, tool panel, footer
-  └─ build_linear_complete_card — linear mode final card, renders segments in order
+  ├─ build_streaming_card_v2 — initial streaming CardKit v2 card
+  └─ build_complete_card — final card, renders segments in order
 ```
 
 ## Key Constraints
@@ -83,6 +80,6 @@ Card templates (cardkit.py) — builds Feishu card JSON
 - The NORMALIZE hook (`on_feishu_normalize`) is injected at `source = event.source` in `_handle_message`, before any other processing. It detects Feishu quoted messages with a false `thread_id` (set by the Feishu adapter but absent in raw event) and clears it, preventing `_reply_anchor_for_event` from returning the wrong ID.
 - The `anchor_id` mechanism: for Feishu quoted messages, `_reply_anchor_for_event(event)` returns `reply_to_message_id` instead of `event.message_id`. The START hook passes both — `message_id` for session identity and streaming callback lookup, `anchor_id` for card delivery (reply target). Sessions are registered under both keys.
 - Reasoning display depends on upstream providing `<thinking>`/`<thought>`/`<antthinking>` tags or `Reasoning:\n` prefix in text. Native API reasoning blocks (Anthropic extended thinking, DeepSeek reasoning_content) are available via `on_reasoning_delta` hook when `display.platforms.feishu.show_reasoning` is enabled.
-- CardKit v2.0 elements (collapsible_panel, streaming_mode) only work with `"schema": "2.0"` cards. IM fallback path uses v1 card format.
-- Linear mode (default) uses a single card for the entire message lifecycle: elements are dynamically created in event arrival order. Non-linear mode creates a streaming card then replaces it with a completion card. When linear CardKit creation fails, it falls back to non-linear mode.
+- CardKit v2.0 elements (collapsible_panel, streaming_mode) only work with `"schema": "2.0"` cards.
+- Streaming cards use a single CardKit card for the message lifecycle: elements are dynamically created in event arrival order. When CardKit creation fails, the plugin yields to the Hermes Gateway default reply.
 - Commit messages: body should use bullet list format (unnumbered `- item`).
