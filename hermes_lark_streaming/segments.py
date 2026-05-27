@@ -1,4 +1,4 @@
-"""线性单卡模式状态追踪 — 扁平 segments 管理."""
+"""流式卡片状态追踪 — 扁平 segments 管理."""
 
 from __future__ import annotations
 
@@ -38,8 +38,8 @@ class Segment:
         self.reasoning_finalized: bool = False
 
 
-class LinearState:
-    """管理线性模式下单张卡片的扁平内容段列表.
+class SegmentState:
+    """管理单张流式卡片的扁平内容段列表.
 
     纯数据类，不含 IO。每个 segment 是一个内容块（reasoning/answer/tool），
     按事件到达顺序排列，无需推断轮次边界。

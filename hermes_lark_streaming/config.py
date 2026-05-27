@@ -24,12 +24,6 @@ class Config:
         return bool(sec.get("enabled", False))
 
     @property
-    def linear(self) -> bool:
-        """是否启用线性单卡模式，按事件顺序动态更新卡片元素."""
-        sec = self._streaming_sec()
-        return bool(sec.get("linear", True))
-
-    @property
     def panel_expanded(self) -> bool:
         """完成态卡片中面板（工具、推理）是否保持展开."""
         sec = self._streaming_sec()
