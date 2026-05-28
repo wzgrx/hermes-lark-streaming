@@ -35,6 +35,8 @@ class StreamCardController(StreamingController):
         self._init_lock = asyncio.Lock()
         self._session_ttl = self._cfg.card_duration_sec
         self._loop: asyncio.AbstractEventLoop | None = None
+        # 内部事件（如 auto-resume）合成 session key 缓存
+        self._internal_session_key: str | None = None
 
     @property
     def enabled(self) -> bool:
@@ -79,9 +81,16 @@ class StreamCardController(StreamingController):
         except RuntimeError:
             return None
 
+    def _resolve_msg_id(self, message_id: str | None) -> str | None:
+        """解析 message_id，对 None（内部事件）回退到缓存的合成 key."""
+        if message_id:
+            return message_id
+        return self._internal_session_key
+
     def _get_active_session(self, message_id: str) -> CardSession | None:
         """获取非终态的活跃 session，不存在或已终态返回 None."""
-        session = self._sessions.get(message_id)
+        msg_id = self._resolve_msg_id(message_id) or message_id
+        session = self._sessions.get(msg_id)
         if session is None or session.state.is_terminal:
             return None
         return session
@@ -115,23 +124,31 @@ class StreamCardController(StreamingController):
         if not self.enabled:
             return
         if not message_id:
-            _logger.warning("on_message_started: missing message_id, chat=%s", chat_id[:12])
-            return
-        if message_id in self._sessions:
-            return
+            # 内部事件（auto-resume/background）无真实 message_id
+            # 生成合成 key 让卡片流程可以跑通，避免回退纯文本
+            msg_id = f"_sys_{chat_id}_{int(time.time())}"
+            self._internal_session_key = msg_id
+            _logger.info(
+                "on_message_started: internal event, synthetic msg=%s chat=%s",
+                msg_id[:20], chat_id[:12],
+            )
+        else:
+            msg_id = message_id
+            if msg_id in self._sessions:
+                return
 
         self._prune_stale_sessions()
 
         loop = self._get_loop()
         if loop is None:
-            _logger.warning("no event loop available, skipping: msg=%s", message_id[:12])
+            _logger.warning("no event loop available, skipping: msg=%s", msg_id[:12])
             return
-        session = CardSession(message_id, chat_id, loop)
-        self._sessions[message_id] = session
-        if anchor_id and anchor_id != message_id:
+        session = CardSession(msg_id, chat_id, loop)
+        self._sessions[msg_id] = session
+        if anchor_id and anchor_id != msg_id:
             session.anchor_id = anchor_id
             self._sessions[anchor_id] = session
-        _logger.info("session created: msg=%s chat=%s anchor=%s", message_id[:12], chat_id[:12], (anchor_id or "")[:12])
+        _logger.info("session created: msg=%s chat=%s anchor=%s", msg_id[:12], chat_id[:12], (anchor_id or "")[:12])
 
         session.create_task = self._fire_and_forget(self._do_create_card(session), loop)
 
@@ -332,6 +349,27 @@ class StreamCardController(StreamingController):
             return False
         message_id = session.message_id
 
+        # 内部事件（auto-resume/background）— 无真实飞书消息可挂卡片
+        # 直接完成流程即可，不需要等待卡片创建或检查 has_card
+        if message_id and message_id.startswith("_sys_"):
+            _logger.info(
+                "on_completed_wait: internal event msg=%s, skip card ops",
+                message_id[:20],
+            )
+            self._apply_completion_payload(
+                session=session,
+                answer=answer,
+                duration=duration,
+                model=model,
+                tokens=tokens,
+                context=context,
+            )
+            result = await self._complete_session_wait(session)
+            self._cleanup(message_id)
+            self._internal_session_key = None
+            # 卡片本身不存在，但告诉 gateway 已处理 → 避免回退纯文本
+            return True
+
         if not await self._wait_for_card_creation(session):
             _logger.info("on_completed_wait: msg=%s card creation not ready, yielding to gateway", message_id[:12])
             self._cleanup(message_id)
@@ -421,8 +459,12 @@ class StreamCardController(StreamingController):
                 _logger.debug("background review sender failed", exc_info=True)
 
     def _cleanup(self, message_id: str) -> None:
-        session = self._sessions.pop(message_id, None)
+        msg_id = self._resolve_msg_id(message_id) or message_id
+        session = self._sessions.pop(msg_id, None)
         if session is None:
+            # 如果 msg_id 是内部合成 key，级联清理引用它的其他 key
+            if msg_id == self._internal_session_key:
+                self._internal_session_key = None
             return
         anchor = getattr(session, "anchor_id", None)
         if anchor and self._sessions.get(anchor) is session:
@@ -435,7 +477,8 @@ class StreamCardController(StreamingController):
             session.image_resolver.cancel_pending()
 
     def _completion_session(self, message_id: str) -> CardSession | None:
-        session = self._sessions.get(message_id)
+        msg_id = self._resolve_msg_id(message_id) or message_id
+        session = self._sessions.get(msg_id)
         if session is not None and (not session.state.is_terminal or session.state == SessionState.FAILED):
             return session
 
