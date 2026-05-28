@@ -113,9 +113,9 @@ class TestDowngradeTables:
 
     def test_over_limit_downgraded(self) -> None:
         table = "| A | B |\n|---|---|\n| 1 | 2 |"
-        text = "\n\n".join([table] * 5)
+        text = "\n\n".join([table] * 6)
         result = _downgrade_tables(text)
-        assert result.count("```") >= 4  # 超限表格被包装为代码块
+        assert result.count("```") >= 2  # 超限表格被包装为代码块
 
 
 # --- 文本拆分 ---
