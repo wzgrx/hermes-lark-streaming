@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from functools import wraps
+from inspect import iscoroutinefunction
 from typing import Any
 
 from .controller import get_controller
@@ -23,6 +24,21 @@ def _safe_hook(
     """统一处理 enabled 检查和异常捕获."""
 
     def decorator(func: Callable) -> Callable:
+        if iscoroutinefunction(func):
+
+            @wraps(func)
+            async def async_wrapper(*, message_id: str, **kwargs: Any) -> Any:
+                try:
+                    ctrl = get_controller()
+                    if not ctrl.enabled:
+                        return default_return
+                    return await func(ctrl=ctrl, message_id=message_id, **kwargs)
+                except Exception as exc:
+                    getattr(_logger, log_level)("%s error: %s", func.__name__, exc, exc_info=True)
+                    return default_return
+
+            return async_wrapper
+
         @wraps(func)
         def wrapper(*, message_id: str, **kwargs: Any) -> Any:
             try:
@@ -100,7 +116,7 @@ def on_message_started(*, ctrl: Any, message_id: str, chat_id: str, anchor_id: s
 
 
 @_safe_hook(default_return=False)
-def on_message_completed(
+async def on_message_completed_wait(
     *,
     ctrl: Any,
     message_id: str,
@@ -110,9 +126,9 @@ def on_message_completed(
     tokens: dict[str, Any] | None = None,
     context: dict[str, Any] | None = None,
 ) -> bool:
-    """[注入点 2] return 前 — message.completed."""
+    """[注入点 2] return 前 — message.completed，等待卡片完成收尾."""
     return bool(
-        ctrl.on_completed(
+        await ctrl.on_completed_wait(
             message_id=message_id,
             answer=answer,
             duration=duration,
@@ -121,35 +137,6 @@ def on_message_completed(
             context=context,
         )
     )
-
-
-async def on_message_completed_wait(
-    *,
-    message_id: str,
-    answer: str = "",
-    duration: float = 0.0,
-    model: str = "",
-    tokens: dict[str, Any] | None = None,
-    context: dict[str, Any] | None = None,
-) -> bool:
-    """[注入点 2] return 前 — message.completed，等待卡片完成收尾."""
-    try:
-        ctrl = get_controller()
-        if not ctrl.enabled:
-            return False
-        return bool(
-            await ctrl.on_completed_wait(
-                message_id=message_id,
-                answer=answer,
-                duration=duration,
-                model=model,
-                tokens=tokens,
-                context=context,
-            )
-        )
-    except Exception as exc:
-        _logger.warning("on_message_completed_wait error: %s", exc, exc_info=True)
-        return False
 
 
 @_safe_hook(default_return=False)
