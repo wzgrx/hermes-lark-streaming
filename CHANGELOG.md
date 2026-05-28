@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.4] - 2026-05-28
+
+### 变更
+
+- 内部模块重构：重组子包结构、引入 StrEnum/TypedDict、移除旧版 hook
+- 卡片内 markdown 表格渲染上限从 3 提升至 5
+
+### Changed
+
+- Internal refactor: reorganize sub-packages, introduce StrEnum/TypedDict, remove legacy hook
+- Raise markdown table rendering limit in cards from 3 to 5
+
+---
+
 ## [0.8.0] - 2026-05-27
 
 ### 变更
