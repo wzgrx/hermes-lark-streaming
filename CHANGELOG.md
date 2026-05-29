@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0] - 2026-05-29
+
+### Highlights
+
+- 后台任务卡片推送：`/background`（`/btw`）任务完成后以 CardKit v2.0 卡片形式推送，支持话题内回复。修复 #38. (#39)
+- 升级：
+  ```bash
+  cd hermes-lark-streaming
+  git pull
+  HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
+  $HERMES_PYTHON -m hermes_lark_streaming uninstall
+  $HERMES_PYTHON -m hermes_lark_streaming install
+  hermes gateway restart
+  ```
+
+### Highlights
+
+- Background task card delivery: `/background` (`/btw`) task results delivered as CardKit v2.0 cards with topic-aware reply. Fixes #38. (#39)
+- Upgrade:
+  ```bash
+  cd hermes-lark-streaming
+  git pull
+  HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
+  $HERMES_PYTHON -m hermes_lark_streaming uninstall
+  $HERMES_PYTHON -m hermes_lark_streaming install
+  hermes gateway restart
+  ```
+
+---
+
 ## [0.8.4] - 2026-05-28
 
 ### 变更

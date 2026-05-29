@@ -25,7 +25,7 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 - **Image resolution** — Detects markdown image references, downloads and re-uploads as Feishu img_key
 - **Abort handling** — Gracefully handles `/stop` command and message interrupts with aborted state card and automatic new session
 - **Cron card delivery** — Delivers scheduled job results as Feishu cards, preserving Markdown rendering
-- **Background task card delivery** — Delivers `/background` task results as cards, with topic-aware reply
+- **Background task card delivery** — Delivers `/background` (`/btw`) task results as cards, with topic-aware reply
 - **i18n** — Built-in Chinese/English bilingual card text (status, tool panel, thinking labels, etc.) that auto-switches based on Feishu client language
 
 ---
