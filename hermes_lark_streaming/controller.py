@@ -35,6 +35,8 @@ class StreamCardController(StreamingController):
         self._init_lock = asyncio.Lock()
         self._session_ttl = self._cfg.card_duration_sec
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._text_fallback_needed: set[str] = set()
+        self._text_fallback_aliases: dict[str, set[str]] = {}
 
     @property
     def enabled(self) -> bool:
@@ -134,6 +136,24 @@ class StreamCardController(StreamingController):
         _logger.info("session created: msg=%s chat=%s anchor=%s", message_id[:12], chat_id[:12], (anchor_id or "")[:12])
 
         session.create_task = self._fire_and_forget(self._do_create_card(session), loop)
+
+    def _mark_text_fallback_needed(self, session: CardSession) -> None:
+        keys = {session.message_id}
+        if session.anchor_id:
+            keys.add(session.anchor_id)
+        self._text_fallback_needed.update(keys)
+        for key in keys:
+            self._text_fallback_aliases[key] = set(keys)
+
+    def consume_text_fallback(self, message_id: str) -> bool:
+        """Return whether gateway should undo already_sent and deliver plain text."""
+        if message_id not in self._text_fallback_needed:
+            return False
+        keys = self._text_fallback_aliases.pop(message_id, {message_id})
+        for key in keys:
+            self._text_fallback_needed.discard(key)
+            self._text_fallback_aliases.pop(key, None)
+        return True
 
     def on_thinking(self, *, message_id: str, text: str) -> bool:
         """思考内容增量."""
@@ -292,6 +312,7 @@ class StreamCardController(StreamingController):
         # 卡片创建失败 → 交回 gateway 正常回复
         if session.state == SessionState.FAILED:
             _logger.info("on_completed: msg=%s state=FAILED, yielding to gateway", message_id[:12])
+            self._mark_text_fallback_needed(session)
             self._cleanup(message_id)
             return False
 
@@ -334,16 +355,19 @@ class StreamCardController(StreamingController):
 
         if not await self._wait_for_card_creation(session):
             _logger.info("on_completed_wait: msg=%s card creation not ready, yielding to gateway", message_id[:12])
+            self._mark_text_fallback_needed(session)
             self._cleanup(message_id)
             return False
 
         if session.state == SessionState.FAILED:
             _logger.info("on_completed_wait: msg=%s state=FAILED, yielding to gateway", message_id[:12])
+            self._mark_text_fallback_needed(session)
             self._cleanup(message_id)
             return False
 
         if not session.has_card:
             _logger.info("on_completed_wait: msg=%s has no card, yielding to gateway", message_id[:12])
+            self._mark_text_fallback_needed(session)
             self._cleanup(message_id)
             return False
 
