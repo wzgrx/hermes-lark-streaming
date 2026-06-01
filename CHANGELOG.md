@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.2] - 2026-06-01
+
+### 修复
+
+- CardKit 创建失败时正确回退纯文本回复，瞬态网关超时自动重试。(#40)
+- 运行时加固：原子写入防止崩溃损坏文件、`on_feishu_normalize` 容错、`get_controller` 线程安全单例。(#42)
+
+### Fixed
+
+- Properly fall back to plain text when CardKit creation fails; retry transient gateway timeouts. (#40)
+- Runtime hardening: atomic writes prevent crash corruption, `on_feishu_normalize` error handling, thread-safe `get_controller` singleton. (#42)
+
+---
+
 ## [0.9.0] - 2026-05-29
 
 ### Highlights
