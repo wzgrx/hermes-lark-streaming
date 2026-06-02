@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.3] - 2026-06-02
+
+### 修复
+
+- 修复卡片拆分后新卡片中段元素未正确创建的问题。(#44)
+
+### Fixed
+
+- Fix segment elements not being created in the new card after card split. (#44)
+
+---
+
 ## [0.9.2] - 2026-06-01
 
 ### 修复
