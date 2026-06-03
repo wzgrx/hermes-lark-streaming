@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.5] - 2026-06-03
+
+### 修复
+
+- 修复多个 dirty tool segment 同时增长时跨段阈值溢出导致卡片超限的问题。修复 #45. (#46)
+- 消除纯 answer 流式阶段冗余的 batch_update 调用：用 tool step 内容快照比较替代 tool_end_offset > 0 条件，正确清理 open tool segment 的 dirty 标志。
+
+### Fixed
+
+- Fix multiple dirty tool segments growing simultaneously causing element threshold overflow. Fixes #45. (#46)
+- Eliminate redundant batch_update calls during pure answer streaming by replacing tool_end_offset > 0 guard with content-level snapshot comparison for open tool segment dirty clearing.
+
+---
+
 ## [0.9.3] - 2026-06-02
 
 ### 修复
