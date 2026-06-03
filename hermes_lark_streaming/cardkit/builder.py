@@ -54,14 +54,41 @@ def _collapsible_panel(
     }
 
 
-def _streaming_element(content: str = "", *, element_id: str = STREAMING_ELEMENT_ID) -> dict:
+def _streaming_element(
+    content: str = "",
+    *,
+    element_id: str = STREAMING_ELEMENT_ID,
+    text_size: str = "normal_v2",
+) -> dict:
     return {
         "tag": "markdown",
         "content": content,
         "text_align": "left",
-        "text_size": "normal_v2",
+        "text_size": text_size,
         "margin": "0px 0px 0px 0px",
         "element_id": element_id,
+    }
+
+
+_HEADER_STATES: dict[str, dict[str, str]] = {
+    "streaming": {"template": "blue", "i18n_key": "processing_prefix"},
+    "completed": {"template": "green", "i18n_key": "status_completed"},
+    "error": {"template": "red", "i18n_key": "status_error"},
+    "stopped": {"template": "red", "i18n_key": "status_stopped"},
+}
+
+
+def _build_header(status: str) -> dict[str, Any]:
+    """构建卡片级 header — 流式蓝 / 完成绿 / 停止红."""
+    cfg = _HEADER_STATES.get(status, _HEADER_STATES["completed"])
+    en_text, zh_text = _T[cfg["i18n_key"]]
+    return {
+        "title": {
+            "tag": "plain_text",
+            "content": en_text,
+            "i18n_content": _i18n(en_text, zh_text),
+        },
+        "template": cfg["template"],
     }
 
 
@@ -256,6 +283,7 @@ def _build_footer_elements(
     is_aborted: bool = False,
     fields: list[list[str]] | None = None,
     show_label: bool = False,
+    text_size: str = "notation",
 ) -> list[dict]:
     if fields is None:
         fields = [["status", "elapsed", "context", "model"]]
@@ -291,7 +319,7 @@ def _build_footer_elements(
             "tag": "markdown",
             "content": en_content,
             "i18n_content": _i18n(en_content, zh_content),
-            "text_size": "notation",
+            "text_size": text_size,
         },
     ]
 
@@ -380,6 +408,8 @@ def build_streaming_card_v2(
     show_tool_use: bool = True,
     show_reasoning: bool = False,
     show_streaming_element: bool = True,
+    header_enabled: bool = False,
+    text_size: str = "normal_v2",
 ) -> dict[str, Any]:
     """CardKit 2.0 流式占位卡片 — 含工具面板 + streaming + loading 元素."""
     elements: list[dict] = []
@@ -396,10 +426,10 @@ def build_streaming_card_v2(
             elements.append(build_streaming_tool_use_pending_panel())
 
     if show_streaming_element:
-        elements.append(_streaming_element())
+        elements.append(_streaming_element(text_size=text_size))
     elements.append(_loading_element())
 
-    return {
+    card = {
         "schema": "2.0",
         "config": {
             "streaming_mode": True,
@@ -416,6 +446,9 @@ def build_streaming_card_v2(
         },
         "body": {"elements": elements},
     }
+    if header_enabled:
+        card["header"] = _build_header("streaming")
+    return card
 
 
 def build_complete_card(
@@ -427,7 +460,11 @@ def build_complete_card(
     is_aborted: bool = False,
     footer_fields: list[list[str]] | None = None,
     footer_show_label: bool = True,
+    footer_enabled: bool = True,
+    footer_text_size: str = "notation",
     panel_expanded: bool = False,
+    header_enabled: bool = False,
+    body_text_size: str = "normal_v2",
 ) -> dict[str, Any]:
     """完成态流式卡片 — 按 segments 顺序渲染."""
     elements: list[dict] = []
@@ -450,20 +487,22 @@ def build_complete_card(
             has_answer = True
             content = _downgrade_tables(optimize_markdown_style(seg.text))
             for chunk in _split_long_text(content):
-                elements.append({"tag": "markdown", "content": chunk})
+                elements.append({"tag": "markdown", "content": chunk, "text_size": body_text_size})
 
     if not has_answer:
-        elements.append({"tag": "markdown", "content": _T["done"][0]})
+        elements.append({"tag": "markdown", "content": _T["done"][0], "text_size": body_text_size})
 
-    elements.extend(
-        _build_footer_elements(
-            footer_data,
-            is_error,
-            is_aborted,
-            fields=footer_fields,
-            show_label=footer_show_label,
+    if footer_enabled:
+        elements.extend(
+            _build_footer_elements(
+                footer_data,
+                is_error,
+                is_aborted,
+                fields=footer_fields,
+                show_label=footer_show_label,
+                text_size=footer_text_size,
+            )
         )
-    )
 
     summary_text = ""
     for seg in reversed(segments):
@@ -483,6 +522,9 @@ def build_complete_card(
     if summary:
         card["config"]["summary"] = {"content": summary}
     card["body"] = {"elements": elements}
+    if header_enabled:
+        header_status = "error" if is_error else "stopped" if is_aborted else "completed"
+        card["header"] = _build_header(header_status)
     return card
 
 
