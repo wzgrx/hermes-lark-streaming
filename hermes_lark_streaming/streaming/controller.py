@@ -311,8 +311,16 @@ class StreamingController:
                         sequence=session.sequence,
                     )
                     seg.dirty = False
+            except FeishuAPIError as e:
+                _logger.warning(
+                    "CardKit stream element failed: code=%s el=%s msg=%s",
+                    e.code, seg.el_id, e,
+                )
+                self._handle_flush_error(e, session)
+                seg.dirty = False
             except Exception as e:
-                _logger.debug("CardKit stream element failed: %s el=%s", e, seg.el_id, exc_info=True)
+                _logger.warning("CardKit stream element failed: %s el=%s", e, seg.el_id)
+                seg.dirty = False
 
     async def _do_batch_update(
         self,
@@ -380,7 +388,7 @@ class StreamingController:
                     seg.dirty = False
         except FeishuAPIError as e:
             _logger.warning("CardKit batch update failed: %s", e, exc_info=True)
-            self._handle_flush_error(e)
+            self._handle_flush_error(e, session)
             return False
         return True
 
@@ -518,10 +526,16 @@ class StreamingController:
         )
         return True
 
-    def _handle_flush_error(self, e: FeishuAPIError) -> None:
+    def _handle_flush_error(self, e: FeishuAPIError, session: CardSession | None = None) -> None:
         if e.code == CARDKIT_RATE_LIMITED:
             return
         if e.code == CARDKIT_STREAMING_CLOSED:
+            if session is not None and not session.state.is_terminal:
+                session.mark_failed()
+                _logger.warning(
+                    "CardKit streaming closed for %s, session terminated",
+                    session.message_id[:12],
+                )
             return
         if e.code == CARDKIT_CONTENT_FAILED:
             sub_code = e.extract_sub_code()
