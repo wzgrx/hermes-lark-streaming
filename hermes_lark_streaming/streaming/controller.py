@@ -339,6 +339,11 @@ class StreamingController:
         pre_flush_tool_offsets = {
             seg.el_id: seg.tool_end_offset for seg in updated_tool_segs
         }
+        pre_flush_tool_steps = session.tool_use.build_display_steps()
+        pre_flush_tool_slices = {
+            seg.el_id: pre_flush_tool_steps[seg.tool_offset:tool_segment_end(seg, pre_flush_tool_steps)]
+            for seg in updated_tool_segs
+        }
         try:
             await self._client.cardkit_batch_update(
                 session.card_id,
@@ -360,13 +365,18 @@ class StreamingController:
                         continue
                     if seg.type in (SegmentType.REASONING, SegmentType.ANSWER) and seg.text:
                         seg.dirty = True
+            current_tool_steps = session.tool_use.build_display_steps()
             for seg in updated_tool_segs:
                 offset_ok = pre_flush_tool_offsets.get(seg.el_id, -1) == seg.tool_end_offset
+                current_tool_slice = current_tool_steps[
+                    seg.tool_offset:tool_segment_end(seg, current_tool_steps)
+                ]
+                tool_slice_ok = pre_flush_tool_slices.get(seg.el_id) == current_tool_slice
                 if seg.el_id in new_el_estimates:
                     estimate = new_el_estimates[seg.el_id]
                     session.element_count += estimate - seg.element_estimate
                     seg.element_estimate = estimate
-                if seg.created and offset_ok and seg.tool_end_offset > 0:
+                if seg.created and offset_ok and tool_slice_ok:
                     seg.dirty = False
         except FeishuAPIError as e:
             _logger.warning("CardKit batch update failed: %s", e, exc_info=True)

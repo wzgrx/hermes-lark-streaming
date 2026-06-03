@@ -840,6 +840,75 @@ class TestDoFlush:
         assert tool_seg_ref.dirty is True
 
     @pytest.mark.asyncio
+    async def test_open_tool_dirty_cleared_when_steps_unchanged(self) -> None:
+        ctrl = _setup_ctrl()
+        session = _make_session("msg_open_tool_clean")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_open_tool_clean"
+        session.tool_use.record_start("read", "f")
+        session.segment_state.on_tool_event(1)
+        tool_seg = session.segment_state.segments[0]
+        tool_seg.created = True
+        ctrl._sessions["msg_open_tool_clean"] = session
+
+        await ctrl._do_flush(session)
+
+        assert tool_seg.tool_end_offset == 0
+        assert tool_seg.dirty is False
+
+    @pytest.mark.asyncio
+    async def test_open_tool_dirty_snapshot_when_steps_change(self) -> None:
+        """await 期间 open tool 新增 step → dirty 保持."""
+        ctrl = _setup_ctrl()
+        original_batch = ctrl._client.cardkit_batch_update
+        session = _make_session("msg_open_tool_snap")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_open_tool_snap"
+        session.tool_use.record_start("read", "f")
+        session.segment_state.on_tool_event(1)
+        tool_seg = session.segment_state.segments[0]
+        tool_seg.created = True
+
+        async def batch_with_race(card_id: str, actions: list[dict], **kw: object) -> None:
+            await original_batch(card_id, actions, **kw)
+            session.tool_use.record_start("grep", "q")
+            session.segment_state.on_tool_event(2)
+
+        ctrl._client.cardkit_batch_update = batch_with_race
+        ctrl._sessions["msg_open_tool_snap"] = session
+
+        await ctrl._do_flush(session)
+
+        assert tool_seg.tool_end_offset == 0
+        assert tool_seg.dirty is True
+
+    @pytest.mark.asyncio
+    async def test_open_tool_dirty_snapshot_when_step_content_changes(self) -> None:
+        """await 期间 open tool 完成但 step 数不变 → dirty 保持."""
+        ctrl = _setup_ctrl()
+        original_batch = ctrl._client.cardkit_batch_update
+        session = _make_session("msg_open_tool_content_snap")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_open_tool_content_snap"
+        session.tool_use.record_start("read", "f")
+        session.segment_state.on_tool_event(1)
+        tool_seg = session.segment_state.segments[0]
+        tool_seg.created = True
+
+        async def batch_with_race(card_id: str, actions: list[dict], **kw: object) -> None:
+            await original_batch(card_id, actions, **kw)
+            session.tool_use.record_end("read", output="done")
+            session.segment_state.on_tool_event(1)
+
+        ctrl._client.cardkit_batch_update = batch_with_race
+        ctrl._sessions["msg_open_tool_content_snap"] = session
+
+        await ctrl._do_flush(session)
+
+        assert tool_seg.tool_end_offset == 0
+        assert tool_seg.dirty is True
+
+    @pytest.mark.asyncio
     async def test_step2_exception_does_not_block_step3(self) -> None:
         ctrl = _setup_ctrl()
         ctrl._client.cardkit_stream_element = AsyncMock(side_effect=RuntimeError("stream fail"))
