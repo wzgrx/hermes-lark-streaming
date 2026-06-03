@@ -309,6 +309,9 @@ class ToolUseTracker:
                 base_title = f"{base_title} ({_format_duration_label(s.elapsed_ms)})"
             sanitizer = desc.get("sanitizer") if desc else None
             detail = _sanitize_detail(s.detail, sanitizer)
+            # no_result tools (clarify, etc.) should not leak their detail text into the card
+            if desc and desc.get("no_result"):
+                detail = ""
             steps.append(
                 {
                     "name": s.name,
