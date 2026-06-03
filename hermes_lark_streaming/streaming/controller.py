@@ -163,7 +163,7 @@ class StreamingController:
         new_el_ids: set[str] = set()
         new_el_estimates: dict[str, int] = {}
         updated_tool_segs: list[Segment] = []
-        new_el_total = 0
+        new_el_total = 0  # 同一 flush 内新 segment 估计 + dirty segment 增量的累计
 
         for i, seg in enumerate(segments):
             if i < session.split_index:
@@ -247,6 +247,7 @@ class StreamingController:
                     new_el_ids=new_el_ids,
                     new_el_estimates=new_el_estimates,
                     updated_tool_segs=updated_tool_segs,
+                    pending_delta=new_el_total,
                 )
                 if rollover == "failed":
                     return
@@ -263,6 +264,7 @@ class StreamingController:
                 )
                 updated_tool_segs.append(seg)
                 new_el_estimates[seg.el_id] = estimate
+                new_el_total += estimate - seg.element_estimate
 
         if actions and not await self._do_batch_update(
             session, segments, actions, new_el_ids, new_el_estimates, updated_tool_segs,
@@ -384,6 +386,7 @@ class StreamingController:
         new_el_ids: set[str],
         new_el_estimates: dict[str, int],
         updated_tool_segs: list[Segment],
+        pending_delta: int = 0,
     ) -> str | None:
         """按 tool step 边界拆分过大的 dirty tool segment."""
         start = seg.tool_offset
@@ -392,13 +395,13 @@ class StreamingController:
         delta = estimate - seg.element_estimate
         if (
             delta <= 0
-            or session.element_count + delta + FOOTER_RESERVE <= ELEMENT_THRESHOLD
+            or session.element_count + pending_delta + delta + FOOTER_RESERVE <= ELEMENT_THRESHOLD
             or session.split_disabled
         ):
             return None
 
         split_offset = find_tool_split_offset(
-            base_count=session.element_count - seg.element_estimate,
+            base_count=session.element_count + pending_delta - seg.element_estimate,
             seg=seg,
             all_steps=all_steps,
         )

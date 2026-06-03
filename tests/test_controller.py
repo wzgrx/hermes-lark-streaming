@@ -597,6 +597,49 @@ class TestDoFlush:
         assert session.segment_state.segments[1].created is True
 
     @pytest.mark.asyncio
+    async def test_tool_growth_counts_pending_new_segments_before_rollover(self) -> None:
+        """同一轮 flush 内，dirty tool 拆分判断要计入前面尚未落账的新 segment."""
+        ctrl = _setup_ctrl()
+        calls = _capture_split_calls(
+            ctrl,
+            cards=["card_tool_pending_next"],
+            messages=["msg_tool_pending_next"],
+        )
+
+        session = _make_session("msg_tool_pending_roll")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_tool_pending_old"
+        session.card_msg_id = "msg_tool_pending_old"
+        session.element_count = 175
+        session.segment_state.on_answer_delta("pending answer")
+        session.tool_use.record_start("read", "file0")
+        session.segment_state.on_tool_event(1)
+        tool_seg = session.segment_state.segments[1]
+        tool_seg.created = True
+        tool_seg.element_estimate = estimate_segment_elements(tool_seg, session.tool_use.build_display_steps())
+
+        session.tool_use.record_start("read", "file1")
+        session.segment_state.on_tool_event(len(session.tool_use.build_display_steps()))
+        ctrl._sessions["msg_tool_pending_roll"] = session
+
+        await ctrl._do_flush(session)
+
+        assert calls == [
+            ("batch", "card_tool_pending_old"),
+            ("create", ""),
+            ("reply", ""),
+            ("close", "card_tool_pending_old"),
+            ("seal", "card_tool_pending_old"),
+            ("batch", "card_tool_pending_next"),
+        ]
+        assert session.card_id == "card_tool_pending_next"
+        assert session.split_index == 2
+        assert len(session.segment_state.segments) == 3
+        assert session.segment_state.segments[1].tool_end_offset == 1
+        assert session.segment_state.segments[2].tool_offset == 1
+        assert session.segment_state.segments[2].created is True
+
+    @pytest.mark.asyncio
     async def test_oversized_new_tool_segment_splits_across_multiple_cards(self) -> None:
         """单次 flush 内 tool steps 很多时，未创建的 tool segment 也会连续分片拆卡."""
         ctrl = _setup_ctrl()
