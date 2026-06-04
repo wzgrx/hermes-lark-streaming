@@ -7,6 +7,7 @@ from hermes_lark_streaming.cardkit.builder import (
     REASONING_TEXT_ELEMENT_ID,
     TOOL_PANEL_ELEMENT_ID,
     _build_footer_elements,
+    _build_header,
     _build_reasoning_panel,
     _build_tool_panel,
     _compact,
@@ -528,3 +529,114 @@ class TestBuildCronCard:
         content = "| A | B |\n|---|---|\n| 1 | 2 |"
         card = build_cron_card(content)
         assert "| A | B |" in card["body"]["elements"][0]["content"]
+
+
+# --- Header ---
+
+
+class TestBuildHeader:
+    def test_streaming_blue(self) -> None:
+        header = _build_header("streaming")
+        assert header is not None
+        assert header["template"] == "blue"
+        assert "Processing" in header["title"]["content"]
+
+    def test_completed_green(self) -> None:
+        header = _build_header("completed")
+        assert header is not None
+        assert header["template"] == "green"
+        assert "Completed" in header["title"]["content"]
+
+    def test_error_red(self) -> None:
+        header = _build_header("error")
+        assert header is not None
+        assert header["template"] == "red"
+        assert "Error" in header["title"]["content"]
+
+    def test_stopped_red(self) -> None:
+        header = _build_header("stopped")
+        assert header is not None
+        assert header["template"] == "red"
+        assert "Stopped" in header["title"]["content"]
+
+    def test_title_has_i18n(self) -> None:
+        header = _build_header("streaming")
+        assert "i18n_content" in header["title"]
+        assert "zh_cn" in header["title"]["i18n_content"]
+        assert "en_us" in header["title"]["i18n_content"]
+
+    def test_unknown_status_falls_back_to_completed(self) -> None:
+        header = _build_header("unknown")
+        assert header is not None
+        assert header["template"] == "green"
+        assert "Completed" in header["title"]["content"]
+
+
+class TestStreamingCardHeader:
+    def test_header_absent_by_default(self) -> None:
+        card = build_streaming_card_v2()
+        assert "header" not in card
+
+    def test_header_present_when_enabled(self) -> None:
+        card = build_streaming_card_v2(header_enabled=True)
+        assert "header" in card
+        assert card["header"]["template"] == "blue"
+
+
+class TestCompleteCardHeader:
+    def test_completed_has_green_header(self) -> None:
+        card = build_complete_card(
+            segments=[_seg("answer", "hi")],
+            all_tool_steps=[],
+            header_enabled=True,
+        )
+        assert "header" in card
+        assert card["header"]["template"] == "green"
+
+    def test_aborted_has_red_header(self) -> None:
+        card = build_complete_card(
+            segments=[_seg("answer", "hi")],
+            all_tool_steps=[],
+            is_aborted=True,
+            header_enabled=True,
+        )
+        assert "header" in card
+        assert card["header"]["template"] == "red"
+
+    def test_error_has_red_header(self) -> None:
+        card = build_complete_card(
+            segments=[_seg("answer", "hi")],
+            all_tool_steps=[],
+            is_error=True,
+            header_enabled=True,
+        )
+        assert "header" in card
+        assert card["header"]["template"] == "red"
+        assert "Error" in card["header"]["title"]["content"]
+
+    def test_header_disabled(self) -> None:
+        card = build_complete_card(
+            segments=[_seg("answer", "hi")],
+            all_tool_steps=[],
+            header_enabled=False,
+        )
+        assert "header" not in card
+
+
+class TestCompleteCardFooter:
+    def test_footer_present_by_default(self) -> None:
+        card = build_complete_card(
+            segments=[_seg("answer", "hi")],
+            all_tool_steps=[],
+        )
+        tags = [e.get("tag") for e in card["body"]["elements"]]
+        assert "hr" in tags
+
+    def test_footer_disabled(self) -> None:
+        card = build_complete_card(
+            segments=[_seg("answer", "hi")],
+            all_tool_steps=[],
+            footer_enabled=False,
+        )
+        tags = [e.get("tag") for e in card["body"]["elements"]]
+        assert "hr" not in tags

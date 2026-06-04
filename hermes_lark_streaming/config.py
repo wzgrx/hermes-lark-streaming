@@ -63,6 +63,42 @@ class Config:
         return int(self._streaming_sec().get("card_ttl_sec", 600))
 
     @property
+    def header_enabled(self) -> bool:
+        """流式卡片和完成态卡片是否显示 header."""
+        sec = self._streaming_sec()
+        header = sec.get("header", {})
+        if not isinstance(header, dict):
+            return False
+        return bool(header.get("enabled", False))
+
+    @property
+    def footer_enabled(self) -> bool:
+        """完成态卡片是否显示 footer."""
+        sec = self._streaming_sec()
+        footer = sec.get("footer", {})
+        if not isinstance(footer, dict):
+            return True
+        return bool(footer.get("enabled", True))
+
+    @property
+    def body_text_size(self) -> str:
+        """Body answer markdown 的文字大小."""
+        sec = self._streaming_sec()
+        body = sec.get("body", {})
+        if not isinstance(body, dict):
+            return "normal_v2"
+        return str(body.get("text_size", "normal_v2")) or "normal_v2"
+
+    @property
+    def footer_text_size(self) -> str:
+        """Footer markdown 的文字大小."""
+        sec = self._streaming_sec()
+        footer = sec.get("footer", {})
+        if not isinstance(footer, dict):
+            return "notation"
+        return str(footer.get("text_size", "notation")) or "notation"
+
+    @property
     def footer_fields(self) -> list[list[str]]:
         """Footer 字段布局（二维数组）."""
         sec = self._streaming_sec()

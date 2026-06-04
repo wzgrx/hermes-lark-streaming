@@ -111,6 +111,8 @@ class StreamingController:
                 show_tool_use=False,
                 show_reasoning=False,
                 show_streaming_element=False,
+                header_enabled=self._cfg.header_enabled,
+                text_size=self._cfg.body_text_size,
             )
             card_id = await self._client.cardkit_create(card)
             card_msg_id = await self._client.reply_card_by_id(
@@ -471,7 +473,10 @@ class StreamingController:
             all_tool_steps=all_steps,
             footer_fields=[],
             footer_show_label=False,
+            footer_enabled=False,
             panel_expanded=self._cfg.panel_expanded,
+            header_enabled=False,
+            body_text_size=self._cfg.body_text_size,
         )
 
         try:
@@ -479,6 +484,8 @@ class StreamingController:
                 show_tool_use=False,
                 show_reasoning=False,
                 show_streaming_element=False,
+                header_enabled=self._cfg.header_enabled,
+                text_size=self._cfg.body_text_size,
             )
             new_card_id = await self._client.cardkit_create(card)
             new_msg_id = await self._client.reply_card_by_id(session.anchor_id or session.message_id, new_card_id)
@@ -568,7 +575,11 @@ class StreamingController:
             is_aborted=is_aborted,
             footer_fields=self._cfg.footer_fields,
             footer_show_label=self._cfg.footer_show_label,
+            footer_enabled=self._cfg.footer_enabled,
+            footer_text_size=self._cfg.footer_text_size,
             panel_expanded=self._cfg.panel_expanded,
+            header_enabled=self._cfg.header_enabled,
+            body_text_size=self._cfg.body_text_size,
         )
 
         streaming_closed = False

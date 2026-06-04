@@ -76,6 +76,58 @@ class TestFooterFields:
         assert cfg.footer_fields == [["status", "elapsed", "context", "model"]]
 
 
+class TestHeaderEnabled:
+    def test_enabled_true(self) -> None:
+        cfg = _make_config({"streaming": {"header": {"enabled": True}}})
+        assert cfg.header_enabled is True
+
+    def test_enabled_false(self) -> None:
+        cfg = _make_config({"streaming": {"header": {"enabled": False}}})
+        assert cfg.header_enabled is False
+
+    def test_missing_enabled_key_defaults_false(self) -> None:
+        cfg = _make_config({"streaming": {"header": {}}})
+        assert cfg.header_enabled is False
+
+    def test_missing_header_section_defaults_false(self) -> None:
+        cfg = _make_config({"streaming": {}})
+        assert cfg.header_enabled is False
+
+    def test_no_streaming_section_defaults_false(self) -> None:
+        cfg = _make_config({})
+        assert cfg.header_enabled is False
+
+    def test_header_not_dict_defaults_false(self) -> None:
+        cfg = _make_config({"streaming": {"header": "invalid"}})
+        assert cfg.header_enabled is False
+
+
+class TestFooterEnabled:
+    def test_enabled_true(self) -> None:
+        cfg = _make_config({"streaming": {"footer": {"enabled": True}}})
+        assert cfg.footer_enabled is True
+
+    def test_enabled_false(self) -> None:
+        cfg = _make_config({"streaming": {"footer": {"enabled": False}}})
+        assert cfg.footer_enabled is False
+
+    def test_missing_enabled_key_defaults_true(self) -> None:
+        cfg = _make_config({"streaming": {"footer": {}}})
+        assert cfg.footer_enabled is True
+
+    def test_no_footer_section_defaults_true(self) -> None:
+        cfg = _make_config({"streaming": {}})
+        assert cfg.footer_enabled is True
+
+    def test_no_streaming_section_defaults_true(self) -> None:
+        cfg = _make_config({})
+        assert cfg.footer_enabled is True
+
+    def test_footer_not_dict_defaults_true(self) -> None:
+        cfg = _make_config({"streaming": {"footer": "invalid"}})
+        assert cfg.footer_enabled is True
+
+
 class TestFooterShowLabel:
     def test_true(self) -> None:
         cfg = _make_config({"streaming": {"footer": {"show_label": True}}})
