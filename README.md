@@ -21,6 +21,7 @@
 - **工具调用** — 实时展示工具调用状态和进度，含标准图标和结果/错误块
 - **CardKit v2.0** — 使用飞书 CardKit 流式 API；卡片创建失败时交回 Hermes Gateway 默认回复
 - **终态卡片** — 完成后展示完整结果，含 token 用量、耗时、上下文信息
+- **卡片样式** — 可配置卡片 header、footer 显示开关及正文字字大小
 - **消息保护** — 消息被删除/撤回后自动终止更新，避免无效 API 调用
 - **图片解析** — 自动识别 markdown 图片引用，下载上传后替换为飞书 img_key
 - **中断处理** — 处理 `/stop` 命令和消息打断，展示中断状态卡片并自动开启新会话
@@ -103,20 +104,33 @@ FEISHU_APP_ID=cli_xxxxx
 FEISHU_APP_SECRET=xxxxx
 ```
 
-### 页脚
+### 卡片样式
 
-通过 `streaming.footer` 自定义完成态卡片的页脚：
+通过以下配置项自定义流式卡片和完成态卡片的外观：
 
 ```yaml
 streaming:
   enabled: true
+  header:
+    enabled: true      # 卡片 header，默认 false
+  body:
+    text_size: normal_v2  # 回答正文文字大小，默认 normal_v2
   footer:
+    enabled: true         # 卡片 footer，默认 true
+    text_size: notation   # Footer 文字大小，默认 notation
     fields:
       - [status, elapsed, context, model]
     show_label: false
+  panel_expanded: false   # 完成态面板折叠，默认 false
 ```
 
-**字段**（`footer.fields`）：二维数组，每个子数组为一行，字段间用 `·` 连接。
+**Header**（`streaming.header.enabled`）：控制卡片是否显示顶部状态栏。开启后根据状态自动着色 — 流式中蓝色、完成绿色、中断/错误红色。默认关闭。
+
+**Footer**（`streaming.footer.enabled`）：控制完成态卡片是否显示底部元数据栏。默认开启。
+
+**文字大小**（`body.text_size` / `footer.text_size`）：有效值包括 `heading`、`normal`、`normal_v2`、`notation` 等。
+
+**Footer 字段**（`footer.fields`）：二维数组，每个子数组为一行，字段间用 `·` 连接。
 
 | 字段 | 说明 | 有标签 | 无标签 |
 |------|------|--------|--------|
@@ -128,17 +142,7 @@ streaming:
 
 **显示标签**（`footer.show_label`）：是否展示字段标签（如 "Elapsed"、"Context"）。默认：`false`。
 
-未配置时的默认值：`fields: [[status, elapsed, context, model]]`，`show_label: false`。
-
-### 面板折叠
-
-完成态卡片中，推理面板和工具面板默认折叠。配置 `panel_expanded: true` 可保持展开：
-
-```yaml
-streaming:
-  enabled: true
-  panel_expanded: true
-```
+**面板折叠**（`panel_expanded`）：完成态卡片中推理面板和工具面板默认折叠，设为 `true` 保持展开。
 
 ---
 

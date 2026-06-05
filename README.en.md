@@ -21,6 +21,7 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 - **Tool use tracking** — Live tool call status with standard icons, result/error blocks
 - **CardKit v2.0** — Uses Feishu CardKit streaming API; card creation failures yield to the Hermes Gateway default reply
 - **Completion card** — Final card with token usage, duration, and context info
+- **Card style** — Configurable card header/footer toggle and body/footer text sizes
 - **Message guard** — Auto-terminates updates when message is deleted/recalled
 - **Image resolution** — Detects markdown image references, downloads and re-uploads as Feishu img_key
 - **Abort handling** — Gracefully handles `/stop` command and message interrupts with aborted state card and automatic new session
@@ -103,20 +104,33 @@ FEISHU_APP_ID=cli_xxxxx
 FEISHU_APP_SECRET=xxxxx
 ```
 
-### Footer
+### Card Style
 
-Customize the completion card footer via `streaming.footer`:
+Customize the appearance of streaming and completion cards with the following options:
 
 ```yaml
 streaming:
   enabled: true
+  header:
+    enabled: true      # Card header, default false
+  body:
+    text_size: normal_v2  # Answer body text size, default normal_v2
   footer:
+    enabled: true         # Card footer, default true
+    text_size: notation   # Footer text size, default notation
     fields:
       - [status, elapsed, context, model]
     show_label: false
+  panel_expanded: false   # Completion panel collapse, default false
 ```
 
-**Fields** (`footer.fields`): A 2D array where each sub-array is one line, fields joined by `·`.
+**Header** (`streaming.header.enabled`): Controls whether the card displays a status header bar. When enabled, the header auto-themes by state — blue for streaming, green for completed, red for stopped/error. Default: disabled.
+
+**Footer** (`streaming.footer.enabled`): Controls whether the completion card displays a footer metadata bar. Default: enabled.
+
+**Text Size** (`body.text_size` / `footer.text_size`): Valid values include `heading`, `normal`, `normal_v2`, `notation`, etc.
+
+**Footer Fields** (`footer.fields`): A 2D array where each sub-array is one line, fields joined by `·`.
 
 | Field | Description | With Label | Without Label |
 |-------|-------------|------------|---------------|
@@ -128,17 +142,7 @@ streaming:
 
 **Show Label** (`footer.show_label`): Whether to display field labels like "Elapsed", "Context". Default: `false`.
 
-Default (when not configured): `fields: [[status, elapsed, context, model]]`, `show_label: false`.
-
-### Panel Collapse
-
-In the completion card, reasoning and tool panels are collapsed by default. Set `panel_expanded: true` to keep them expanded:
-
-```yaml
-streaming:
-  enabled: true
-  panel_expanded: true
-```
+**Panel Collapse** (`panel_expanded`): Reasoning and tool panels are collapsed by default in completion cards. Set to `true` to keep them expanded.
 
 ---
 
