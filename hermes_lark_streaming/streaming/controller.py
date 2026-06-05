@@ -207,7 +207,7 @@ class StreamingController:
                 new_el_ids.add(seg.el_id)
                 new_el_estimates[seg.el_id] = estimated
                 new_el_total += estimated
-                actions.append(build_add_segment_action(seg, all_steps))
+                actions.append(build_add_segment_action(seg, all_steps, text_size=self._cfg.body_text_size))
                 if (
                     seg.type == SegmentType.TOOL
                     and i + 1 < len(segments)

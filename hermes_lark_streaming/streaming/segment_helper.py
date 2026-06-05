@@ -69,7 +69,9 @@ def find_tool_split_offset(
     return None
 
 
-def build_add_segment_action(seg: Segment, all_steps: list[ToolDisplayStep]) -> dict[str, Any]:
+def build_add_segment_action(
+    seg: Segment, all_steps: list[ToolDisplayStep], *, text_size: str = "normal_v2",
+) -> dict[str, Any]:
     """构造新增 segment 元素的 batch action."""
     if seg.type == SegmentType.REASONING:
         element = _build_reasoning_panel(
@@ -80,7 +82,7 @@ def build_add_segment_action(seg: Segment, all_steps: list[ToolDisplayStep]) -> 
             text_element_id=seg.text_el_id,
         )
     elif seg.type == SegmentType.ANSWER:
-        element = _streaming_element(element_id=seg.el_id)
+        element = _streaming_element(element_id=seg.el_id, text_size=text_size)
     elif seg.type == SegmentType.TOOL:
         start = seg.tool_offset
         end = seg.tool_end_offset if seg.tool_end_offset else len(all_steps)
