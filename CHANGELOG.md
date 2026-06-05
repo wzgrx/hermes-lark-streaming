@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.10.0] - 2026-06-05
+
+### 新增
+
+- 卡片外观配置：Header/Footer 开关、正文/Footer 文字大小，流式阶段和完成态均生效。(#18, #47)
+
+  ```yaml
+  streaming:
+    header:
+      enabled: true      # 卡片 header，默认 false
+    body:
+      text_size: heading  # 正文文字大小，默认 normal_v2
+    footer:
+      enabled: true       # 卡片 footer，默认 true
+      text_size: notation # Footer 文字大小，默认 notation
+  ```
+
+  文字大小有效值见[飞书文档](https://open.feishu.cn/document/feishu-cards/card-json-v2-components/content-components/plain-text)。
+
+- Batch update 诊断日志，用于排查 300313 错误。(#49)
+
+### Added
+
+- Card style configuration: `streaming.header.enabled`, `streaming.footer.enabled`, `streaming.body.text_size`, `streaming.footer.text_size`, applied in both streaming and completion phases. (#18, #47)
+
+  ```yaml
+  streaming:
+    header:
+      enabled: true      # card header, default false
+    body:
+      text_size: heading  # answer body text size, default normal_v2
+    footer:
+      enabled: true       # card footer, default true
+      text_size: notation # footer text size, default notation
+  ```
+
+  See [Feishu docs](https://open.feishu.cn/document/feishu-cards/card-json-v2-components/content-components/plain-text?lang=en-US) for valid `text_size` values.
+
+- Diagnostic logging for CardKit batch update failures to aid 300313 troubleshooting. (#49)
+
+---
+
 ## [0.9.5] - 2026-06-03
 
 ### 修复
