@@ -128,7 +128,7 @@ streaming:
 
 **Footer**（`streaming.footer.enabled`）：控制完成态卡片是否显示底部元数据栏。默认开启。
 
-**文字大小**（`body.text_size` / `footer.text_size`）：有效值包括 `heading`、`normal`、`normal_v2`、`notation` 等。
+**文字大小**（`body.text_size` / `footer.text_size`）：有效值包括 `heading`、`normal`、`normal_v2`、`notation` 等。详见[飞书文档](https://open.feishu.cn/document/feishu-cards/card-json-v2-components/content-components/plain-text)。
 
 **Footer 字段**（`footer.fields`）：二维数组，每个子数组为一行，字段间用 `·` 连接。
 
