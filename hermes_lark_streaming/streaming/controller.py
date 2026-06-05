@@ -19,6 +19,7 @@ from ..feishu import (
     CARDKIT_STREAMING_CLOSED,
     FeishuAPIError,
 )
+from .diagnostics import compact_ids, extract_missing_element_id, segment_state_for_log, summarize_actions
 from .flush import CARDKIT_MS
 from .image import ImageResolver
 from .segment_helper import (
@@ -330,10 +331,13 @@ class StreamingController:
         assert session.card_id is not None
         session.sequence += 1
         _logger.info(
-            "CardKit batch update: msg=%s seq=%d actions=%d",
+            "CardKit batch update: msg=%s card=%s seq=%d actions=%d split=%d elements=%d",
             session.message_id[:12],
+            session.card_id[:12],
             session.sequence,
             len(actions),
+            session.split_index,
+            session.element_count,
         )
         pre_flush_reasoning_elapsed = {
             seg.el_id: seg.elapsed_ms for seg in segments if seg.type == SegmentType.REASONING
@@ -381,7 +385,23 @@ class StreamingController:
                 if seg.created and offset_ok and tool_slice_ok:
                     seg.dirty = False
         except FeishuAPIError as e:
-            _logger.warning("CardKit batch update failed: %s", e, exc_info=True)
+            missing_el_id = extract_missing_element_id(e)
+            action_summary = summarize_actions(actions)
+            _logger.warning(
+                "CardKit batch update failed: %s card=%s seq=%d split=%d elements=%d "
+                "missing=%s missing_state=%s new=[%s] tool_updates=[%s] %s",
+                e,
+                session.card_id[:12],
+                session.sequence,
+                session.split_index,
+                session.element_count,
+                missing_el_id or "-",
+                segment_state_for_log(segments, missing_el_id),
+                compact_ids(new_el_ids),
+                compact_ids([seg.el_id for seg in updated_tool_segs]),
+                action_summary,
+                exc_info=True,
+            )
             self._handle_flush_error(e)
             return False
         return True
@@ -518,9 +538,11 @@ class StreamingController:
         for seg in segments[split_idx:]:
             seg.created = False
         _logger.info(
-            "CardKit split: msg=%s sealed=%d new_card=%s",
+            "CardKit split: msg=%s old_card=%s sealed=%d split_idx=%d new_card=%s",
             session.message_id[:12],
+            old_card_id[:12],
             len(seal_segments),
+            split_idx,
             new_card_id[:12],
         )
         return True
