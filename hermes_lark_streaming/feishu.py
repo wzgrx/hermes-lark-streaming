@@ -234,7 +234,7 @@ class FeishuClient:
         *,
         sequence: int = 0,
     ) -> None:
-        """流式更新卡片内指定 element 的内容（打字机效果）."""
+        """流式更新卡片内指定 element 的内容（打字机效果），含重试逻辑."""
         body_builder = ContentCardElementRequestBody.builder().content(content)
         body_builder = body_builder.sequence(sequence)
         request = (
@@ -244,11 +244,13 @@ class FeishuClient:
             .request_body(body_builder.build())
             .build()
         )
-        resp = await asyncio.to_thread(
-            self._client.cardkit.v1.card_element.content,
-            request,
+        await self._checked_call(
+            "cardkit_stream_element",
+            lambda: asyncio.to_thread(
+                self._client.cardkit.v1.card_element.content,
+                request,
+            ),
         )
-        self._check(resp, "cardkit_stream_element")
 
     async def cardkit_update(
         self,

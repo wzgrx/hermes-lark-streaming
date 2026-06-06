@@ -21,7 +21,7 @@ from .streaming.session import CardSession, SessionState
 from .streaming.text import strip_reasoning_tags
 
 _logger = logging.getLogger("hermes_lark_streaming")
-_CARD_CREATION_WAIT_SEC = 10.0
+_CARD_CREATION_WAIT_SEC = 30.0
 
 
 class StreamCardController(StreamingController):
@@ -388,8 +388,16 @@ class StreamCardController(StreamingController):
             context=context,
         )
 
-        return await self._complete_session_wait(session)
-
+        if not await self._complete_session_wait(session):
+            _logger.info(
+                "on_completed_wait: msg=%s completion failed, yielding to gateway",
+                message_id[:12],
+            )
+            self._mark_text_fallback_needed(session)
+            self._cleanup(message_id)
+            return False
+        return True
+ 
     def on_cron_deliver(
         self,
         *,
