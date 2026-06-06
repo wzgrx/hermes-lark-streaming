@@ -15,6 +15,7 @@ from ..cardkit.markdown import (
 from ..feishu import (
     CARDKIT_CONTENT_FAILED,
     CARDKIT_ELEMENT_LIMIT,
+    CARDKIT_ELEMENT_NOT_FOUND,
     CARDKIT_RATE_LIMITED,
     CARDKIT_STREAMING_CLOSED,
     FeishuAPIError,
@@ -563,6 +564,14 @@ class StreamingController:
                 session.mark_failed()
                 _logger.warning(
                     "CardKit streaming closed for %s, session terminated",
+                    session.message_id[:12],
+                )
+            return
+        if e.code == CARDKIT_ELEMENT_NOT_FOUND:
+            if session is not None and not session.state.is_terminal:
+                session.mark_failed()
+                _logger.warning(
+                    "CardKit element not found for %s (code=300313), session terminated",
                     session.message_id[:12],
                 )
             return

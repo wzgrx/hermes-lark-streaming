@@ -27,6 +27,7 @@ _HOOK_NAMES = [
     "ABORT",
     "INTERRUPT",
     "BG_DELIVER",
+    "FOOTER",
 ]
 MARKERS: list[tuple[str, str]] = [(f"# {PREFIX}_{n}_BEGIN", f"# {PREFIX}_{n}_END") for n in _HOOK_NAMES]
 
@@ -41,6 +42,7 @@ MK_BACKGROUND_REVIEW, MK_BACKGROUND_REVIEW_END = MARKERS[7]
 MK_ABORT, MK_ABORT_END = MARKERS[8]
 MK_INTERRUPT, MK_INTERRUPT_END = MARKERS[9]
 MK_BG_DELIVER, MK_BG_DELIVER_END = MARKERS[10]
+MK_FOOTER, MK_FOOTER_END = MARKERS[11]
 
 _BACKUP_SUFFIX = ".hermes_lark.bak"
 
@@ -308,6 +310,22 @@ def _bg_deliver_hook(indent: str) -> str:
     )
 
 
+def _footer_hook(indent: str) -> str:
+    return _make_hook(
+        indent,
+        MK_FOOTER,
+        MK_FOOTER_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_footer_deliver",
+            "    if on_footer_deliver(platform=getattr(source.platform, 'value', '')):",
+            "        _footer_line = ''",
+            "except Exception:",
+            "    pass",
+        ],
+    )
+
+
 def _remove_block(content: str, begin: str, end: str) -> str:
     lines = content.splitlines(keepends=True)
     begin_idx = end_idx = None
@@ -418,6 +436,9 @@ class Patcher:
                 "Cannot find background deliver anchor in run.py — Hermes version may be incompatible"
             )
 
+        if "if _footer_line:" not in content:
+            raise PatcherError("Cannot find footer anchor in run.py — Hermes version may be incompatible")
+
         normalize_site = _find_handle_message_source_site(tree, content.splitlines(keepends=True))
         if normalize_site is None:
             raise PatcherError(
@@ -473,6 +494,7 @@ class Patcher:
             ("reasoning", "reasoning", _find_reasoning_site(tree, lines)),
             ("background_review", "background_review", _find_background_review_site(tree, lines)),
             ("bg_deliver", "bg_deliver", _find_bg_deliver_site(tree, lines)),
+            ("footer", "footer", _find_footer_site(tree, lines)),
         ]
 
         sites: list[tuple[int, str, str]] = []
@@ -495,6 +517,7 @@ class Patcher:
             "reasoning": _reasoning_hook,
             "background_review": _background_review_hook,
             "bg_deliver": _bg_deliver_hook,
+            "footer": _footer_hook,
         }
         for idx, indent, fn_name in sites:
             hook = _HOOK_FNS[fn_name](indent)
@@ -603,6 +626,15 @@ def _find_bg_deliver_site(tree: ast.Module, lines: list[str]) -> tuple[int, str]
     for i, line in enumerate(lines):
         if line.strip() == "images, text_content = adapter.extract_images(response)":
             return i + 1, _safe_indent(lines, i)
+    return None
+
+
+def _find_footer_site(tree: ast.Module, lines: list[str]) -> tuple[int, str] | None:
+    """查找 gateway 中 footer 发送位置."""
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "if _footer_line:":
+            return i, _safe_indent(lines, i)
     return None
 
 

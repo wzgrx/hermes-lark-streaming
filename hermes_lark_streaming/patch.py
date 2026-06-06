@@ -263,3 +263,14 @@ async def on_background_deliver(
     except Exception as exc:
         _logger.warning("on_background_deliver error: %s", exc, exc_info=True)
         return False
+
+
+def on_footer_deliver(*, platform: str) -> bool:
+    """[注入点 12] gateway footer 发送前 — 飞书平台跳过（卡片已有 footer 信息）."""
+    try:
+        ctrl = get_controller()
+        if not ctrl.enabled:
+            return False
+        return platform.lower() in ("feishu", "lark")
+    except Exception:
+        return False
