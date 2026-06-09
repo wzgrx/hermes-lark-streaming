@@ -65,7 +65,7 @@ curl https://raw.githubusercontent.com/Cheerwhy/hermes-lark-streaming/main/READM
 
 ### Manual
 
-> The plugin reads `HERMES_HOME` from Hermes to locate the installation path (default: `~/.hermes`). No extra setup needed for non-default paths.
+> The plugin reads `HERMES_HOME` from Hermes to locate the installation path (default: `~/.hermes`). It also auto-discovers modules in `site-packages` for pip-installed Hermes — no manual path configuration needed.
 
 ```bash
 git clone https://github.com/Cheerwhy/hermes-lark-streaming.git

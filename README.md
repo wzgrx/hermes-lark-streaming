@@ -65,7 +65,7 @@ curl https://raw.githubusercontent.com/Cheerwhy/hermes-lark-streaming/main/READM
 
 ### 手动安装
 
-> 插件会自动读取 Hermes 的 `HERMES_HOME` 环境变量定位安装路径（默认 `~/.hermes`），非默认路径下无需额外操作。
+> 插件会自动读取 Hermes 的 `HERMES_HOME` 环境变量定位安装路径（默认 `~/.hermes`），同时支持 pip 安装的 Hermes（自动发现 `site-packages` 中的模块），无需手动指定路径。
 
 ```bash
 git clone https://github.com/Cheerwhy/hermes-lark-streaming.git
