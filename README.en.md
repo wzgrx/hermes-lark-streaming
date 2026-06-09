@@ -186,24 +186,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 
 ## How It Works
 
-The plugin injects hook calls into `gateway/run.py` and `cron/scheduler.py` via AST patching. All business logic lives in the `hermes_lark_streaming` package:
-
-| Hook | Injection Target | Description |
-|------|-----------------|-------------|
-| `on_feishu_normalize` | After `source = event.source` in `_handle_message` | Fixes false thread_id on Feishu quoted messages |
-| `on_message_started` | Top of `_handle_message_with_agent` | Creates card session and placeholder card |
-| `on_tool_updated` | `progress_callback` | Displays tool call status in real-time |
-| `on_answer_delta` | `_stream_delta_cb` | Streams answer text to the card |
-| `on_thinking_delta` | `_interim_assistant_cb` | Displays reasoning/thinking process |
-| `on_reasoning_delta` | After `agent.reasoning_config` assignment | Streams native model reasoning |
-| `on_background_review_message` | At `background_review_callback` assignment | Defers self-evolution messages until card completion |
-| `on_message_aborted` | Before stale `return None` | Handles `/stop` abort |
-| `on_message_interrupted` | Before recursive `_run_agent` call | Handles message interrupts, terminates old card and creates new session |
-| `on_queued_followup_boundary` | Before `was_interrupted = result.get("interrupted")` | Finalizes current card before Queue-mode follow-up drain |
-| `on_queued_followup_result` | Before `return _preserve_queued_followup_history_offset` | Carries deepest completion ID back through recursive merge chain |
-| `on_message_completed_wait` | Before `return response` | Waits for card creation/finalization before sending the completion card; yields to gateway text fallback on failure |
-| `on_cron_deliver` | After `delivered = False` in `_deliver_result` | Intercepts Feishu cron delivery, sends as card |
-| `on_background_deliver` | After `extract_images` in `_run_background_task` | Intercepts Feishu background task delivery, replies as card with topic-aware positioning |
+The plugin injects hook calls into `gateway/run.py` and `cron/scheduler.py` via AST patching. All business logic lives in the `hermes_lark_streaming` package.
 
 **Message flow:**
 
@@ -215,7 +198,7 @@ User sends message
   → Completion card (tokens, duration, context)
 ```
 
-If a message is deleted/recalled, UnavailableGuard auto-terminates further updates.
+If a message is deleted/recalled, updates are auto-terminated.
 
 **Interrupt handling:**
 
@@ -226,15 +209,6 @@ If a message is deleted/recalled, UnavailableGuard auto-terminates further updat
 - Message interrupt — User sends a new message while a response is in progress; old card shows interrupted state, and a new streaming card is automatically created for the new message:
 
 ![](assets/interrupt.jpg)
-
-**Failure handling:**
-
-| Scenario | Handling |
-|----------|----------|
-| CardKit streaming | 100ms throttled updates |
-| CardKit creation failure | Gateway falls back to the default text reply |
-| Rate limiting | Skips current frame, no channel switch |
-| Completion failure | Gateway falls back to the default text reply |
 
 ---
 

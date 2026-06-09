@@ -186,24 +186,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 
 ## 工作原理
 
-插件通过 AST 注入在 `gateway/run.py` 和 `cron/scheduler.py` 插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成：
-
-| Hook | 注入位置 | 说明 |
-|------|----------|------|
-| `on_feishu_normalize` | `_handle_message` 中 `source = event.source` 之后 | 修正飞书引用消息的虚假 thread_id |
-| `on_message_started` | `_handle_message_with_agent` 函数体开头 | 创建卡片会话，发送占位卡片 |
-| `on_tool_updated` | `progress_callback` 内部 | 实时展示工具调用状态 |
-| `on_answer_delta` | `_stream_delta_cb` 内部 | 流式更新回答文本 |
-| `on_thinking_delta` | `_interim_assistant_cb` 内部 | 显示思考/推理过程 |
-| `on_reasoning_delta` | `agent.reasoning_config` 赋值之后 | 流式展示模型原生推理 |
-| `on_background_review_message` | `background_review_callback` 赋值处 | 延迟自我进化消息到卡片完成后再发送 |
-| `on_message_aborted` | stale `return None` 之前 | 处理 `/stop` 中断 |
-| `on_message_interrupted` | `_run_agent` 递归调用前 | 处理消息打断，终止旧卡片并创建新会话 |
-| `on_queued_followup_boundary` | `was_interrupted = result.get("interrupted")` 之前 | Queue 模式 follow-up 前终结当前卡片 |
-| `on_queued_followup_result` | `return _preserve_queued_followup_history_offset` 之前 | 传递最深 completion ID 回递归合并链 |
-| `on_message_completed_wait` | `return response` 之前 | 等待卡片创建/收尾完成后发送终态卡片，失败时让网关走文本兜底 |
-| `on_cron_deliver` | `_deliver_result` 中 `delivered = False` 之后 | 拦截飞书 Cron 推送，以卡片形式发送 |
-| `on_background_deliver` | `_run_background_task` 中 `extract_images` 之后 | 拦截飞书后台任务推送，以卡片形式回复到原始消息（话题内正确定位） |
+插件通过 AST 注入在 `gateway/run.py` 和 `cron/scheduler.py` 插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成。
 
 **消息处理流程：**
 
@@ -215,7 +198,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
   → 终态卡片（token/耗时/上下文）
 ```
 
-若消息被删除/撤回，UnavailableGuard 自动终止后续更新。
+若消息被删除/撤回，自动终止后续更新。
 
 **中断处理：**
 
@@ -226,15 +209,6 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 - 消息打断 — 用户发送新消息打断正在处理的回复，旧卡片展示中断状态，并自动为新消息创建新的流式卡片：
 
 ![](assets/interrupt.jpg)
-
-**失败处理：**
-
-| 场景 | 处理方式 |
-|------|----------|
-| CardKit 流式 | 100ms 节流更新 |
-| CardKit 创建失败 | Gateway 回退到默认文本回复 |
-| 速率限制 | 跳过当前帧，不切换通道 |
-| 终态卡片失败 | Gateway 回退到默认文本回复 |
 
 ---
 
