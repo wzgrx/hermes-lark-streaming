@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import contextlib
+import importlib.util
 import logging
 import os
 import shutil
@@ -49,8 +50,46 @@ MK_BG_DELIVER, MK_BG_DELIVER_END = MARKERS[12]
 _BACKUP_SUFFIX = ".hermes_lark.bak"
 
 _HERMES_HOME = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
-_RUN_PATH = _HERMES_HOME / "hermes-agent" / "gateway" / "run.py"
-_CRON_PATH = _HERMES_HOME / "hermes-agent" / "cron" / "scheduler.py"
+
+
+def _valid_source(path: Path) -> Path | None:
+    try:
+        candidate = path.resolve()
+        if candidate.is_file() and candidate.suffix == ".py":
+            return candidate
+    except (OSError, RuntimeError):
+        pass
+    return None
+
+
+def _resolve_module_path(module_name: str, hardcoded: Path) -> Path:
+    """Discover the actual file path of a Hermes module.
+
+    Uses the standard Hermes home layout when available, then falls back to
+    module discovery for pip-install scenarios without importing parent packages.
+    """
+    if candidate := _valid_source(hardcoded):
+        return candidate
+
+    try:
+        package_name, _, relative_name = module_name.partition(".")
+        spec = importlib.util.find_spec(package_name)
+        if spec and spec.submodule_search_locations:
+            relative_path = Path(*relative_name.split(".")).with_suffix(".py")
+            for location in spec.submodule_search_locations:
+                if candidate := _valid_source(Path(location) / relative_path):
+                    return candidate
+    except Exception:
+        _logger.debug("Failed to resolve Hermes module %s", module_name, exc_info=True)
+    return hardcoded
+
+
+_RUN_PATH = _resolve_module_path(
+    "gateway.run", _HERMES_HOME / "hermes-agent" / "gateway" / "run.py"
+)
+_CRON_PATH = _resolve_module_path(
+    "cron.scheduler", _HERMES_HOME / "hermes-agent" / "cron" / "scheduler.py"
+)
 
 MK_CRON_DELIVER = f"# {PREFIX}_CRON_DELIVER_BEGIN"
 MK_CRON_DELIVER_END = f"# {PREFIX}_CRON_DELIVER_END"
