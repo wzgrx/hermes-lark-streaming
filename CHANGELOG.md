@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.10.3] - 2026-06-09
+
+### 新增
+
+- Queued follow-up hooks：支持 Hermes queue 模式下连续消息的卡片生命周期管理，正确传递 completion ID。(#53)
+
+### 修复
+
+- 重试飞书 CardKit 瞬态服务端错误（1663、300000），扩展 gateway timeout 2200 的重试范围至所有 CardKit 操作。(#52)
+- 去重 cron 卡片推送到同一 chat_id 的情况。
+
+### Added
+
+- Queued follow-up hooks for streaming card lifecycle under Hermes queue busy mode, propagating completion ID correctly. (#53)
+
+### Fixed
+
+- Retry transient Feishu CardKit server errors (1663, 300000) in addition to gateway timeout 2200 across all CardKit operations. (#52)
+- Deduplicate cron card delivery to the same chat_id.
+
+---
+
 ## [0.10.0] - 2026-06-05
 
 ### 新增
