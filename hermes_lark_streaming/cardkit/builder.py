@@ -1,8 +1,7 @@
-"""CardKit v2.0 卡片构建器 — i18n、元素构建、卡片组装."""
-
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any
 
 from ..streaming.segments import Segment, SegmentType
@@ -54,14 +53,40 @@ def _collapsible_panel(
     }
 
 
-def _streaming_element(content: str = "", *, element_id: str = STREAMING_ELEMENT_ID) -> dict:
+def _streaming_element(
+    content: str = "",
+    *,
+    element_id: str = STREAMING_ELEMENT_ID,
+    text_size: str = "normal_v2",
+) -> dict:
     return {
         "tag": "markdown",
         "content": content,
         "text_align": "left",
-        "text_size": "normal_v2",
+        "text_size": text_size,
         "margin": "0px 0px 0px 0px",
         "element_id": element_id,
+    }
+
+
+_HEADER_STATES: dict[str, dict[str, str]] = {
+    "streaming": {"template": "blue", "i18n_key": "processing_prefix"},
+    "completed": {"template": "green", "i18n_key": "status_completed"},
+    "error": {"template": "red", "i18n_key": "status_error"},
+    "stopped": {"template": "red", "i18n_key": "status_stopped"},
+}
+
+
+def _build_header(status: str) -> dict[str, Any]:
+    cfg = _HEADER_STATES.get(status, _HEADER_STATES["completed"])
+    en_text, zh_text = _T[cfg["i18n_key"]]
+    return {
+        "title": {
+            "tag": "plain_text",
+            "content": en_text,
+            "i18n_content": _i18n(en_text, zh_text),
+        },
+        "template": cfg["template"],
     }
 
 
@@ -256,6 +281,7 @@ def _build_footer_elements(
     is_aborted: bool = False,
     fields: list[list[str]] | None = None,
     show_label: bool = False,
+    text_size: str = "notation",
 ) -> list[dict]:
     if fields is None:
         fields = [["status", "elapsed", "context", "model"]]
@@ -291,7 +317,7 @@ def _build_footer_elements(
             "tag": "markdown",
             "content": en_content,
             "i18n_content": _i18n(en_content, zh_content),
-            "text_size": "notation",
+            "text_size": text_size,
         },
     ]
 
@@ -334,7 +360,7 @@ def _render_footer_field(
     if name == "context":
         used = data.get("context_used", 0) or 0
         max_c = data.get("context_max", 0) or 0
-        if max_c:
+        if used > 0 and max_c > 0:
             pct = int(used / max_c * 100)
             val = f"{_compact(used)}/{_compact(max_c)} ({pct}%)"
             if show_label:
@@ -380,8 +406,9 @@ def build_streaming_card_v2(
     show_tool_use: bool = True,
     show_reasoning: bool = False,
     show_streaming_element: bool = True,
+    header_enabled: bool = False,
+    text_size: str = "normal_v2",
 ) -> dict[str, Any]:
-    """CardKit 2.0 流式占位卡片 — 含工具面板 + streaming + loading 元素."""
     elements: list[dict] = []
 
     if show_reasoning:
@@ -396,10 +423,10 @@ def build_streaming_card_v2(
             elements.append(build_streaming_tool_use_pending_panel())
 
     if show_streaming_element:
-        elements.append(_streaming_element())
+        elements.append(_streaming_element(text_size=text_size))
     elements.append(_loading_element())
 
-    return {
+    card = {
         "schema": "2.0",
         "config": {
             "streaming_mode": True,
@@ -416,6 +443,9 @@ def build_streaming_card_v2(
         },
         "body": {"elements": elements},
     }
+    if header_enabled:
+        card["header"] = _build_header("streaming")
+    return card
 
 
 def build_complete_card(
@@ -427,9 +457,12 @@ def build_complete_card(
     is_aborted: bool = False,
     footer_fields: list[list[str]] | None = None,
     footer_show_label: bool = True,
+    footer_enabled: bool = True,
+    footer_text_size: str = "notation",
     panel_expanded: bool = False,
+    header_enabled: bool = False,
+    body_text_size: str = "normal_v2",
 ) -> dict[str, Any]:
-    """完成态流式卡片 — 按 segments 顺序渲染."""
     elements: list[dict] = []
     has_answer = False
 
@@ -450,20 +483,22 @@ def build_complete_card(
             has_answer = True
             content = _downgrade_tables(optimize_markdown_style(seg.text))
             for chunk in _split_long_text(content):
-                elements.append({"tag": "markdown", "content": chunk})
+                elements.append({"tag": "markdown", "content": chunk, "text_size": body_text_size})
 
     if not has_answer:
-        elements.append({"tag": "markdown", "content": _T["done"][0]})
+        elements.append({"tag": "markdown", "content": _T["done"][0], "text_size": body_text_size})
 
-    elements.extend(
-        _build_footer_elements(
-            footer_data,
-            is_error,
-            is_aborted,
-            fields=footer_fields,
-            show_label=footer_show_label,
+    if footer_enabled:
+        elements.extend(
+            _build_footer_elements(
+                footer_data,
+                is_error,
+                is_aborted,
+                fields=footer_fields,
+                show_label=footer_show_label,
+                text_size=footer_text_size,
+            )
         )
-    )
 
     summary_text = ""
     for seg in reversed(segments):
@@ -483,22 +518,61 @@ def build_complete_card(
     if summary:
         card["config"]["summary"] = {"content": summary}
     card["body"] = {"elements": elements}
+    if header_enabled:
+        header_status = "error" if is_error else "stopped" if is_aborted else "completed"
+        card["header"] = _build_header(header_status)
     return card
 
 
-def build_cron_card(content: str) -> dict[str, Any]:
-    """Cron 推送用的极简静态卡片 — schema 2.0，仅 markdown 内容."""
+def _format_run_time(run_time: str) -> str:
+    if not run_time:
+        return ""
+    try:
+        dt = datetime.fromisoformat(run_time)
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except (ValueError, TypeError):
+        return run_time
+
+
+def build_cron_card(
+    content: str, *, task_name: str = "", run_time: str = ""
+) -> dict[str, Any]:
     card: dict[str, Any] = {
         "schema": "2.0",
         "config": {"wide_screen_mode": True, "locales": _LOCALES},
         "body": {"elements": []},
     }
+    header_parts = [p for p in (task_name, _format_run_time(run_time)) if p]
+    if header_parts:
+        card["header"] = {
+            "title": {"tag": "lark_md", "content": ":Alarm: " + " · ".join(header_parts)},
+            "template": "blue",
+        }
     if not content.strip():
         return card
     summary = content[:120].replace("\n", " ").replace("```", "").strip()
     if summary:
         card["config"]["summary"] = {"content": summary}
     for chunk in _split_long_text(optimize_markdown_style(content)):
+        if chunk.strip():
+            card["body"]["elements"].append({"tag": "markdown", "content": chunk})
+    return card
+
+
+def build_background_card(preview: str, content: str) -> dict[str, Any]:
+    card: dict[str, Any] = {
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True, "locales": _LOCALES},
+        "header": {
+            "title": {"tag": "plain_text", "content": f"✅ Background: \"{preview}\""},
+        },
+        "body": {"elements": []},
+    }
+    body = content if content.strip() else "(No response generated)"
+    summary = body[:120].replace("\n", " ").replace("```", "").strip()
+    if summary:
+        card["config"]["summary"] = {"content": summary}
+    for chunk in _split_long_text(optimize_markdown_style(body)):
         if chunk.strip():
             card["body"]["elements"].append({"tag": "markdown", "content": chunk})
     return card
