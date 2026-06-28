@@ -388,7 +388,7 @@ def _render_footer_field(
                 platform = "火山"
             else:
                 platform = "AI"
-            val = f"💰 {platform}·¥{bal:.2f}"
+            val = f"💰 {platform}·¥{bal:.2f}·{model}"
             return val, val
 
         # 2) 回退：从 balance-cache.json 读（外部 cron 写入的跨平台余额）
@@ -396,7 +396,7 @@ def _render_footer_field(
             balances = _load_balance_cache()
             bal_str = _match_platform_balance(balances, model)
             if bal_str:
-                val = f"💰 {bal_str}"
+                val = f"💰 {bal_str}·{model}"
                 return val, val
         return None, None
 
