@@ -493,9 +493,13 @@ class StreamCardController(StreamingController):
             if final_answer:
                 session.segment_state.on_answer_delta(final_answer)
 
+        from hermes_lark_streaming.balance import _get_deepseek_balance
+        balance = _get_deepseek_balance()
+
         session.footer = {
             "duration": duration,
             "model": model,
+            **({"balance": balance} if balance is not None else {}),
             **({"input_tokens": tokens.get("input_tokens")} if tokens else {}),
             **({"output_tokens": tokens.get("output_tokens")} if tokens else {}),
             **({"context_used": context.get("used_tokens")} if context else {}),
