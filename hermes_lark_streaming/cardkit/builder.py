@@ -372,12 +372,31 @@ def _render_footer_field(
         return None, None
 
     if name == "balance":
+        bal = data.get("balance")
         model = (data.get("model") or "").strip()
+
+        # 1) 优先：controller 通过 balance.py 直接查 API（5分钟缓存）
+        if bal is not None:
+            ml = model.lower()
+            if "deepseek" in ml:
+                platform = "DeepSeek"
+            elif "qwen" in ml or "bailian" in ml or "tongyi" in ml:
+                platform = "阿里"
+            elif "silicon" in ml or "glm" in ml or "zhipu" in ml:
+                platform = "硅基"
+            elif "doubao" in ml or "volc" in ml or "huoshan" in ml:
+                platform = "火山"
+            else:
+                platform = "AI"
+            val = f"💰 {platform}·¥{bal:.2f}"
+            return val, val
+
+        # 2) 回退：从 balance-cache.json 读（外部 cron 写入的跨平台余额）
         if model:
             balances = _load_balance_cache()
             bal_str = _match_platform_balance(balances, model)
             if bal_str:
-                val = f"💰 {bal_str}·{model}"
+                val = f"💰 {bal_str}"
                 return val, val
         return None, None
 
