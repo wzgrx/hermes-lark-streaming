@@ -363,7 +363,7 @@ def _render_footer_field(
     if name == "context":
         used = data.get("context_used", 0) or 0
         max_c = data.get("context_max", 0) or 0
-        if max_c and used > 0:
+        if max_c:
             pct = int(used / max_c * 100)
             val = f"{_compact(used)}/{_compact(max_c)} ({pct}%)"
             if show_label:

@@ -670,6 +670,27 @@ class StreamingController:
         card = build_cron_card(content, task_name=task_name, run_time=run_time)
         await self._client.send_card_to_chat(chat_id, card)
 
+    async def on_background_deliver(
+        self,
+        chat_id: str,
+        preview: str,
+        content: str,
+        *,
+        reply_to_message_id: str | None = None,
+    ) -> bool:
+        """公开接口 — 发送后台任务完成卡片。返回 True 表示卡片已发送。"""
+        try:
+            await self._do_background_deliver(
+                chat_id=chat_id,
+                preview=preview,
+                content=content,
+                reply_to_message_id=reply_to_message_id,
+            )
+            return True
+        except Exception as exc:
+            _logger.warning("background_deliver card failed: %s", exc)
+            return False
+
     async def _do_background_deliver(
         self,
         chat_id: str,
