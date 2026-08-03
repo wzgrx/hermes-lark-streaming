@@ -154,6 +154,17 @@ def _cmd_restore() -> int:
     return 0
 
 
+def _load_hermes_environment() -> None:
+    """Load the active Hermes profile environment for standalone CLI commands."""
+    try:
+        from hermes_cli.env_loader import load_hermes_dotenv
+    except ImportError:
+        return
+    from .config import hermes_home
+
+    load_hermes_dotenv(hermes_home=hermes_home())
+
+
 def _cmd_status() -> int:
     patcher = _get_patcher()
     if patcher is None:
@@ -176,7 +187,8 @@ def _cmd_status() -> int:
     if cron_patcher is not None:
         print(f"Cron hook: {'installed' if cron_patcher.is_patched() else 'not installed'}")
 
-    # Check config
+    # Check config after loading the same profile environment as Gateway.
+    _load_hermes_environment()
     from .config import Config
 
     cfg = Config()
