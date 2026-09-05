@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import logging
 import shutil
+import subprocess
 import textwrap
 import urllib.request
 from pathlib import Path
@@ -38,14 +39,19 @@ RUN_BAK = RUN_SRC.with_suffix(RUN_SRC.suffix + ".hermes_lark.bak")
 SAMPLES_DIR = Path(__file__).parent / "samples"
 SAMPLE_RUN = SAMPLES_DIR / "run.py"
 
-_RUN_URL = "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/gateway/run.py"
-_CRON_URL = "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/cron/scheduler.py"
+# These tests exercise the legacy monolithic patcher. Latest main is modular;
+# its compatibility is covered separately in test_modular_patcher.py.
+LEGACY_REV = "63279301bcbdc185c1b07b98a9312eb0c862f26d"
+_RUN_URL = f"https://raw.githubusercontent.com/NousResearch/hermes-agent/{LEGACY_REV}/gateway/run.py"
+_CRON_URL = f"https://raw.githubusercontent.com/NousResearch/hermes-agent/{LEGACY_REV}/cron/scheduler.py"
 
 CRON_SRC = Path.home() / ".hermes" / "hermes-agent" / "cron" / "scheduler.py"
 CRON_BAK = CRON_SRC.with_suffix(CRON_SRC.suffix + ".hermes_lark.bak")
 SAMPLE_CRON = SAMPLES_DIR / "scheduler.py"
 
 def _ensure_sample() -> Path:
+    if (RUN_SRC.parent / "run_turn_runner.py").exists():
+        return _pinned_legacy_sample("gateway/run.py", SAMPLE_RUN, _RUN_URL)
     src = RUN_BAK if RUN_BAK.exists() else RUN_SRC
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     if src.exists():
@@ -61,6 +67,19 @@ def _ensure_sample() -> Path:
     return SAMPLE_RUN
 
 
+def _pinned_legacy_sample(relative: str, target: Path, url: str) -> Path:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        ["git", "-C", str(RUN_SRC.parent.parent), "show", f"{LEGACY_REV}:{relative}"],
+        capture_output=True,
+    )
+    if result.returncode == 0:
+        target.write_bytes(result.stdout)
+    else:
+        urllib.request.urlretrieve(url, target)
+    return target
+
+
 @pytest.fixture()
 def run_copy(tmp_path: Path) -> Path:
     src = _ensure_sample()
@@ -73,6 +92,8 @@ def run_copy(tmp_path: Path) -> Path:
 
 
 def _ensure_cron_sample() -> Path:
+    if (CRON_SRC.parent / "scheduler_delivery.py").exists():
+        return _pinned_legacy_sample("cron/scheduler.py", SAMPLE_CRON, _CRON_URL)
     src = CRON_BAK if CRON_BAK.exists() else CRON_SRC
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     if src.exists():
