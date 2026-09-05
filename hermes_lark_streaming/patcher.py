@@ -697,6 +697,13 @@ def _remove_block_checked(content: str, begin: str, end: str) -> str:
 class Patcher:
     """管理 AST 注入的安装和移除."""
 
+    def __new__(cls, run_path: Path | None = None):
+        path = run_path or _default_run_path()
+        if (path.parent / "run_turn_runner.py").is_file():
+            from .modular_patcher import ModularPatcher
+            return ModularPatcher(path)
+        return super().__new__(cls)
+
     MARKERS: list[tuple[str, str]] = MARKERS
 
     def __init__(self, run_path: Path | None = None) -> None:
@@ -1031,6 +1038,13 @@ def _safe_indent(lines: list[str], lineno: int) -> str:
 
 class CronPatcher:
     """注入 CRON_DELIVER hook 到 cron/scheduler.py 的 _deliver_result."""
+
+    def __new__(cls, cron_path: Path | None = None):
+        path = cron_path or _default_cron_path()
+        if (path.parent / "scheduler_delivery.py").is_file():
+            from .modular_patcher import ModularCronPatcher
+            return ModularCronPatcher(path)
+        return super().__new__(cls)
 
     def __init__(self, cron_path: Path | None = None) -> None:
         self.cron_path = cron_path or _default_cron_path()

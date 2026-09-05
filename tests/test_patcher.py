@@ -66,6 +66,9 @@ def run_copy(tmp_path: Path) -> Path:
     src = _ensure_sample()
     dst = tmp_path / "run.py"
     shutil.copy2(src, dst)
+    # The installed repository may already carry the overlay in Git. Test
+    # installation against a clean disposable source, never against live files.
+    Patcher(dst).remove()
     return dst
 
 
@@ -89,6 +92,7 @@ def scheduler_copy(tmp_path: Path) -> Path:
     src = _ensure_cron_sample()
     dst = tmp_path / "scheduler.py"
     shutil.copy2(src, dst)
+    CronPatcher(dst).remove()
     return dst
 
 
