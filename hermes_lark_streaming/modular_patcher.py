@@ -90,7 +90,8 @@ class ModularPatcher:
         add('run_turn_runner.py', lambda s: _function(s, 'progress_callback'), p._tool_hook)
         add('run_turn_runner.py', lambda s: _function(s, 'stream_delta_cb'),
             lambda i: p._answer_hook(i).replace('_stts_consumer_ref', 'stts'))
-        add('run_turn_runner.py', lambda s: _function(s, 'interim_assistant_cb'), p._thinking_hook)
+        add('run_turn_runner.py', lambda s: _function(s, 'interim_assistant_cb'),
+            lambda i: p._thinking_hook(i, tts_consumer='stts'))
         add('run_turn_runner.py', lambda s: _after_assignment(s, 'agent.reasoning_config'), p._reasoning_hook)
         add('run_turn_runner.py', lambda s: _after_assignment(s, 'agent.background_review_callback'), p._background_review_hook)
         add('run_turn_runner.py', lambda s: _after_assignment(s, 'agent.clarify_callback'), p._clarify_hook)
@@ -99,7 +100,7 @@ class ModularPatcher:
         add('run_turn.py', lambda s: _before(s, '# Restart the typing indicator;'),
             lambda i: p._interrupt_hook(i).replace('was_interrupted', 'result.get("interrupted")')
             .replace('message_id=event_message_id', 'message_id=turn_ctx.event_message_id'))
-        add('run_turn.py', lambda s: _before(s, 'return _preserve_queued_followup_history_offset(result, followup_result)'), p._followup_result_hook)
+        add('run_turn.py', lambda s: _before(s, '_preserve_queued_followup_history_offset(result, followup_result)'), p._followup_result_hook)
         add('run_turn.py', lambda s: _after_assignment(s, '(images, text_content)'), p._bg_deliver_hook)
         after = dict(clean)
         for path, idx, hook in sorted(slots, key=lambda t: t[1], reverse=True):

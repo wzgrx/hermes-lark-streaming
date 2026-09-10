@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 import shutil
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call
+from typing import Optional
 
 import pytest
 
@@ -61,7 +62,7 @@ def test_modular_delta_preserves_tts_without_duplicate_text(modular_root):
     module = ast.Module(body=[callback], type_ignores=[])
     stts, native = Mock(), Mock()
     ctx = SimpleNamespace(event_message_id='message-1', _run_still_current=lambda: True)
-    namespace = {'ctx': ctx, 'stts': stts, 'delta_sinks': [native, stts]}
+    namespace = {'ctx': ctx, 'stts': stts, 'delta_sinks': [native, stts], 'Optional': Optional}
     exec(compile(ast.fix_missing_locations(module), '<modular-delta>', 'exec'), namespace)
     with patch('hermes_lark_streaming.patch.on_answer_delta', return_value=True) as hook:
         namespace['stream_delta_cb']('hello')
@@ -76,8 +77,44 @@ def test_modular_delta_yields_to_native_when_card_is_unavailable(modular_root):
     callback = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == 'stream_delta_cb')
     native = Mock()
     namespace = {'ctx': SimpleNamespace(event_message_id='m', _run_still_current=lambda: True),
-                 'stts': None, 'delta_sinks': [native]}
+                 'stts': None, 'delta_sinks': [native], 'Optional': Optional}
     exec(compile(ast.fix_missing_locations(ast.Module(body=[callback], type_ignores=[])), '<delta>', 'exec'), namespace)
     with patch('hermes_lark_streaming.patch.on_answer_delta', return_value=False):
         namespace['stream_delta_cb']('hello')
     native.on_delta.assert_called_once_with('hello')
+
+
+def test_modular_flush_signal_reaches_native_and_tts(modular_root):
+    obj = Patcher(modular_root / 'gateway/run.py'); obj.apply()
+    tree = ast.parse((modular_root / 'gateway/run_turn_runner.py').read_text())
+    callback = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == 'stream_delta_cb')
+    native, stts = Mock(), Mock()
+    namespace = {'ctx': SimpleNamespace(event_message_id='m', _run_still_current=lambda: True),
+                 'stts': stts, 'delta_sinks': [native, stts], 'Optional': Optional}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[callback], type_ignores=[])), '<flush>', 'exec'), namespace)
+    with patch('hermes_lark_streaming.patch.on_answer_delta') as hook:
+        namespace['stream_delta_cb'](None)
+    hook.assert_not_called()
+    native.on_delta.assert_called_once_with(None)
+    stts.on_delta.assert_called_once_with(None)
+
+
+@pytest.mark.parametrize('already_streamed', [False, True])
+def test_modular_commentary_keeps_tts_segment_boundaries(modular_root, already_streamed):
+    obj = Patcher(modular_root / 'gateway/run.py'); obj.apply()
+    tree = ast.parse((modular_root / 'gateway/run_turn_runner.py').read_text())
+    callback = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == 'interim_assistant_cb')
+    native, stts = Mock(), Mock()
+    namespace = {'ctx': SimpleNamespace(event_message_id='m', _run_still_current=lambda: True),
+                 'stts': stts, 'stream_consumer': native}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[callback], type_ignores=[])), '<commentary>', 'exec'), namespace)
+    with patch('hermes_lark_streaming.patch.on_thinking_delta', return_value=True) as hook:
+        namespace['interim_assistant_cb']('commentary', already_streamed=already_streamed)
+    if already_streamed:
+        hook.assert_not_called()
+        stts.on_delta.assert_called_once_with(None)
+        native.on_segment_break.assert_called_once_with()
+    else:
+        hook.assert_called_once_with(message_id='m', text='commentary')
+        assert stts.on_delta.call_args_list == [call(None), call('commentary'), call(None)]
+        native.on_commentary.assert_not_called()

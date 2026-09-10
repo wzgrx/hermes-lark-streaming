@@ -412,7 +412,7 @@ def _answer_hook(indent: str) -> str:
     )
 
 
-def _thinking_hook(indent: str) -> str:
+def _thinking_hook(indent: str, *, tts_consumer: str | None = None) -> str:
     return _make_hook(
         indent,
         MK_THINKING,
@@ -428,6 +428,12 @@ def _thinking_hook(indent: str) -> str:
             "        _lark_run_current = _run_still_current",
             "    if (text and not already_streamed and _lark_run_current()",
             "            and on_thinking_delta(message_id=_lark_message_id, text=text)):",
+            *([
+                f"        if {tts_consumer} is not None:",
+                f"            {tts_consumer}.on_delta(None)",
+                f"            {tts_consumer}.on_delta(text)",
+                f"            {tts_consumer}.on_delta(None)",
+            ] if tts_consumer else []),
             "        return",
             *_hook_exception_lines("thinking"),
         ],
