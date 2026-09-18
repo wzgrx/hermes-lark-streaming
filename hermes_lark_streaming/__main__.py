@@ -175,13 +175,23 @@ def _cmd_status() -> int:
     print(f"Target:  {patcher.run_path}")
 
     if patched:
-        from .patcher import Patcher as _PatcherCls
+        from .patcher import MARKERS
 
-        content = patcher.run_path.read_text(encoding="utf-8")
-        for begin, _end in _PatcherCls.MARKERS:
-            found = begin in content
+        sources: dict = {}
+        _contents = getattr(patcher, "_contents", None)
+        if callable(_contents):
+            try:
+                raw = _contents()
+            except OSError:
+                raw = None
+            if isinstance(raw, dict):
+                sources = raw
+        if not sources:
+            sources = {patcher.run_path: patcher.run_path.read_text(encoding="utf-8")}
+        for begin, _end in MARKERS:
             label = begin.replace("# HERMES_LARK_", "").replace("_BEGIN", "").lower()
-            print(f"  {label}: {'installed' if found else 'missing'}")
+            found_in = sorted({path.name for path, text in sources.items() if begin in text})
+            print(f"  {label}: {found_in[0] if found_in else 'MISSING'}")
 
     cron_patcher = _get_cron_patcher()
     if cron_patcher is not None:
