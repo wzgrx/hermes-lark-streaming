@@ -29,6 +29,8 @@
 - **后台任务卡片推送** — `/background`（`/btw`）任务完成后以卡片形式推送，支持话题内回复
 - **审批边界** — 保留 Hermes 原生可操作审批卡，自动暂停/封存当前流并在审批后新卡继续
 - **复盘收纳** — Self-improvement/background review 通知在完成前到达时合并进终态卡片
+- **崩溃安全投递** — 稳定 UUID + `delivered/not_sent/unknown` 台账，避免网络超时后重复答案
+- **Hermes 原生观测** — 兼容 0.21.3/main 的流、工具、审批 hooks；CardKit 仍由单一 owner 投递
 - **300313 自愈** — 元素可见性有界重试 + 缺失元素立即串行重建，避免卡住和重试风暴
 - **多语言** — 卡片文本（状态、工具面板、思考标签等）内置中英双语，根据飞书客户端语言自动切换
 
@@ -48,7 +50,7 @@
 
 - Hermes `>= 0.14.0`（2026.5.16）已安装并配置飞书平台
 - `Python >= 3.11`
-- `lark-oapi >= 1.4.0` — 飞书/Lark 官方 Python SDK
+- `lark-oapi >= 1.7.3` — 飞书/Lark 官方 Python SDK
 - `PyYAML >= 6.0` — YAML 解析库
 - 飞书应用权限：消息卡片（CardKit）读写、消息发送与回复、图片上传
 
@@ -162,6 +164,7 @@ $HERMES_PYTHON -m hermes_lark_streaming doctor     # 配置、hook、路由和�
 $HERMES_PYTHON -m hermes_lark_streaming metrics --json
 $HERMES_PYTHON -m hermes_lark_streaming smoke      # 默认离线；--execute 才访问真实测试群
 $HERMES_PYTHON -m hermes_lark_streaming lark-cli-smoke
+$HERMES_PYTHON -m hermes_lark_streaming repair-sdk  # only when doctor reports broken SDK
 ```
 
 ---

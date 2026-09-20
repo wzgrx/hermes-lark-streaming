@@ -12,12 +12,14 @@ from ..cardkit.markdown import (
     _downgrade_tables,
     optimize_markdown_style,
 )
+from ..delivery import DeliveryStatus, delivery_ledger
 from ..feishu import (
     CARDKIT_CONTENT_FAILED,
     CARDKIT_ELEMENT_LIMIT,
     CARDKIT_RATE_LIMITED,
     CARDKIT_STREAMING_CLOSED,
     FeishuAPIError,
+    classify_delivery_failure,
 )
 from ..history import compact_terminal_segments
 from ..metrics import metrics
@@ -114,8 +116,104 @@ class StreamingController:
         self._schedule_flush(session)
         return True
 
+    @staticmethod
+    def _logical_delivery_key(session: CardSession, generation: str, route: str) -> str:
+        return f"stream:{session.message_id}:generation:{generation}:route:{route}"
+
+    async def _create_and_attach_card(
+        self,
+        session: CardSession,
+        card: dict[str, Any],
+        *,
+        generation: str,
+        reply_to_message_id: str | None,
+        existing_card_id: str = "",
+    ) -> tuple[str, str]:
+        """Create/attach one card using a restart-stable Feishu idempotency UUID."""
+        route = "reply" if reply_to_message_id else "chat"
+        logical_key = self._logical_delivery_key(session, generation, route)
+        entry = delivery_ledger.begin(logical_key, f"card.{route}")
+        session.delivery_key = logical_key
+        session.delivery_status = entry.status
+
+        if entry.status is DeliveryStatus.DELIVERED and entry.card_id and entry.message_id:
+            metrics.increment("delivery.recovered_delivered")
+            return entry.card_id, entry.message_id
+
+        client = self._session_client(session)
+        card_id = entry.card_id or existing_card_id
+        if not card_id:
+            card_id = await client.cardkit_create(card)
+            entry = delivery_ledger.card_created(logical_key, card_id)
+        # The caller owns the active session card. In split-card flows the old card must remain
+        # active until it is sealed; an ambiguous initial attach is retained after this helper returns.
+        try:
+            if reply_to_message_id:
+                message_id = await client.reply_card_by_id(
+                    reply_to_message_id,
+                    card_id,
+                    request_uuid=entry.request_uuid,
+                )
+            else:
+                message_id = await client.send_card_to_chat(
+                    chat_id=session.chat_id,
+                    card={"type": "card", "data": {"card_id": card_id}},
+                    request_uuid=entry.request_uuid,
+                )
+        except Exception as exc:
+            status = classify_delivery_failure(exc)
+            code = exc.code if isinstance(exc, FeishuAPIError) else 0
+            delivery_ledger.failed(logical_key, status, error_code=code)
+            session.delivery_status = status
+            metrics.increment(f"delivery.{status.value}")
+            metrics.persist()
+            if status is DeliveryStatus.UNKNOWN:
+                _logger.warning(
+                    "Card attach outcome unknown: msg=%s card=%s route=%s",
+                    session.message_id[:12],
+                    card_id[:12],
+                    route,
+                )
+                return card_id, ""
+            raise
+
+        delivery_ledger.delivered(logical_key, card_id=card_id, message_id=message_id)
+        session.delivery_status = DeliveryStatus.DELIVERED
+        metrics.increment("delivery.delivered")
+        return card_id, message_id
+
+    async def _send_uncertain_delivery_notice(self, session: CardSession) -> None:
+        if session.delivery_notice_sent:
+            return
+        logical_key = f"stream:{session.message_id}:uncertain-notice"
+        entry = delivery_ledger.begin(logical_key, "notice.unknown")
+        if entry.status is DeliveryStatus.DELIVERED:
+            session.delivery_notice_sent = True
+            return
+        notice = (
+            "⚠️ 卡片投递确认在网络响应阶段中断; 卡片可能已经送达。"
+            "请先刷新当前会话, 再决定是否重试。\n"
+            "Delivery confirmation was interrupted; refresh this chat before retrying."
+        )
+        try:
+            message_id = await self._session_client(session).send_text_to_chat(
+                session.chat_id,
+                notice,
+                reply_to_message_id=session.anchor_id or session.message_id,
+                request_uuid=entry.request_uuid,
+            )
+        except Exception as exc:
+            status = classify_delivery_failure(exc)
+            code = exc.code if isinstance(exc, FeishuAPIError) else 0
+            delivery_ledger.failed(logical_key, status, error_code=code)
+            metrics.increment("delivery.unknown_notice_failed")
+            return
+        delivery_ledger.delivered(logical_key, card_id="", message_id=message_id)
+        session.delivery_notice_sent = True
+        metrics.increment("delivery.unknown_notice_sent")
+
     async def _do_create_card(self, session: CardSession) -> None:
-        """创建只有 loading 的流式占位卡片."""
+        """Create a loading card with crash-safe, tri-state delivery ownership."""
         if session.state != SessionState.IDLE:
             return
         session.state = SessionState.CREATING
@@ -135,28 +233,42 @@ class StreamingController:
                 text_size=self._cfg.body_text_size,
                 width_mode=self._cfg.width_mode,
             )
-            card_id = await self._session_client(session).cardkit_create(card)
             try:
-                card_msg_id = await self._session_client(session).reply_card_by_id(
-                    reply_to_message_id,
-                    card_id,
+                card_id, card_msg_id = await self._create_and_attach_card(
+                    session,
+                    card,
+                    generation="0",
+                    reply_to_message_id=reply_to_message_id,
                 )
             except FeishuAPIError as error:
                 if error.code != CARDKIT_CONTENT_FAILED:
                     raise
-                card_id = await self._session_client(session).cardkit_create(card)
+                # A structured 230099 response proves no message was created. Build a new card
+                # entity and request UUID, then try the reply path once more.
                 try:
-                    card_msg_id = await self._session_client(session).reply_card_by_id(
-                        reply_to_message_id,
-                        card_id,
+                    card_id, card_msg_id = await self._create_and_attach_card(
+                        session,
+                        card,
+                        generation="0-retry",
+                        reply_to_message_id=reply_to_message_id,
                     )
                 except FeishuAPIError:
-                    card_msg_id = await self._session_client(session).send_card_to_chat(
-                        chat_id=session.chat_id,
-                        card={"type": "card", "data": {"card_id": card_id}},
+                    # The reply API conclusively rejected the card twice. Fall back to a chat send
+                    # with its own stable UUID; ambiguous outcomes never enter this branch.
+                    retry_entry = delivery_ledger.get(self._logical_delivery_key(session, "0-retry", "reply"))
+                    card_id, card_msg_id = await self._create_and_attach_card(
+                        session,
+                        card,
+                        generation="0-standalone",
+                        reply_to_message_id=None,
+                        existing_card_id=retry_entry.card_id if retry_entry else "",
                     )
-            session.set_card(card_id=card_id, card_msg_id=card_msg_id)
-            session.element_count = 1  # loading element
+            if card_msg_id:
+                session.set_card(card_id=card_id, card_msg_id=card_msg_id)
+            else:
+                session.card_id = card_id
+                session.card_msg_id = None
+            session.element_count = 1
             session.flush.set_throttle(CARDKIT_MS)
 
             if session.image_resolver is None:
@@ -171,9 +283,10 @@ class StreamingController:
             if session.segment_state and session.segment_state.has_dirty:
                 self._schedule_flush(session)
             _logger.info(
-                "CardKit card created: msg=%s card_id=%s",
+                "CardKit card created: msg=%s card_id=%s delivery=%s",
                 session.message_id[:12],
                 (session.card_id or "")[:12],
+                session.delivery_status.value,
             )
         except FeishuAPIError:
             _logger.info("CardKit create failed, yielding to gateway", exc_info=True)
@@ -584,11 +697,9 @@ class StreamingController:
             )
 
     async def _create_streaming_card(self, session: CardSession) -> tuple[str, str] | None:
-        """创建空白流式卡并挂到 anchor，返回 (card_id, msg_id)。失败返回 None。
-
-        不修改 session.card_id —— 调用方负责 set_card。
-        """
+        """Create and attach the next split card with restart-stable idempotency."""
         _ = self._session_client(session)
+        generation = session.delivery_generation + 1
         try:
             card = build_streaming_card_v2(
                 show_tool_use=False,
@@ -598,11 +709,13 @@ class StreamingController:
                 text_size=self._cfg.body_text_size,
                 width_mode=self._cfg.width_mode,
             )
-            new_card_id = await self._session_client(session).cardkit_create(card)
-            new_msg_id = await self._session_client(session).reply_card_by_id(
-                session.anchor_id or session.message_id,
-                new_card_id,
+            new_card_id, new_msg_id = await self._create_and_attach_card(
+                session,
+                card,
+                generation=str(generation),
+                reply_to_message_id=session.anchor_id or session.message_id,
             )
+            session.delivery_generation = generation
         except Exception:
             _logger.warning(
                 "CardKit create streaming card failed for msg=%s",
@@ -827,6 +940,8 @@ class StreamingController:
                     )
                 session.state = SessionState.COMPLETED
                 metrics.increment("card.completed")
+                if session.delivery_status is DeliveryStatus.UNKNOWN:
+                    await self._send_uncertain_delivery_notice(session)
                 metrics.persist()
                 return True
             except FeishuAPIError as e:

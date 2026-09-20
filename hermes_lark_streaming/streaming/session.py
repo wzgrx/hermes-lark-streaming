@@ -10,6 +10,7 @@ from enum import StrEnum
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
+from ..delivery import DeliveryStatus
 from .flush import CARDKIT_MS, FlushController
 from .segments import Segment, SegmentState
 from .tooluse import ToolUseTracker
@@ -55,6 +56,10 @@ class CardSession:
         "deferred_background_review_closed",
         "deferred_background_review_lock",
         "deferred_background_reviews",
+        "delivery_generation",
+        "delivery_key",
+        "delivery_notice_sent",
+        "delivery_status",
         "element_count",
         "flush",
         "footer",
@@ -97,6 +102,10 @@ class CardSession:
         self.deferred_background_review_closed = False
         self.deferred_background_reviews: list[tuple[str, Callable[[str], Any]]] = []
         self.deferred_background_review_lock = Lock()
+        self.delivery_generation = 0
+        self.delivery_key = ""
+        self.delivery_status = DeliveryStatus.PENDING
+        self.delivery_notice_sent = False
 
         self.guard = UnavailableGuard(
             reply_to_message_id=message_id,

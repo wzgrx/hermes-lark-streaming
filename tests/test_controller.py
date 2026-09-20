@@ -9,12 +9,13 @@ import time
 from contextlib import nullcontext
 from contextvars import ContextVar
 from types import ModuleType, SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
 import hermes_lark_streaming.controller as controller_module
 from hermes_lark_streaming.controller import StreamCardController, get_controller
+from hermes_lark_streaming.delivery import DeliveryStatus
 from hermes_lark_streaming.feishu import FeishuAPIError, FeishuClient
 from hermes_lark_streaming.streaming.segment_helper import estimate_segment_elements
 from hermes_lark_streaming.streaming.segments import Segment, SegmentState
@@ -997,6 +998,7 @@ class TestDoCreateCard:
         ctrl._client.send_card_to_chat.assert_awaited_once_with(
             chat_id="chat_456",
             card={"type": "card", "data": {"card_id": "card_second"}},
+            request_uuid=ANY,
         )
 
     @pytest.mark.asyncio
@@ -2283,3 +2285,84 @@ class TestStreamedMediaDelivery:
             assert await ctrl.on_completed_wait(message_id="msg_plain", answer="就是一条普通回复。") is True
 
         ctrl._client.upload_file.assert_not_awaited()
+
+class TestCrashSafeDelivery:
+    @pytest.mark.asyncio
+    async def test_unknown_attach_reuses_card_and_request_uuid(self, isolate_delivery_ledger) -> None:
+        ctrl = _setup_ctrl()
+        ctrl._client.cardkit_create = AsyncMock(return_value="card-unknown")
+        ctrl._client.reply_card_by_id = AsyncMock(side_effect=TimeoutError("response lost"))
+        session = _make_session("msg-unknown")
+        card = {"schema": "2.0", "body": {"elements": []}}
+
+        first = await ctrl._create_and_attach_card(
+            session,
+            card,
+            generation="0",
+            reply_to_message_id="anchor",
+        )
+        second = await ctrl._create_and_attach_card(
+            session,
+            card,
+            generation="0",
+            reply_to_message_id="anchor",
+        )
+
+        assert first == second == ("card-unknown", "")
+        assert session.delivery_status is DeliveryStatus.UNKNOWN
+        ctrl._client.cardkit_create.assert_awaited_once()
+        assert ctrl._client.reply_card_by_id.await_count == 2
+        first_uuid = ctrl._client.reply_card_by_id.await_args_list[0].kwargs["request_uuid"]
+        second_uuid = ctrl._client.reply_card_by_id.await_args_list[1].kwargs["request_uuid"]
+        assert first_uuid == second_uuid
+        entry = isolate_delivery_ledger.get("stream:msg-unknown:generation:0:route:reply")
+        assert entry is not None and entry.status is DeliveryStatus.UNKNOWN
+
+    @pytest.mark.asyncio
+    async def test_delivered_attach_is_recovered_without_sdk_call(self, isolate_delivery_ledger) -> None:
+        logical_key = "stream:msg-recovered:generation:0:route:reply"
+        isolate_delivery_ledger.begin(logical_key, "card.reply")
+        isolate_delivery_ledger.delivered(logical_key, card_id="card-existing", message_id="om-existing")
+        ctrl = _setup_ctrl()
+        session = _make_session("msg-recovered")
+
+        result = await ctrl._create_and_attach_card(
+            session,
+            {"schema": "2.0", "body": {"elements": []}},
+            generation="0",
+            reply_to_message_id="anchor",
+        )
+
+        assert result == ("card-existing", "om-existing")
+        assert session.delivery_status is DeliveryStatus.DELIVERED
+        ctrl._client.cardkit_create.assert_not_awaited()
+        ctrl._client.reply_card_by_id.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_unknown_initial_attach_does_not_send_duplicate_card(self) -> None:
+        ctrl = _setup_ctrl()
+        ctrl._client.cardkit_create = AsyncMock(return_value="card-unknown")
+        ctrl._client.reply_card_by_id = AsyncMock(side_effect=TimeoutError("response lost"))
+        session = _make_session("msg-no-duplicate")
+
+        await ctrl._do_create_card(session)
+
+        assert session.state is SessionState.STREAMING
+        assert session.card_id == "card-unknown"
+        assert session.card_msg_id is None
+        assert session.delivery_status is DeliveryStatus.UNKNOWN
+        ctrl._client.send_card_to_chat.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_uncertain_delivery_notice_is_idempotent(self, isolate_delivery_ledger) -> None:
+        ctrl = _setup_ctrl()
+        ctrl._client.send_text_to_chat = AsyncMock(return_value="notice-message")
+        session = _make_session("msg-notice")
+        session.delivery_status = DeliveryStatus.UNKNOWN
+
+        await ctrl._send_uncertain_delivery_notice(session)
+        await ctrl._send_uncertain_delivery_notice(session)
+
+        ctrl._client.send_text_to_chat.assert_awaited_once()
+        entry = isolate_delivery_ledger.get("stream:msg-notice:uncertain-notice")
+        assert entry is not None and entry.status is DeliveryStatus.DELIVERED

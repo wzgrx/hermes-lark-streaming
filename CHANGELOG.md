@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-20
+
+### 新增
+
+- 崩溃安全投递台账：初始卡片的 UUID 跨 Gateway 重启保持稳定，并按
+  `delivered` / `not_sent` / `unknown` 三态决定恢复、重试或通用提示。
+- 对 Hermes 0.21.3 / 最新 main 的原生 observer hooks 进行插件注册；observer 只记录
+  脱敏生命周期指标，AST 兼容层继续作为唯一 CardKit 投递 owner。
+- `doctor` 增加 `lark-oapi` 功能探测、官方 `lark-channel-sdk` 迁移就绪度、原生 hook
+  能力和投递台账摘要；新增显式 `repair-sdk` 命令。
+- 新增 CodeQL 周期扫描，并将全部 GitHub Actions 固定到完整提交 SHA。
+
+### 变更
+
+- 发布 provenance 迁移至统一的 `actions/attest`；保留 wheel、sdist、CycloneDX SBOM
+  和 SHA256 校验。
+- 明确官方 Channel SDK 的采用边界：当前由 `lark-oapi` 承担 OpenAPI/CardKit 细粒度
+  控制，待 Hermes 提供 owner-capable renderer API 后再切换 channel transport。
+
+### Fixed
+
+- Prevent duplicate answer delivery after ambiguous Feishu transport failures by persisting
+  stable idempotency UUIDs and suppressing unsafe plaintext/card retries.
+- Register current Hermes observer hooks without treating ignored callback returns as delivery
+  ownership, preserving one authoritative CardKit path.
+
 ## [0.15.0] - 2026-09-20
 
 ### 新增

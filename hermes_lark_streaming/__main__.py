@@ -39,6 +39,7 @@ def _commands() -> dict[str, Callable[[], int]]:
         "metrics": _cmd_metrics,
         "smoke": _cmd_smoke,
         "lark-cli-smoke": _cmd_lark_cli_smoke,
+        "repair-sdk": _cmd_repair_sdk,
         "sidecar": _cmd_sidecar,
     }
 
@@ -56,6 +57,7 @@ def _print_usage() -> None:
     print("  metrics    Show privacy-preserving runtime metrics [--json]")
     print("  smoke      CardKit dry-run; add --execute --chat-id CHAT for live E2E")
     print("  lark-cli-smoke  Inspect optional lark-cli; add --execute for read-only checks")
+    print("  repair-sdk  Explicitly repair lark-oapi in the active Hermes interpreter")
     print("  sidecar    Run optional health/metrics sidecar [--host HOST --port PORT]")
 
 
@@ -296,6 +298,16 @@ def _cmd_lark_cli_smoke() -> int:
 
     print(json.dumps(lark_cli_smoke(execute="--execute" in sys.argv[2:]), ensure_ascii=False, indent=2))
     return 0
+
+
+def _cmd_repair_sdk() -> int:
+    import json
+
+    from .sdk import repair_lark_oapi
+
+    result = repair_lark_oapi()
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get("returncode") == 0 and result.get("after", {}).get("ok") else 1
 
 
 def _cmd_sidecar() -> int:

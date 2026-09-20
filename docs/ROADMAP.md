@@ -24,9 +24,29 @@
 12. ✅ **国际化/可访问性**：中英之外的 locale，颜色不作为唯一状态信号，以及移动端紧凑布局的截图回归。
 
 
-## 0.15.0 落地说明
+## P3：Hermes 最新接口与可靠投递
+
+13. ✅ **投递三态与稳定 UUID**：初始卡片 UUID 跨重启复用；仅 `not_sent` 允许新 UUID
+    重试，`unknown` 抑制重复答案并发一个幂等通用提示。
+14. ✅ **话题锚点与恢复测试**：保持 Hermes 最新 `_reply_anchor_for_event` 语义，引用消息
+    优先、普通消息回落 event message id；拆卡和恢复均复用同一 anchor。
+15. ✅ **SDK 能力检查/显式修复**：按实际构造器探测 `lark-oapi`，doctor 同时报告官方
+    `lark-channel-sdk` 就绪度；修复严格落到当前 Hermes Python。
+16. ✅ **原生 Hermes observer bridge**：注册 0.21.3/main 的流、工具与审批 observer；
+    因返回值被忽略且缺少飞书路由 id，它们只做脱敏指标，AST 仍是唯一 delivery owner。
+17. ✅ **供应链强化**：Actions 完整 SHA 固定、CodeQL、统一 `actions/attest`、自动化契约测试。
+
+## P4：等待上游 owner API 后执行
+
+- Hermes 发布能 claim/suppress 平台回复并携带 `chat_id/message_id` 的稳定 renderer API 后，
+  将 CardKit owner 从 AST 一次性迁移到原生接口；禁止 observer 与 AST 双投递。
+- 在独立 profile 做 `lark-channel-sdk` shadow transport，对比去重、CardKit 流式、媒体、
+  callback 和多 bot 行为；通过真实 E2E 后再替换当前 `lark-oapi` transport。
+
+## 0.16.0 落地说明
 
 实现与运维入口见 [Operations](OPERATIONS.md)，兼容边界见
 [Compatibility](COMPATIBILITY.md)，Bailey sidecar 的逐项取舍见
-[Bailey audit](BAILEY-AUDIT.md)。原生 hook 自动切换已经具备；其真正启用取决于 Hermes
-上游发布稳定的 `register_streaming_renderer` 生命周期协议。
+[Bailey audit](BAILEY-AUDIT.md)。原生 observer 已在 Hermes 0.21.3/main 上启用，可靠投递台账与 SDK doctor 已落地。
+真正的 CardKit owner 切换仍取决于 Hermes 上游发布稳定的
+`register_streaming_renderer` 生命周期协议。

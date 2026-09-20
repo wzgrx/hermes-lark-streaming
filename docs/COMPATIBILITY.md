@@ -3,18 +3,30 @@
 | Component | Tested range | Notes |
 |---|---:|---|
 | Python | 3.11–3.13 | CI matrix |
-| Hermes | `v2026.9.11`, `v2026.9.14`, `main` | pinned + daily main verification |
-| `lark-oapi` | `>=1.7.3` | CardKit v2 and IM delivery |
+| Hermes | `v2026.9.11`, `v2026.9.14` (`0.21.3`), `main` | pinned matrix + daily main verification |
+| `lark-oapi` | `>=1.7.3` | active CardKit v2 and IM transport; feature-probed by doctor |
+| `lark-channel-sdk` | optional evaluation target | reported by doctor; not installed or activated automatically |
 | Feishu/Lark | CardKit v2 | China and Larksuite base URLs |
 
-Hermes currently exposes package discovery but not a stable streaming renderer lifecycle API.
-The package probes `register_streaming_renderer`; otherwise the fail-closed, reversible AST
-compatibility adapter is used. `verify` compiles every target before `install` changes files.
+Hermes 0.21.3 and current `main` expose observer-only streaming hooks through
+`PluginContext.register_hook()`: `on_stream_start`, `on_stream_delta`, `on_stream_end` and
+`on_interim_message`. Their callback returns are ignored, and their payloads do not contain a
+Feishu `chat_id`/`message_id`; therefore they are used only for privacy-preserving lifecycle
+metrics. The fail-closed, reversible AST adapter remains the sole CardKit delivery owner.
+
+The package also probes the future `register_streaming_renderer` owner protocol. If Hermes adds
+that API, native rendering takes precedence and observer/AST ownership is retired rather than run
+in parallel.
 
 Before an upgrade:
 
 ```bash
-python -m hermes_lark_streaming doctor
+python -m hermes_lark_streaming doctor --json
 python -m hermes_lark_streaming verify
 ```
 
+If doctor reports missing `lark-oapi` constructors, repair only the active Hermes interpreter:
+
+```bash
+~/.hermes/hermes-agent/venv/bin/python -m hermes_lark_streaming repair-sdk
+```
