@@ -162,6 +162,26 @@ def test_card_limits_compact_byte_heavy_short_tool_panels() -> None:
     assert any(element.get("content") == "final answer" for element in compacted["body"]["elements"])
 
 
+def test_card_limits_tight_budget_terminates_and_keeps_latest_answer() -> None:
+    card = {
+        "schema": "2.0",
+        "body": {
+            "elements": [
+                {"tag": "markdown", "content": "old " * 300},
+                {"tag": "markdown", "content": "latest answer"},
+                {"tag": "hr"},
+                {"tag": "markdown", "content": "completed · model"},
+            ]
+        },
+    }
+
+    compacted = compact_card(card, max_bytes=300)
+
+    assert inspect_card(compacted).json_bytes <= 300
+    assert any(element.get("content") == "latest answer" for element in compacted["body"]["elements"])
+    assert "compacted" in compacted["body"]["elements"][0]["content"]
+
+
 def test_tool_history_preserves_old_errors_and_recent_steps() -> None:
     steps = [_step(i, "error" if i == 2 else "success") for i in range(10)]
     compacted, hidden = compact_tool_steps(steps, compact_after=8, keep_recent=4)
