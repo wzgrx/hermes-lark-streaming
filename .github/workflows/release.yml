@@ -47,11 +47,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Create signed release bundle
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
-        with:
-          body: ${{ steps.changelog.outputs.notes }}
-          files: |
-            dist/*.whl
-            dist/*.tar.gz
-            dist/*.json
-            dist/SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ steps.changelog.outputs.notes }}
+        run: |
+          printf '%s\n' "$RELEASE_NOTES" > /tmp/release-notes.md
+          gh release create "$GITHUB_REF_NAME" \
+            dist/*.whl dist/*.tar.gz dist/*.json dist/SHA256SUMS \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file /tmp/release-notes.md
