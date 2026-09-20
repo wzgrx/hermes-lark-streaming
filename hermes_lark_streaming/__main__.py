@@ -175,7 +175,7 @@ def _cmd_status() -> int:
     print(f"Target:  {patcher.run_path}")
 
     if patched:
-        from .patcher import MARKERS
+        markers = patcher.MARKERS
 
         sources: dict = {}
         _contents = getattr(patcher, "_contents", None)
@@ -188,7 +188,7 @@ def _cmd_status() -> int:
                 sources = raw
         if not sources:
             sources = {patcher.run_path: patcher.run_path.read_text(encoding="utf-8")}
-        for begin, _end in MARKERS:
+        for begin, _end in markers:
             label = begin.replace("# HERMES_LARK_", "").replace("_BEGIN", "").lower()
             found_in = sorted({path.name for path, text in sources.items() if begin in text})
             print(f"  {label}: {found_in[0] if found_in else 'MISSING'}")
