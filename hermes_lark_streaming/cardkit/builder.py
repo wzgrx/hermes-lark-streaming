@@ -245,6 +245,25 @@ def _escape_md(value: str) -> str:
     return re.sub(r"([`*_{}\[\]<>])", r"\\\1", value.replace("\\", "\\\\"))
 
 
+def _build_notice_panel(text: str, *, element_id: str | None = None) -> dict:
+    """Render a background/system notice without mixing it into the assistant answer."""
+    panel = _collapsible_panel(
+        expanded=False,
+        title_el={
+            "tag": "plain_text",
+            "content": "💾 Background review",
+            "i18n_content": _i18n("💾 Background review", "💾 后台复盘"),
+            "text_color": "grey",
+            "text_size": "notation",
+        },
+        elements=[{"tag": "markdown", "content": text, "text_size": "notation"}],
+        vertical_spacing="8px",
+    )
+    if element_id:
+        panel["element_id"] = element_id
+    return panel
+
+
 def _build_reasoning_panel(
     text: str, elapsed_ms: float = 0, *, expanded: bool = False, element_id: str | None = None,
     text_element_id: str | None = REASONING_TEXT_ELEMENT_ID,
@@ -490,6 +509,8 @@ def build_complete_card(
             steps = all_tool_steps[start:end]
             if steps:
                 elements.append(_build_tool_panel(steps, expanded=panel_expanded, element_id=None))
+        elif seg.type == SegmentType.NOTICE and seg.text:
+            elements.append(_build_notice_panel(seg.text))
         elif seg.type == SegmentType.ANSWER and seg.text:
             has_answer = True
             content = _downgrade_tables(optimize_markdown_style(seg.text))

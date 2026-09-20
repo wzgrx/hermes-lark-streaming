@@ -355,11 +355,34 @@ async def test_background_review_deferred_until_complete() -> None:
     assert ctrl.defer_background_review(message_id="msg_bg", text="review", sender=sent.append)
     assert sent == []
 
-    with patch.object(ctrl, "_do_complete_card_inner", new_callable=AsyncMock, return_value=True):
-        await ctrl._do_complete_card(session)
+    session.card_id = "card_bg"
+    assert await ctrl._do_complete_card(session) is True
+
+    assert sent == []
+    assert "msg_bg" not in ctrl._sessions
+    final_card = ctrl._client.cardkit_update.await_args.args[1]
+    assert any(
+        element.get("tag") == "collapsible_panel"
+        and any(child.get("content") == "review" for child in element.get("elements", []))
+        for element in final_card["body"]["elements"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_background_review_uses_native_fallback_when_card_completion_fails() -> None:
+    ctrl = _setup_ctrl()
+    session = _make_session("msg_bg_fail")
+    session.state = SessionState.STREAMING
+    session.card_id = "card_bg_fail"
+    session.card_msg_id = "card_msg_bg_fail"
+    ctrl._sessions["msg_bg_fail"] = session
+    sent: list[str] = []
+
+    assert ctrl.defer_background_review(message_id="msg_bg_fail", text="review", sender=sent.append)
+    with patch.object(ctrl, "_do_complete_card_inner", new_callable=AsyncMock, return_value=False):
+        assert await ctrl._do_complete_card(session) is False
 
     assert sent == ["review"]
-    assert "msg_bg" not in ctrl._sessions
 
 
 @pytest.mark.asyncio
@@ -400,7 +423,7 @@ async def test_background_review_does_not_interrupt_replacement_card() -> None:
         )
         await asyncio.gather(*tasks)
 
-    assert events == ["old_card_completed", "review_sent"]
+    assert events == ["old_card_completed"]
     assert "old" not in ctrl._sessions
     assert ctrl._sessions["new"].deferred_background_reviews == []
 
@@ -527,6 +550,32 @@ async def test_clarify_split_seal_failure_still_switches_card() -> None:
 
     assert result is True
     assert session.card_id == "card_id_abc"  # 新卡已挂上
+
+
+def test_approval_boundary_pauses_and_splits_after_tool_finishes() -> None:
+    ctrl = _setup_ctrl()
+    session = _make_session("msg_approval")
+    session.state = SessionState.STREAMING
+    session.card_id = "approval_card"
+    session.tool_use.record_start("terminal", "command")
+    session.segment_state.on_tool_event(1)
+    ctrl._sessions["msg_approval"] = session
+
+    ctrl.on_approval_enter(message_id="msg_approval")
+
+    assert session.state == SessionState.CLARIFY_PAUSED
+    assert session.approval_pending_split is True
+    with patch.object(ctrl, "_schedule_clarify_split") as split:
+        assert ctrl.on_tool_update(
+            message_id="msg_approval",
+            tool_name="terminal",
+            status="completed",
+            detail="done",
+        )
+
+    assert session.state == SessionState.STREAMING
+    assert session.approval_pending_split is False
+    split.assert_called_once_with(session)
 
 
 def test_on_clarify_enter_only_pauses_not_seals() -> None:
@@ -1410,6 +1459,7 @@ class TestDoFlush:
         assert tool_seg.dirty is True
         # element_count 同步扣减（避免下一轮 add 重复累加导致阈值虚高、误触发拆分）
         assert session.element_count == 0
+        assert session.flush._needs_reflush is True
 
         # 第二次 flush：走 add_elements 重建，batch_update 成功
         await ctrl._do_flush(session)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -133,3 +133,38 @@ async def test_cardkit_create_does_not_retry_non_transient_error() -> None:
         await client.cardkit_create({"schema": "2.0"})
 
     assert create.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_stream_element_retries_300313_with_same_sequence() -> None:
+    content = MagicMock(
+        side_effect=[
+            _Resp(ok=False, code=300313, msg="element not found"),
+            _Resp(ok=False, code=300313, msg="element not found"),
+            _Resp(ok=True),
+        ]
+    )
+    client = _client_with(card_element_content=content)  # type: ignore[arg-type]
+
+    with patch("hermes_lark_streaming.feishu.asyncio.sleep", new=AsyncMock()) as sleep:
+        await client.cardkit_stream_element("card", "answer_1", "hello", sequence=17)
+
+    assert content.call_count == 3
+    assert sleep.await_count == 2
+    requests = [call.args[0] for call in content.call_args_list]
+    assert {request.request_body.sequence for request in requests} == {17}
+
+
+@pytest.mark.asyncio
+async def test_stream_element_300313_retry_is_bounded() -> None:
+    content = MagicMock(return_value=_Resp(ok=False, code=300313, msg="element not found"))
+    client = _client_with(card_element_content=content)  # type: ignore[arg-type]
+
+    with (
+        patch("hermes_lark_streaming.feishu.asyncio.sleep", new=AsyncMock()),
+        pytest.raises(FeishuAPIError) as error,
+    ):
+        await client.cardkit_stream_element("card", "missing", "hello", sequence=4)
+
+    assert error.value.code == 300313
+    assert content.call_count == 4

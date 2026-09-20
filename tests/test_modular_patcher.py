@@ -140,3 +140,18 @@ def test_modular_commentary_keeps_tts_segment_boundaries(modular_root, already_s
         hook.assert_called_once_with(message_id="m", text="commentary")
         assert stts.on_delta.call_args_list == [call(None), call("commentary"), call(None)]
         native.on_commentary.assert_not_called()
+
+
+def test_modular_approval_boundary_is_injected(modular_root):
+    obj = Patcher(modular_root / "gateway/run.py")
+    obj.apply()
+    source = (modular_root / "gateway/run_turn_runner.py").read_text()
+    assert source.count("# HERMES_LARK_APPROVAL_BEGIN") == 1
+    tree = ast.parse(source)
+    callback = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_approval_notify_sync"
+    )
+    rendered = ast.unparse(callback)
+    assert "on_approval_enter(message_id=self._ctx.event_message_id)" in rendered

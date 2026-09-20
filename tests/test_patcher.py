@@ -28,6 +28,7 @@ from hermes_lark_streaming.patcher import (
     _answer_hook,
     _complete_hook,
     _cron_deliver_hook,
+    _find_answer_delta_sites,
     _followup_complete_hook,
     _remove_block,
     _stop_hook,
@@ -312,6 +313,24 @@ class TestVerify:
             _patcher(p).verify_target()
 
 
+def test_find_answer_delta_sites_uses_primary_text_consumer() -> None:
+    source = textwrap.dedent("""\
+        def _stream_delta_cb(text):
+            if ctx._run_still_current():
+                _stream_consumer.on_delta(text)
+        if fallback:
+            def _stream_delta_cb(text):
+                if ctx._run_still_current():
+                    _stts_consumer_ref.on_delta(text)
+    """)
+    lines = source.splitlines(keepends=True)
+
+    sites = _find_answer_delta_sites(ast.parse(source), lines)
+
+    assert len(sites) == 1
+    assert "_stream_consumer.on_delta" in lines[sites[0][0] + 1]
+
+
 class TestGeneratedAnswerHook:
     def test_patch_hook_requires_message_id(self) -> None:
         from hermes_lark_streaming.patch import on_answer_delta
@@ -545,10 +564,8 @@ async def test_generated_followup_hook_handles_distinct_delivery_result() -> Non
 class TestApplyRemove:
     def test_apply_injects_all_markers(self, run_copy: Path) -> None:
         original = run_copy.read_text(encoding="utf-8")
-        expected_answer_hooks = sum(
-            isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name == "_stream_delta_cb"
-            for node in ast.walk(ast.parse(original))
-        )
+        tree = ast.parse(original)
+        expected_answer_hooks = len(_find_answer_delta_sites(tree, original.splitlines(keepends=True)))
         patcher = _patcher(run_copy)
         patcher.apply()
         content = run_copy.read_text(encoding="utf-8")

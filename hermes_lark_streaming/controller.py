@@ -267,6 +267,12 @@ class StreamCardController(StreamingController):
                         tool_name,
                         session.message_id[:12],
                     )
+            if session.approval_pending_split:
+                # Approval prompts are rendered by Hermes' native interactive card. Keep that
+                # action surface intact, then move post-decision output onto a fresh stream card.
+                session.approval_pending_split = False
+                session.state = SessionState.STREAMING
+                self._schedule_clarify_split(session)
 
         session.segment_state.on_tool_event(len(session.tool_use.build_display_steps()))
         self._schedule_flush(session)
@@ -391,6 +397,17 @@ class StreamCardController(StreamingController):
         for key, val in list(self._interrupt_map.items()):
             if val == old_message_id:
                 self._interrupt_map[key] = new_message_id
+
+    def on_approval_enter(self, *, message_id: str) -> None:
+        """Pause the active stream while Hermes presents its native approval card."""
+        if not self.enabled:
+            return
+        session = self._get_active_session(message_id)
+        if session is None:
+            return
+        session.approval_pending_split = True
+        if session.state == SessionState.STREAMING:
+            session.state = SessionState.CLARIFY_PAUSED
 
     def on_clarify_enter(
         self,
@@ -610,6 +627,23 @@ class StreamCardController(StreamingController):
                 return False
             session.deferred_background_reviews.append((text, sender))
         return True
+
+    def _consume_deferred_background_reviews(self, session: CardSession) -> None:
+        """Copy captured reviews into the final card while retaining fallback senders."""
+        with session.deferred_background_review_lock:
+            session.deferred_background_review_closed = True
+            pending = list(session.deferred_background_reviews)
+        if session.segment_state is None:
+            return
+        for text, _sender in pending:
+            session.segment_state.on_notice(text)
+
+    @staticmethod
+    def _discard_deferred_background_reviews(session: CardSession) -> None:
+        """Drop native fallbacks after the final card accepted the embedded reviews."""
+        with session.deferred_background_review_lock:
+            session.deferred_background_review_closed = True
+            session.deferred_background_reviews.clear()
 
     def _flush_deferred_background_reviews(self, session: CardSession) -> None:
         lock = getattr(session, "deferred_background_review_lock", None)

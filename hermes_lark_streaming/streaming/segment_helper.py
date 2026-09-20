@@ -6,6 +6,7 @@ from typing import Any
 
 from ..cardkit.builder import (
     _LOADING_ELEMENT_ID,
+    _build_notice_panel,
     _build_reasoning_panel,
     _build_tool_panel,
     _format_elapsed,
@@ -25,6 +26,8 @@ def estimate_segment_elements(seg: Segment, all_steps: list[ToolDisplayStep]) ->
         return 4  # collapsible_panel + plain_text + standard_icon + markdown
     if seg.type == SegmentType.ANSWER:
         return 1
+    if seg.type == SegmentType.NOTICE:
+        return 4
     if seg.type == SegmentType.TOOL:
         return estimate_tool_elements(
             seg.tool_offset,
@@ -83,6 +86,8 @@ def build_add_segment_action(
         )
     elif seg.type == SegmentType.ANSWER:
         element = _streaming_element(element_id=seg.el_id, text_size=text_size)
+    elif seg.type == SegmentType.NOTICE:
+        element = _build_notice_panel(seg.text, element_id=seg.el_id)
     elif seg.type == SegmentType.TOOL:
         start = seg.tool_offset
         end = seg.tool_end_offset if seg.tool_end_offset else len(all_steps)

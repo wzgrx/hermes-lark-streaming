@@ -193,6 +193,11 @@ def _default_cron_path() -> Path:
 MK_CRON_DELIVER = f"# {PREFIX}_CRON_DELIVER_BEGIN"
 MK_CRON_DELIVER_END = f"# {PREFIX}_CRON_DELIVER_END"
 
+# Approval is available only in Hermes' modular TurnRunner. Keep it out of the
+# legacy marker contract so older monolithic releases remain installable.
+MK_APPROVAL = f"# {PREFIX}_APPROVAL_BEGIN"
+MK_APPROVAL_END = f"# {PREFIX}_APPROVAL_END"
+
 _ANCHOR_CHECKS: list[tuple[str, tuple[str, ...], str]] = [
     ("Restart typing indicator so the user sees activity", (), "interrupt"),
     ('was_interrupted = result.get("interrupted")', (), "queued follow-up boundary"),
@@ -617,6 +622,20 @@ def _bg_deliver_hook(indent: str) -> str:
     )
 
 
+def _approval_hook(indent: str) -> str:
+    return _make_hook(
+        indent,
+        MK_APPROVAL,
+        MK_APPROVAL_END,
+        [
+            "try:",
+            "    from hermes_lark_streaming.patch import on_approval_enter",
+            "    on_approval_enter(message_id=self._ctx.event_message_id)",
+            *_hook_exception_lines("approval"),
+        ],
+    )
+
+
 def _clarify_hook(indent: str) -> str:
     return _make_hook(
         indent,
@@ -735,7 +754,7 @@ class Patcher:
         content = self.run_path.read_text(encoding="utf-8")
         tree = ast.parse(content)
         lines = content.splitlines(keepends=True)
-        answer_sites = _find_func_bodies(tree, lines, "_stream_delta_cb")
+        answer_sites = _find_answer_delta_sites(tree, lines)
         for begin, end in self.MARKERS:
             expected = len(answer_sites) if begin == MK_ANSWER else 1
             if content.count(begin) != expected or content.count(end) != expected:
@@ -849,7 +868,7 @@ class Patcher:
         ]
         hook_defs.extend(
             ("answer", f"answer callback {index}", loc)
-            for index, loc in enumerate(_find_func_bodies(tree, lines, "_stream_delta_cb"), start=1)
+            for index, loc in enumerate(_find_answer_delta_sites(tree, lines), start=1)
         )
 
         sites: list[tuple[int, str, str]] = []
@@ -908,6 +927,52 @@ def _find_func_bodies(tree: ast.Module, lines: list[str], name: str) -> list[tup
                 lineno = body[start].lineno - 1
                 indent = _safe_indent(lines, lineno)
                 sites.append((lineno, indent))
+    return sites
+
+
+def _find_answer_delta_sites(tree: ast.Module, lines: list[str]) -> list[tuple[int, str]]:
+    """Select the primary text callback, excluding Hermes' TTS-only fallback.
+
+    Hermes 0.20 has two nested ``_stream_delta_cb`` functions. Only the one
+    calling ``_stream_consumer.on_delta`` owns visible text; injecting into the
+    later TTS fallback leaves native text delivery active and duplicates the
+    final answer. A single callback remains supported for older layouts.
+    """
+    candidates = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+        and node.name == "_stream_delta_cb"
+    ]
+
+    def is_primary(node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Call) or not isinstance(child.func, ast.Attribute):
+                continue
+            if child.func.attr == "on_delta" and "_stream_consumer" in ast.unparse(child.func.value):
+                return True
+        return False
+
+    selected = [node for node in candidates if is_primary(node)]
+    if not selected:
+        if len(candidates) == 1:
+            selected = candidates
+        elif candidates:
+            raise PatcherError(
+                "Multiple _stream_delta_cb callbacks found but no primary text consumer could be identified"
+            )
+
+    sites: list[tuple[int, str]] = []
+    for node in selected:
+        start = 1 if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ) else 0
+        if start < len(node.body):
+            lineno = node.body[start].lineno - 1
+            sites.append((lineno, _safe_indent(lines, lineno)))
     return sites
 
 
