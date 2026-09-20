@@ -107,6 +107,13 @@ streaming:
       - [status, elapsed, context, model]
     show_label: false
   panel_expanded: false   # Keep completion panels expanded, default false
+  adaptive_backpressure:
+    enabled: true
+    min_ms: 100
+    max_ms: 1500
+  history_compaction:
+    compact_after: 48
+    keep_recent: 24
 display:
   platforms:
     feishu:
@@ -137,6 +144,8 @@ display:
 
 **Tool-Use Panel** (`display.platforms.feishu.show_tool_use`): Controls whether tool-use panels are displayed. The platform-specific setting takes precedence over global `display.show_tool_use`. Default: `true`. This setting is reloaded at runtime.
 
+See [operations](docs/OPERATIONS.md), [compatibility](docs/COMPATIBILITY.md), and the [Bailey sidecar comparison](docs/BAILEY-AUDIT.md).
+
 ---
 
 ## CLI Commands
@@ -147,7 +156,11 @@ $HERMES_PYTHON -m hermes_lark_streaming verify     # Verify compatibility (no fi
 $HERMES_PYTHON -m hermes_lark_streaming install    # Inject hooks
 $HERMES_PYTHON -m hermes_lark_streaming uninstall  # Remove hooks
 $HERMES_PYTHON -m hermes_lark_streaming restore    # Restore original files from backup
-$HERMES_PYTHON -m hermes_lark_streaming status     # Show status (incl. Hermes Python/install dir detection)
+$HERMES_PYTHON -m hermes_lark_streaming status     # Show patch/runtime status
+$HERMES_PYTHON -m hermes_lark_streaming doctor     # Config, hook, routing and dependency checks
+$HERMES_PYTHON -m hermes_lark_streaming metrics --json
+$HERMES_PYTHON -m hermes_lark_streaming smoke      # Offline unless --execute is explicit
+$HERMES_PYTHON -m hermes_lark_streaming lark-cli-smoke
 ```
 
 ---

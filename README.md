@@ -110,6 +110,13 @@ streaming:
       - [status, elapsed, context, model]
     show_label: false
   panel_expanded: false   # 完成态面板保持展开，默认 false
+  adaptive_backpressure:
+    enabled: true
+    min_ms: 100
+    max_ms: 1500
+  history_compaction:
+    compact_after: 48
+    keep_recent: 24
 display:
   platforms:
     feishu:
@@ -151,6 +158,10 @@ $HERMES_PYTHON -m hermes_lark_streaming install    # 注入 hook
 $HERMES_PYTHON -m hermes_lark_streaming uninstall  # 移除 hook
 $HERMES_PYTHON -m hermes_lark_streaming restore    # 从备份恢复原始文件
 $HERMES_PYTHON -m hermes_lark_streaming status     # 查看状态（含 Hermes Python/安装目录检测）
+$HERMES_PYTHON -m hermes_lark_streaming doctor     # 配置、hook、路由和依赖诊断
+$HERMES_PYTHON -m hermes_lark_streaming metrics --json
+$HERMES_PYTHON -m hermes_lark_streaming smoke      # 默认离线；--execute 才访问真实测试群
+$HERMES_PYTHON -m hermes_lark_streaming lark-cli-smoke
 ```
 
 ---
@@ -194,7 +205,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
   → 终态卡片（token/耗时/上下文）
 ```
 
-若消息被删除/撤回，自动终止后续更新。上游 Issue/PR 覆盖状态见 [维护审计](docs/UPSTREAM-AUDIT-2026-09-20.md)，后续规划见 [Roadmap](docs/ROADMAP.md)。
+若消息被删除/撤回，自动终止后续更新。多 bot、sidecar、E2E 与监控详见 [运维指南](docs/OPERATIONS.md)，Bailey 项目借鉴项见 [对比审计](docs/BAILEY-AUDIT.md)。上游 Issue/PR 覆盖状态见 [维护审计](docs/UPSTREAM-AUDIT-2026-09-20.md)，后续规划见 [Roadmap](docs/ROADMAP.md)。
 
 **中断处理：**
 

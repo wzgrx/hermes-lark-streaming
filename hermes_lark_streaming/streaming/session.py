@@ -44,10 +44,12 @@ class CardSession:
         "_loop",
         "anchor_id",
         "approval_pending_split",
+        "bot_id",
         "card_id",
         "card_msg_id",
         "chat_id",
         "clarify_pending_split",
+        "client",
         "create_task",
         "created_at",
         "deferred_background_review_closed",
@@ -79,6 +81,8 @@ class CardSession:
         self.anchor_id: str | None = None
         self.approval_pending_split = False
         self.chat_id = chat_id
+        self.client: Any | None = None
+        self.bot_id = "default"
         self.session_key: str | None = None
         self.create_task: asyncio.Future[Any] | ConcurrentFuture | None = None
         self.state = SessionState.IDLE
@@ -122,7 +126,7 @@ class CardSession:
     def active_segments(self) -> list[Segment]:
         if self.segment_state is None:
             return []
-        return self.segment_state.segments[self.split_index:]
+        return self.segment_state.segments[self.split_index :]
 
     def record_raw_answer(self, text: str) -> None:
         """记录未清洗的答案增量（含 ``MEDIA:`` 指令），供附件补投扫描."""
