@@ -22,6 +22,8 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 - **CardKit v2.0** — Uses Feishu CardKit streaming API; card creation failures yield to the Hermes Gateway default reply
 - **Completion card** — Final card with token usage, duration, and context info
 - **Card style** — Configurable card header/footer toggle and body/footer text sizes
+- **Crash-safe delivery** — Stable UUIDs and a `delivered/not_sent/unknown` ledger prevent duplicate answers after ambiguous timeouts
+- **Native Hermes observation** — Uses 0.21.3/main stream/tool/approval hooks for metrics while preserving one CardKit delivery owner
 - **Message guard** — Auto-terminates updates when message is deleted/recalled
 - **Image resolution** — Detects markdown image references, downloads and re-uploads as Feishu img_key
 - **Abort handling** — Gracefully handles `/stop` command and message interrupts with aborted state card and automatic new session
@@ -45,7 +47,7 @@ When long conversations or excessive tool steps cause the card to approach Feish
 
 - Hermes `>= 0.14.0` (2026.5.16) with Feishu/Lark platform configured
 - `Python >= 3.11`
-- `lark-oapi >= 1.4.0` — Feishu/Lark official Python SDK
+- `lark-oapi >= 1.7.3` — Feishu/Lark official Python SDK
 - `PyYAML >= 6.0` — YAML parser
 - Feishu app permissions: CardKit read/write, message send & reply, image upload
 
@@ -161,6 +163,7 @@ $HERMES_PYTHON -m hermes_lark_streaming doctor     # Config, hook, routing and d
 $HERMES_PYTHON -m hermes_lark_streaming metrics --json
 $HERMES_PYTHON -m hermes_lark_streaming smoke      # Offline unless --execute is explicit
 $HERMES_PYTHON -m hermes_lark_streaming lark-cli-smoke
+$HERMES_PYTHON -m hermes_lark_streaming repair-sdk  # only when doctor reports broken SDK
 ```
 
 ---

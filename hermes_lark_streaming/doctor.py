@@ -10,8 +10,10 @@ import sys
 from typing import Any
 
 from .config import Config
+from .delivery import delivery_ledger
 from .metrics import metrics
-from .native_hooks import capability
+from .native_hooks import runtime_capability
+from .sdk import probe_channel_sdk, probe_lark_oapi
 
 
 def build_report() -> dict[str, Any]:
@@ -32,6 +34,14 @@ def build_report() -> dict[str, Any]:
     add("hermes-runtime", runtime != "not installed in this interpreter", runtime)
     lark_cli = shutil.which("lark-cli")
     add("lark-cli", bool(lark_cli), lark_cli or "optional; not installed")
+    sdk = probe_lark_oapi()
+    add("lark-oapi", bool(sdk["ok"]), str(sdk["version"]))
+    native = runtime_capability()
+    add(
+        "native-observers",
+        bool(native["available"]),
+        f"{len(native['observer_hooks'])} supported; AST remains delivery owner",
+    )
     try:
         from .patcher import CronPatcher, Patcher
 
@@ -49,8 +59,10 @@ def build_report() -> dict[str, Any]:
         add("multi-bot", all(bot["configured"] for bot in routing["bots"]), f"{routing['bot_count']} bot(s)")
     return {
         "schema": 1,
-        "integration": capability(),
-        "ok": all(item["ok"] for item in checks if item["name"] != "lark-cli"),
+        "integration": {"strategy": "native-observer+ast" if native["available"] else "ast", **native},
+        "sdk": {"lark_oapi": sdk, "channel_sdk": probe_channel_sdk()},
+        "delivery": delivery_ledger.summary(),
+        "ok": all(item["ok"] for item in checks if item["name"] not in {"lark-cli", "native-observers"}),
         "checks": checks,
         "routing": routing,
         "backpressure": {
@@ -70,6 +82,7 @@ def print_report(*, as_json: bool = False) -> int:
         print(f"Hermes Lark Streaming doctor: {'PASS' if report['ok'] else 'CHECK'}")
         for item in report["checks"]:
             print(f"  {'OK' if item['ok'] else '--'} {item['name']}: {item['detail']}")
+        print(f"  delivery ledger: {report['delivery']['entries']} entries at {report['delivery']['path']}")
         print(f"  metrics: {report['metrics_path']}")
     return 0 if report["ok"] else 1
 

@@ -8,6 +8,7 @@ hermes-lark-streaming doctor --json
 hermes-lark-streaming metrics --json
 hermes-lark-streaming smoke
 hermes-lark-streaming lark-cli-smoke
+hermes-lark-streaming repair-sdk  # only after doctor reports a broken SDK
 ```
 
 `smoke` is offline by default. A real CardKit create → stream → close → update check is explicit:
@@ -68,3 +69,35 @@ hermes-lark-streaming sidecar --host 127.0.0.1 --port 8788
 domain-separated HMAC proof with timestamp and nonce; the replay cache is TTL- and size-bounded.
 In-process card delivery remains the default and the sidecar is not required for normal use.
 
+
+
+## Crash-safe delivery ledger
+
+Initial CardKit attachment uses a logical-delivery fingerprint and a stable Feishu request UUID.
+The local ledger distinguishes four states:
+
+- `pending`: request prepared but no terminal evidence;
+- `delivered`: Feishu returned the card message id; a restart resumes without sending again;
+- `not_sent`: a structured non-transient Feishu response proved rejection, so a fresh attempt is safe;
+- `unknown`: a timeout/transport failure may have committed remotely, so the answer is not duplicated.
+
+The ledger is stored at `~/.hermes/state/hermes-lark-streaming-delivery.json`, atomically replaced,
+mode `0600`, bounded to 1,024 rows and seven days. Logical keys are SHA-256 fingerprints; message
+bodies, credentials, user ids and chat ids are not stored. `doctor --json` reports counts only.
+
+If an attach outcome remains `unknown`, CardKit entity updates continue and the plugin emits one
+idempotent generic refresh notice after completion. It does not resend the answer as plaintext.
+
+## Native Hermes hooks
+
+Version 0.16.0 registers current Hermes streaming/tool/approval observers through the package entry
+point. The callbacks only increment local counters and return immediately; they never render cards,
+route messages or inspect/store stream text. Use `doctor --json` to see the exact hook set reported
+by the installed Hermes runtime.
+
+## SDK recovery boundary
+
+`doctor` feature-probes the constructors used by the plugin instead of trusting only a package
+version. `repair-sdk` is explicit and targets `sys.executable` through `uv pip`, preventing a repair
+from landing in a different user/system Python. The official `lark-cli` remains an optional
+preflight tool and the official `lark-channel-sdk` remains an evaluated migration target.

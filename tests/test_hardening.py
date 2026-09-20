@@ -9,7 +9,7 @@ from hermes_lark_streaming.card_limits import MAX_JSON_BYTES, compact_card, insp
 from hermes_lark_streaming.e2e import dry_run
 from hermes_lark_streaming.history import compact_terminal_segments, compact_tool_steps
 from hermes_lark_streaming.metrics import MetricsStore
-from hermes_lark_streaming.native_hooks import capability, try_register
+from hermes_lark_streaming.native_hooks import OBSERVER_HOOKS, capability, try_register
 from hermes_lark_streaming.routing import BotRegistry
 from hermes_lark_streaming.security import ReplayGuard, sign_callback
 from hermes_lark_streaming.sidecar import SidecarDispatcher
@@ -159,3 +159,52 @@ def test_sidecar_dispatcher_owns_event_loop_and_forwards_events() -> None:
     finally:
         dispatcher.close()
     assert calls == [{"message_id": "m", "chat_id": "c", "anchor_id": None, "session_key": None}]
+
+
+def test_native_observer_bridge_registers_supported_lifecycle_hooks(monkeypatch) -> None:
+    registered = {}
+    increments = []
+
+    class Context:
+        def register_hook(self, name, callback):
+            registered[name] = callback
+
+    class Metrics:
+        def increment(self, name, amount=1):
+            increments.append((name, amount))
+
+    monkeypatch.setattr("hermes_lark_streaming.native_hooks.metrics", Metrics())
+    context = Context()
+    assert try_register(context) is False
+    assert tuple(registered) == OBSERVER_HOOKS
+    assert capability(context)["strategy"] == "native-observer+ast"
+
+    registered["on_stream_delta"](kind="reasoning", delta="private text is ignored")
+    registered["post_tool_call"](status="error", error_type="RuntimeError")
+    assert ("hermes.stream.delta.reasoning", 1) in increments
+    assert ("hermes.tool.failed", 1) in increments
+    assert not any("private text" in str(item) for item in increments)
+
+
+def test_future_native_renderer_takes_precedence_over_observers(monkeypatch) -> None:
+    renderers = []
+    observers = []
+
+    class Context:
+        def register_streaming_renderer(self, platform, renderer):
+            renderers.append((platform, renderer))
+
+        def register_hook(self, name, callback):
+            observers.append((name, callback))
+
+    class Metrics:
+        def increment(self, name, amount=1):
+            pass
+
+    monkeypatch.setattr("hermes_lark_streaming.native_hooks.metrics", Metrics())
+    context = Context()
+    renderer = object()
+    assert try_register(context, renderer) is True
+    assert renderers == [("feishu", renderer)]
+    assert observers == []
+    assert capability(context)["strategy"] == "native-renderer"

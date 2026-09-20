@@ -1,13 +1,14 @@
 """Hermes Lark streaming package entry point."""
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"
 
 
 def register(ctx: object) -> None:
-    """Register package presence with Hermes.
+    """Register native observers and select a future owner-capable renderer.
 
-    Hermes currently uses the compatibility patcher.  Future runtimes can expose
-    ``register_streaming_renderer`` and will be selected without source rewriting.
+    Current Hermes stream hooks are observer-only, so the reversible AST adapter remains
+    the CardKit delivery owner. A future ``register_streaming_renderer`` protocol takes
+    precedence without running both delivery paths.
     """
     from .native_hooks import try_register
 
