@@ -23,6 +23,8 @@ def test_release_uses_consolidated_attestation_action() -> None:
     assert "actions/attest@" in release
     assert "attest-build-provenance" not in release
     assert "subject-path: 'dist/*'" in release
+    assert "softprops/action-gh-release" not in release
+    assert "gh release create" in release
 
 
 def test_codeql_scans_python_on_pr_push_and_schedule() -> None:
