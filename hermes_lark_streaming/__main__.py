@@ -157,7 +157,7 @@ def _cmd_restore() -> int:
 def _load_hermes_environment() -> None:
     """Load the active Hermes profile environment for standalone CLI commands."""
     try:
-        from hermes_cli.env_loader import load_hermes_dotenv
+        from hermes_cli.env_loader import load_hermes_dotenv  # type: ignore[import-not-found]
     except ImportError:
         return
     from .config import hermes_home

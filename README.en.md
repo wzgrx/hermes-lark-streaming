@@ -60,7 +60,7 @@ For the full installation procedure see [INSTALL.md](INSTALL.md).
 Have the AI agent connected to Hermes read the installation guide and execute it:
 
 ```
-curl https://raw.githubusercontent.com/Cheerwhy/hermes-lark-streaming/main/INSTALL.md
+curl https://raw.githubusercontent.com/wzgrx/hermes-lark-streaming/main/INSTALL.md
 ```
 
 ---
@@ -179,7 +179,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 
 ## How It Works
 
-The plugin injects hook calls into `gateway/run.py` and `cron/scheduler.py` via AST patching. All business logic lives in the `hermes_lark_streaming` package.
+The plugin injects hook calls into the modular `gateway/run_*.py` / `cron/scheduler_delivery.py` files (or legacy `gateway/run.py` / `cron/scheduler.py`) via AST patching. All business logic lives in the `hermes_lark_streaming` package.
 
 **Message flow:**
 

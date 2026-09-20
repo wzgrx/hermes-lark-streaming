@@ -60,7 +60,7 @@
 让 Hermes 对接的 AI agent 读取安装指南后自动执行：
 
 ```
-curl https://raw.githubusercontent.com/Cheerwhy/hermes-lark-streaming/main/INSTALL.md
+curl https://raw.githubusercontent.com/wzgrx/hermes-lark-streaming/main/INSTALL.md
 ```
 
 ---
@@ -179,7 +179,7 @@ $HERMES_PYTHON -m pip uninstall hermes-lark-streaming
 
 ## 工作原理
 
-插件通过 AST 注入在 `gateway/run.py` 和 `cron/scheduler.py` 插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成。
+插件通过 AST 注入在 模块化 `gateway/run_*.py` / `cron/scheduler_delivery.py`（旧布局为 `gateway/run.py` / `cron/scheduler.py`） 插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成。
 
 **消息处理流程：**
 

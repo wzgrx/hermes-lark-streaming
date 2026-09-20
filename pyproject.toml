@@ -1,17 +1,17 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-lark-streaming"
-version = "0.12.0"
+version = "0.13.0"
 description = "Real-time streaming card plugin for Hermes Gateway via Feishu/Lark CardKit v2.0"
 readme = "README.md"
 requires-python = ">=3.11"
 keywords = ["Hermes", "Feishu", "Lark", "streaming-card"]
 dependencies = [
-  "lark-oapi>=1.4.0",
-  "PyYAML>=6.0",
+  "lark-oapi>=1.7.3",
+  "PyYAML>=6.0.3",
 ]
 
 [project.scripts]
@@ -22,11 +22,11 @@ hermes-lark-streaming = "hermes_lark_streaming"
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=7.0",
-  "pytest-asyncio>=0.21",
-  "ruff>=0.8",
-  "mypy>=1.11",
-  "types-PyYAML",
+  "pytest>=9.1.1",
+  "pytest-asyncio>=1.4.0",
+  "ruff>=0.16.8",
+  "mypy>=2.3.1",
+  "types-PyYAML>=6.0.12.20260906",
 ]
 
 [tool.setuptools.packages.find]

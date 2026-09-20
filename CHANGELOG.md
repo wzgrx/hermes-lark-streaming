@@ -9,13 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-20
+
+### 新增
+
+- 支持 Hermes 0.21.3 的模块化 Gateway：在 `run_inbound.py`、`run_turn.py`、`run_turn_runner.py`、`run_busy.py` 与 `scheduler_delivery.py` 中按模块注入钩子，同时保留旧版单文件布局兼容。
+- 新增多文件原子补丁计划：所有目标先解析、生成并编译通过后才写入；任何一步失败都会回滚已写文件，避免 Hermes 升级后留下半安装状态。
+- CLI 会加载当前 Hermes profile 环境，提供 `hermes-lark-streaming` 命令入口，并在 `status` 中显示模块化补丁标记。
+- 增加最新 Hermes main 的每日兼容性检查、Python 3.11/3.12/3.13 测试矩阵与 Dependabot 依赖更新。
+
 ### 修复
 
-- 修复流式卡片路径下 `MEDIA:` 附件不投递：网关只从 `final_response` 扫描 MEDIA 指令再上传文件（`gateway/run_turn.py` 的 `if already_sent and not failed: if response and adapter:`），而本插件在队列 follow-up 收尾时会清空 `final_response`（失败分支下网关侧注入代码同样清空），模型只走流式 delta、`final_response` 为空时也一样 —— 这三种情况下卡片正文正常但附件被静默丢弃。现在插件会从流式文本重新解析 `MEDIA:` 指令并直接上传投递；同一标签若网关自己会投递则不重复发送。卡片正文也不再显示 `MEDIA:<path>` 指令（与 Hermes 的显示口径一致）。
+- 保留 Hermes 队列 follow-up 的入站 ledger 更新与最深层 completion ID，避免连续消息丢历史或结束错误卡片。
+- 修复流式 TTS 边界：`None` 音频 flush 信号继续送往原生/TTS consumer，commentary 只播放一次并正确切分语音段。
+- 修复 clarify、background review、interrupt、busy `/stop`、后台投递和 cron 投递在模块化 Gateway 下的参数与生命周期。
+- 修复流式卡片路径下 `MEDIA:` 附件不投递：从流式文本重新解析并直接上传，只在 Hermes 尚未投递时发送，且卡片正文不再显示内部 MEDIA 指令。
+- 支持流式消息中的图片与 cron MEDIA 附件，并避免网关原生路径重复投递。
+
+### Added
+
+- Support the modular Hermes 0.21.3 gateway across `run_inbound.py`, `run_turn.py`, `run_turn_runner.py`, `run_busy.py`, and `scheduler_delivery.py`, while retaining the legacy single-file layout.
+- Add fail-closed, atomic multi-file patch planning: every target is parsed, generated, and compiled before publication, with rollback on write failure.
+- Load the active Hermes profile environment in the CLI, expose the `hermes-lark-streaming` entry point, and report modular markers in `status`.
+- Add a daily compatibility check against Hermes main, a Python 3.11/3.12/3.13 CI matrix, and Dependabot updates.
 
 ### Fixed
 
-- Deliver `MEDIA:` attachments on the streaming-card path. Hermes only scans `final_response` for MEDIA directives (`gateway/run_turn.py`: `if already_sent and not failed: if response and adapter:`), but this plugin blanks `final_response` when finalizing a queued follow-up (and the gateway's own failure branch blanks it too) — and a model that only streams deltas leaves it empty as well. In all three cases the card rendered fine while the attachment was dropped silently. The plugin now re-parses `MEDIA:` directives from the streamed text and uploads them itself, skipping any tag the gateway will deliver, so nothing is sent twice. `MEDIA:<path>` directives are also stripped from the card body, matching Hermes' display behaviour.
+- Preserve the queued follow-up inbound ledger and deepest completion ID so consecutive messages keep history and finalize the correct card.
+- Preserve TTS stream boundaries: forward `None` audio flush signals to native/TTS consumers and emit commentary exactly once with proper segment breaks.
+- Fix callback arguments and lifecycles for clarify, background review, interrupts, busy `/stop`, background delivery, and cron delivery under the modular gateway.
+- Deliver `MEDIA:` attachments on the streaming-card path by re-parsing streamed text, suppressing duplicates when Hermes will deliver them, and removing internal MEDIA directives from card text.
+- Support inline images and cron MEDIA attachments without duplicate native delivery.
 
 ## [0.12.0] - 2026-07-31
 

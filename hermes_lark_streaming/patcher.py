@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from .config import hermes_home
 
@@ -708,7 +709,7 @@ def _remove_block_checked(content: str, begin: str, end: str) -> str:
 class Patcher:
     """管理 AST 注入的安装和移除."""
 
-    def __new__(cls, run_path: Path | None = None):
+    def __new__(cls, run_path: Path | None = None) -> Any:
         path = run_path or _default_run_path()
         if (path.parent / "run_turn_runner.py").is_file():
             from .modular_patcher import ModularPatcher
@@ -1050,7 +1051,7 @@ def _safe_indent(lines: list[str], lineno: int) -> str:
 class CronPatcher:
     """注入 CRON_DELIVER hook 到 cron/scheduler.py 的 _deliver_result."""
 
-    def __new__(cls, cron_path: Path | None = None):
+    def __new__(cls, cron_path: Path | None = None) -> Any:
         path = cron_path or _default_cron_path()
         if (path.parent / "scheduler_delivery.py").is_file():
             from .modular_patcher import ModularCronPatcher

@@ -2,7 +2,7 @@
 
 ## Project
 
-Hermes Gateway plugin that injects hooks into `~/.hermes/hermes-agent/gateway/run.py` and `cron/scheduler.py` via AST patching to provide real-time streaming Feishu/Lark CardKit v2.0 cards with typewriter effect.
+Hermes Gateway plugin that injects hooks into the current modular `gateway/run_*.py` and `cron/scheduler_delivery.py` files (with legacy single-file compatibility) to provide real-time streaming Feishu/Lark CardKit v2.0 cards.
 
 ## Commands
 
@@ -24,14 +24,14 @@ $HERMES_PYTHON -m pip install -e ".[dev]"  # test dependencies
 $HERMES_PYTHON -m ruff check hermes_lark_streaming tests
 $HERMES_PYTHON -m mypy hermes_lark_streaming/
 
-# Run tests (local run.py first, CI auto-downloads from GitHub)
+# Run tests (local latest Hermes source; CI checks current Hermes main)
 $HERMES_PYTHON -m pytest tests/ -q
 ```
 
 ## Architecture
 
 ```
-gateway/run.py (Hermes)
+gateway/run_*.py (Hermes 0.21.3+ modular layout; legacy gateway/run.py supported)
   └─ AST-injected hooks (patcher.py defines markers + injection logic)
        │
        ├─ on_feishu_normalize   → patch.on_feishu_normalize() (inline, fixes false thread_id)
@@ -49,7 +49,7 @@ gateway/run.py (Hermes)
        ├─ on_session_aborted    → controller.on_session_aborted() (busy-session /stop)
        └─ on_background_deliver → controller.on_background_deliver()
 
-cron/scheduler.py (Hermes)
+cron/scheduler_delivery.py (modular; legacy cron/scheduler.py supported)
   └─ CronPatcher (patcher.py) injects on_cron_deliver into _deliver_result
        └─ intercepts feishu/lark targets → build_cron_card → send_card_to_chat
 
@@ -90,7 +90,7 @@ Card templates (cardkit/)
 
 ## Key Constraints
 
-- Hermes `>= 0.14.0` (2026.5.16) required. `patcher.py` targets specific function names in Hermes's `gateway/run.py` (`_handle_message_with_agent`, `progress_callback`, `_stream_delta_cb`, `_interim_assistant_cb`) and `cron/scheduler.py` (`_deliver_result`). If Hermes changes these, `verify` will catch it.
+- Hermes `>= 0.14.0` is supported; the maintained path is tested against Hermes 0.21.3 and daily against current Hermes main. `patcher.py` dispatches to `modular_patcher.py` when the split gateway is present. Run `verify` after every Hermes update before installing hooks.
 - The interrupt hook is injected at the `"Restart typing indicator"` comment in `_run_agent`. It fires when `was_interrupted and next_message_id` are both truthy. The `_interrupt_map` redirects completion from `old_id` to the new session, handling nested interrupts (A→B→C).
 - The completion hook installed into `gateway/run.py` is async: `on_message_completed_wait` awaits queued CardKit creation/finalization before setting `already_sent`. Upgrades must rerun `uninstall` + `install` so older sync completion hooks are removed from Hermes gateway.
 - The `_thinking_hook` has a `not already_streamed` guard (patcher.py:103) — thinking deltas are skipped once answer streaming has begun.
