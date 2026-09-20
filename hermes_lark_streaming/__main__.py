@@ -154,6 +154,17 @@ def _cmd_restore() -> int:
     return 0
 
 
+def _load_hermes_environment() -> None:
+    """Load the active Hermes profile environment for standalone CLI commands."""
+    try:
+        from hermes_cli.env_loader import load_hermes_dotenv  # type: ignore[import-not-found]
+    except ImportError:
+        return
+    from .config import hermes_home
+
+    load_hermes_dotenv(hermes_home=hermes_home())
+
+
 def _cmd_status() -> int:
     patcher = _get_patcher()
     if patcher is None:
@@ -164,19 +175,30 @@ def _cmd_status() -> int:
     print(f"Target:  {patcher.run_path}")
 
     if patched:
-        from .patcher import Patcher as _PatcherCls
+        from .patcher import MARKERS
 
-        content = patcher.run_path.read_text(encoding="utf-8")
-        for begin, _end in _PatcherCls.MARKERS:
-            found = begin in content
+        sources: dict = {}
+        _contents = getattr(patcher, "_contents", None)
+        if callable(_contents):
+            try:
+                raw = _contents()
+            except OSError:
+                raw = None
+            if isinstance(raw, dict):
+                sources = raw
+        if not sources:
+            sources = {patcher.run_path: patcher.run_path.read_text(encoding="utf-8")}
+        for begin, _end in MARKERS:
             label = begin.replace("# HERMES_LARK_", "").replace("_BEGIN", "").lower()
-            print(f"  {label}: {'installed' if found else 'missing'}")
+            found_in = sorted({path.name for path, text in sources.items() if begin in text})
+            print(f"  {label}: {found_in[0] if found_in else 'MISSING'}")
 
     cron_patcher = _get_cron_patcher()
     if cron_patcher is not None:
         print(f"Cron hook: {'installed' if cron_patcher.is_patched() else 'not installed'}")
 
-    # Check config
+    # Check config after loading the same profile environment as Gateway.
+    _load_hermes_environment()
     from .config import Config
 
     cfg = Config()

@@ -2,7 +2,7 @@
 
 ## Project
 
-Hermes Gateway plugin that injects hooks into `~/.hermes/hermes-agent/gateway/run.py` and `cron/scheduler.py` via AST patching to provide real-time streaming Feishu/Lark CardKit v2.0 cards with typewriter effect.
+Hermes Gateway plugin that injects hooks into the current modular `gateway/run_*.py` and `cron/scheduler_delivery.py` files (with legacy single-file compatibility) to provide real-time streaming Feishu/Lark CardKit v2.0 cards.
 
 ## Commands
 
@@ -24,14 +24,14 @@ $HERMES_PYTHON -m pip install -e ".[dev]"  # test dependencies
 $HERMES_PYTHON -m ruff check hermes_lark_streaming tests
 $HERMES_PYTHON -m mypy hermes_lark_streaming/
 
-# Run tests (local run.py first, CI auto-downloads from GitHub)
+# Run tests (local latest Hermes source; CI checks current Hermes main)
 $HERMES_PYTHON -m pytest tests/ -q
 ```
 
 ## Architecture
 
 ```
-gateway/run.py (Hermes)
+gateway/run_*.py (Hermes 0.21.3+ modular layout; legacy gateway/run.py supported)
   └─ AST-injected hooks (patcher.py defines markers + injection logic)
        │
        ├─ on_feishu_normalize   → patch.on_feishu_normalize() (inline, fixes false thread_id)
@@ -49,7 +49,7 @@ gateway/run.py (Hermes)
        ├─ on_session_aborted    → controller.on_session_aborted() (busy-session /stop)
        └─ on_background_deliver → controller.on_background_deliver()
 
-cron/scheduler.py (Hermes)
+cron/scheduler_delivery.py (modular; legacy cron/scheduler.py supported)
   └─ CronPatcher (patcher.py) injects on_cron_deliver into _deliver_result
        └─ intercepts feishu/lark targets → build_cron_card → send_card_to_chat
 
@@ -90,7 +90,7 @@ Card templates (cardkit/)
 
 ## Key Constraints
 
-- Hermes `>= 0.14.0` (2026.5.16) required. `patcher.py` targets specific function names in Hermes's `gateway/run.py` (`_handle_message_with_agent`, `progress_callback`, `_stream_delta_cb`, `_interim_assistant_cb`) and `cron/scheduler.py` (`_deliver_result`). If Hermes changes these, `verify` will catch it.
+- Hermes `>= 0.14.0` is supported; the maintained path is tested against Hermes 0.21.3 and daily against current Hermes main. `patcher.py` dispatches to `modular_patcher.py` when the split gateway is present. Run `verify` after every Hermes update before installing hooks.
 - The interrupt hook is injected at the `"Restart typing indicator"` comment in `_run_agent`. It fires when `was_interrupted and next_message_id` are both truthy. The `_interrupt_map` redirects completion from `old_id` to the new session, handling nested interrupts (A→B→C).
 - The completion hook installed into `gateway/run.py` is async: `on_message_completed_wait` awaits queued CardKit creation/finalization before setting `already_sent`. Upgrades must rerun `uninstall` + `install` so older sync completion hooks are removed from Hermes gateway.
 - The `_thinking_hook` has a `not already_streamed` guard (patcher.py:103) — thinking deltas are skipped once answer streaming has begun.
@@ -99,7 +99,14 @@ Card templates (cardkit/)
 - Reasoning display depends on upstream providing `<thinking>`/`<thought>`/`<antthinking>` tags or `Reasoning:\n` prefix in text. Native API reasoning blocks (Anthropic extended thinking, DeepSeek reasoning_content) are available via `on_reasoning_delta` hook when `display.platforms.feishu.show_reasoning` is enabled.
 - CardKit v2.0 elements (collapsible_panel, streaming_mode) only work with `"schema": "2.0"` cards.
 - Streaming cards use a single CardKit card for the message lifecycle: elements are dynamically created in event arrival order. When CardKit creation fails, the plugin yields to the Hermes Gateway default reply.
-- The follow-up drain hooks manage card lifecycle for Hermes's queued follow-up messages (triggered when `busy_text_mode: queue` or `busy_input_mode: queue`). `on_queued_followup_boundary` is injected at `was_interrupted = result.get("interrupted")` in `_run_agent` — it finalizes the current card and sets `response_previewed`/`already_sent` on the result dict before the drain loop processes the queued message. `on_queued_followup_result` is injected at `return _preserve_queued_followup_history_offset(...)` and uses `setdefault` to carry the deepest `_hermes_lark_completion_id` back through the recursive merge chain.
+- The follow-up drain hooks manage card lifecycle for Hermes's queued follow-up messages (triggered when `busy_text_mode: queue` or `busy_input_mode: queue`). `on_queued_followup_boundary` is injected at `was_interrupted = result.get("interrupted")` in `_run_agent` — it finalizes the current card and sets `response_previewed`/`already_sent` on the result dict before the drain loop processes the queued message. `on_queued_followup_result` is injected at the `_preserve_queued_followup_history_offset(...)` call (both return and assignment forms) and uses `setdefault` to carry the deepest `_hermes_lark_completion_id` back through the recursive merge chain.
 - The COMPLETE hook uses `_lark_completion_id = agent_result.get('_hermes_lark_completion_id') or event.message_id` — in follow-up scenarios the deepest message_id propagates up via `on_queued_followup_result`, ensuring the correct card session is finalized. Non-follow-up scenarios fall back to `event.message_id`.
 - The background deliver hook (`on_background_deliver`) is injected in `_run_background_task` after `adapter.extract_images(response)`. It uses `ReplyMessage` API with `event_message_id` as anchor, so cards land in the correct topic. On success, `text_content` is cleared to avoid duplicate text delivery, while images and media files continue through the original Hermes loops. On failure, the original Hermes delivery logic runs as fallback.
 - Commit messages: body should use bullet list format (unnumbered `- item`).
+
+## Modular upstream compatibility — 2026-09-10
+
+- Keep upstream queued-terminal inbound ledger updates after the follow-up result hook.
+- `_stream_delta_cb` accepts `Optional[str]`: `None` is an upstream audio flush signal, not answer text. Preserve its delivery to native/TTS consumers.
+- When Lark consumes a non-streamed commentary segment, flush the `stts` segment boundary, emit the commentary to `stts`, then flush again before returning. Already-streamed commentary is not emitted twice.
+- Modular patch plans must still compile completely before file replacement; run the full plugin tests and Hermes queued-follow-up regressions after any anchor migration.

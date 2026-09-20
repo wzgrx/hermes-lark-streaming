@@ -34,7 +34,7 @@ Verify it exists and is Python 3.11+:
 
 ```bash
 # Clone only if not already present (re-runs / updates skip this)
-[ -d hermes-lark-streaming ] || git clone https://github.com/Cheerwhy/hermes-lark-streaming.git
+[ -d hermes-lark-streaming ] || git clone https://github.com/wzgrx/hermes-lark-streaming.git
 cd hermes-lark-streaming
 "$HERMES_PYTHON" -m pip install -e .
 ```
@@ -103,7 +103,7 @@ streaming:
 "$HERMES_PYTHON" -m hermes_lark_streaming install
 ```
 
-This patches `gateway/run.py` and `cron/scheduler.py` in place. A `.hermes_lark.bak`
+This patches the current modular gateway/cron modules, with legacy single-file support. A `.hermes_lark.bak`
 backup is created next to each file.
 
 ## Step 6 — Restart the gateway

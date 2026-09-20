@@ -6,6 +6,8 @@ on:
   push:
     paths:
       - 'hermes_lark_streaming/patcher.py'
+      - 'hermes_lark_streaming/modular_patcher.py'
+      - '.github/workflows/hermes-check.yml'
   workflow_dispatch:
 
 permissions:
@@ -18,52 +20,46 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Fetch Hermes sources
-        run: |
-          curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/gateway/run.py" -o hermes_run.py
-          if [ ! -s hermes_run.py ]; then
-            echo "::error::Failed to fetch run.py"
-            exit 1
-          fi
-          curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/cron/scheduler.py" -o hermes_scheduler.py
-          if [ ! -s hermes_scheduler.py ]; then
-            echo "::error::Failed to fetch scheduler.py"
-            exit 1
-          fi
+      - name: Fetch latest Hermes source
+        uses: actions/checkout@v6
+        with:
+          repository: NousResearch/hermes-agent
+          path: _hermes-agent
+          fetch-depth: 1
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.12'
+          cache: pip
 
       - name: Install plugin
-        run: pip install -e .
+        run: python -m pip install --upgrade pip && python -m pip install -e .
 
-      - name: Run verify
+      - name: Verify latest modular Hermes
         id: verify
         continue-on-error: true
         run: |
           set +e
-          python -c "
-          import pathlib
-          from hermes_lark_streaming.patcher import Patcher, CronPatcher
-          p = Patcher(pathlib.Path('hermes_run.py'))
-          p.verify_target()
-          cp = CronPatcher(pathlib.Path('hermes_scheduler.py'))
-          cp.verify_target()
-          print('Both targets compatible.')
-          " > /tmp/verify.log 2>&1
+          python - <<'PY' > /tmp/verify.log 2>&1
+          from pathlib import Path
+          from hermes_lark_streaming.patcher import CronPatcher, Patcher
+
+          root = Path('_hermes-agent')
+          Patcher(root / 'gateway/run.py').verify_target()
+          CronPatcher(root / 'cron/scheduler.py').verify_target()
+          print('Gateway and cron targets are compatible with latest Hermes main.')
+          PY
           code=$?
           {
             echo "exit=${code}"
-            if [ -s /tmp/verify.log ]; then
-              echo "log<<VERIFY_EOF"
-              cat /tmp/verify.log
-              echo "VERIFY_EOF"
-            fi
+            echo 'log<<VERIFY_EOF'
+            cat /tmp/verify.log
+            echo 'VERIFY_EOF'
           } >> "$GITHUB_OUTPUT"
+          exit "$code"
 
-      - name: Open issue on failure
+      - name: Open issue on compatibility failure
         if: always() && steps.verify.outcome != 'success'
         uses: actions/github-script@v7
         env:
@@ -71,12 +67,10 @@ jobs:
         with:
           script: |
             const label = 'hermes-compat';
-            const title = 'Hermes compatibility check failed';
-            const log = process.env.VERIFY_LOG || '(no output captured — verify step may have been skipped, e.g. upstream fetch / install failure)';
+            const title = 'Hermes main compatibility check failed';
+            const log = process.env.VERIFY_LOG || '(no output captured)';
             const run = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            const body = `The Hermes compatibility check failed.\n\nPlease check if Hermes has updated function names or injection anchors in \`gateway/run.py\` or \`cron/scheduler.py\`.\n\n<details><summary>verify output</summary>\n\n\`\`\`\n${log}\n\`\`\`\n\n</details>\n\nWorkflow run: ${run}`;
-
-            // Ensure label exists
+            const body = `The daily check against the latest modular Hermes source failed.\n\nInspect injection anchors under \`gateway/run_*.py\` and \`cron/scheduler_delivery.py\`.\n\n<details><summary>verify output</summary>\n\n\`\`\`\n${log}\n\`\`\`\n\n</details>\n\nWorkflow run: ${run}`;
             try {
               await github.rest.issues.createLabel({
                 owner: context.repo.owner,
@@ -84,11 +78,9 @@ jobs:
                 name: label,
                 color: 'e99695',
               });
-            } catch (e) {
-              // Label already exists, ignore
+            } catch (error) {
+              if (error.status !== 422) throw error;
             }
-
-            // Only create if no open issue with this label
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,

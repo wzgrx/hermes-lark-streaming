@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import logging
 import shutil
+import subprocess
 import textwrap
 import urllib.request
 from pathlib import Path
@@ -38,14 +39,19 @@ RUN_BAK = RUN_SRC.with_suffix(RUN_SRC.suffix + ".hermes_lark.bak")
 SAMPLES_DIR = Path(__file__).parent / "samples"
 SAMPLE_RUN = SAMPLES_DIR / "run.py"
 
-_RUN_URL = "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/gateway/run.py"
-_CRON_URL = "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/cron/scheduler.py"
+# These tests exercise the legacy monolithic patcher. Latest main is modular;
+# its compatibility is covered separately in test_modular_patcher.py.
+LEGACY_REV = "63279301bcbdc185c1b07b98a9312eb0c862f26d"
+_RUN_URL = f"https://raw.githubusercontent.com/NousResearch/hermes-agent/{LEGACY_REV}/gateway/run.py"
+_CRON_URL = f"https://raw.githubusercontent.com/NousResearch/hermes-agent/{LEGACY_REV}/cron/scheduler.py"
 
 CRON_SRC = Path.home() / ".hermes" / "hermes-agent" / "cron" / "scheduler.py"
 CRON_BAK = CRON_SRC.with_suffix(CRON_SRC.suffix + ".hermes_lark.bak")
 SAMPLE_CRON = SAMPLES_DIR / "scheduler.py"
 
 def _ensure_sample() -> Path:
+    if (RUN_SRC.parent / "run_turn_runner.py").exists():
+        return _pinned_legacy_sample("gateway/run.py", SAMPLE_RUN, _RUN_URL)
     src = RUN_BAK if RUN_BAK.exists() else RUN_SRC
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     if src.exists():
@@ -61,15 +67,33 @@ def _ensure_sample() -> Path:
     return SAMPLE_RUN
 
 
+def _pinned_legacy_sample(relative: str, target: Path, url: str) -> Path:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        ["git", "-C", str(RUN_SRC.parent.parent), "show", f"{LEGACY_REV}:{relative}"],
+        capture_output=True,
+    )
+    if result.returncode == 0:
+        target.write_bytes(result.stdout)
+    else:
+        urllib.request.urlretrieve(url, target)
+    return target
+
+
 @pytest.fixture()
 def run_copy(tmp_path: Path) -> Path:
     src = _ensure_sample()
     dst = tmp_path / "run.py"
     shutil.copy2(src, dst)
+    # The installed repository may already carry the overlay in Git. Test
+    # installation against a clean disposable source, never against live files.
+    Patcher(dst).remove()
     return dst
 
 
 def _ensure_cron_sample() -> Path:
+    if (CRON_SRC.parent / "scheduler_delivery.py").exists():
+        return _pinned_legacy_sample("cron/scheduler.py", SAMPLE_CRON, _CRON_URL)
     src = CRON_BAK if CRON_BAK.exists() else CRON_SRC
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     if src.exists():
@@ -89,6 +113,7 @@ def scheduler_copy(tmp_path: Path) -> Path:
     src = _ensure_cron_sample()
     dst = tmp_path / "scheduler.py"
     shutil.copy2(src, dst)
+    CronPatcher(dst).remove()
     return dst
 
 
@@ -100,15 +125,18 @@ def _cron_patcher(path: Path) -> CronPatcher:
     return CronPatcher(cron_path=path)
 
 
-def _build_cron_hook_runner():
+def _build_cron_hook_runner(*, media_files_in_scope: bool = True):
     namespace: dict = {
         "job": {
             "name": "test",
             "next_run_at": "2026-06-10T14:30:00+08:00",
         }
     }
+    params = "targets, cleaned_delivery_content, loop, transport=None"
+    if media_files_in_scope:
+        params += ", media_files=None"
     source = (
-        "def deliver(targets, cleaned_delivery_content, loop, transport=None):\n"
+        f"def deliver({params}):\n"
         "    fallback = []\n"
         "    for platform_name, chat_id in targets:\n"
         "        delivered = False\n"
@@ -774,7 +802,7 @@ class TestCronApplyRemove:
         sent = []
 
         def fake_on_cron_deliver(
-            *, chat_id, content, loop, task_name, run_time
+            *, chat_id, content, loop, task_name, run_time, media_files=None
         ):
             sent.append((chat_id, content, task_name, run_time))
             return True
@@ -819,6 +847,30 @@ class TestCronApplyRemove:
         assert fallback == ["oc_relay"]
         mock_deliver.assert_not_called()
 
+    def test_injected_hook_forwards_media_files(self) -> None:
+        """Hermes 已把 MEDIA 标签收进 media_files，钩子必须原样透传给插件补投."""
+        deliver = _build_cron_hook_runner()
+        media = [("/tmp/curve.png", False), ("/tmp/digest.md", False)]
+
+        with patch(
+            "hermes_lark_streaming.patch.on_cron_deliver", return_value=True
+        ) as mock_deliver:
+            fallback = deliver([("feishu", "oc_media")], "价格跌了", None, media_files=media)
+
+        assert mock_deliver.call_args[1]["media_files"] == media
+        assert fallback == []
+
+    def test_injected_hook_survives_missing_media_files_scope(self) -> None:
+        """旧版 Hermes 投递函数里没有 media_files：钩子仍要发出卡片，而不是抛 NameError."""
+        deliver = _build_cron_hook_runner(media_files_in_scope=False)
+
+        with patch("hermes_lark_streaming.patch.on_cron_deliver") as mock_deliver:
+            mock_deliver.return_value = True
+            fallback = deliver([("feishu", "oc_old")], "report", None)
+
+        assert mock_deliver.call_args[1]["media_files"] == []
+        assert fallback == []
+
 
 class TestCronBackupRestore:
     def test_backup_created_on_apply(self, scheduler_copy: Path) -> None:
@@ -861,7 +913,7 @@ class TestOnCronDeliverHook:
             assert on_cron_deliver(chat_id="c1", content="text", loop=None) is True
             ctrl.on_cron_deliver.assert_called_once_with(
                 chat_id="c1", content="text", loop=None,
-                task_name="", run_time="",
+                task_name="", run_time="", media_files=None,
             )
 
     def test_delegates_to_controller(self) -> None:
@@ -877,7 +929,7 @@ class TestOnCronDeliverHook:
             assert result is True
             ctrl.on_cron_deliver.assert_called_once_with(
                 chat_id="c1", content="hello", loop=loop,
-                task_name="", run_time="",
+                task_name="", run_time="", media_files=None,
             )
 
 

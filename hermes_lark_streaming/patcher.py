@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from .config import hermes_home
 
@@ -412,7 +413,7 @@ def _answer_hook(indent: str) -> str:
     )
 
 
-def _thinking_hook(indent: str) -> str:
+def _thinking_hook(indent: str, *, tts_consumer: str | None = None) -> str:
     return _make_hook(
         indent,
         MK_THINKING,
@@ -428,6 +429,12 @@ def _thinking_hook(indent: str) -> str:
             "        _lark_run_current = _run_still_current",
             "    if (text and not already_streamed and _lark_run_current()",
             "            and on_thinking_delta(message_id=_lark_message_id, text=text)):",
+            *([
+                f"        if {tts_consumer} is not None:",
+                f"            {tts_consumer}.on_delta(None)",
+                f"            {tts_consumer}.on_delta(text)",
+                f"            {tts_consumer}.on_delta(None)",
+            ] if tts_consumer else []),
             "        return",
             *_hook_exception_lines("thinking"),
         ],
@@ -574,6 +581,9 @@ def _cron_deliver_hook(indent: str) -> str:
             "            loop=loop,",
             "            task_name=job.get('name', ''),",
             "            run_time=job.get('next_run_at', ''),",
+            "            # Hermes 已把 MEDIA 标签剥进 media_files, 并在下面自己投递附件",
+            "            # 本钩子返回 True 会 continue 跳过那段, 所以附件由插件补投",
+            "            media_files=locals().get('media_files') or [],",
             "        ):",
             "            _hermes_lark_cron_seen.add(_hermes_lark_cron_key)",
             "            delivered = True",
@@ -614,9 +624,11 @@ def _clarify_hook(indent: str) -> str:
         MK_CLARIFY_END,
         [
             "try:",
+            "    import functools",
             "    from hermes_lark_streaming.patch import on_clarify_enter, on_clarify_exit",
             "    _lark_clarify_orig = agent.clarify_callback",
-            "    def _lark_clarify_wrapper(question, choices, multi_select=False):",
+            "    @functools.wraps(_lark_clarify_orig)",
+            "    def _lark_clarify_wrapper(*args, **kwargs):",
             "        try:",
             "            _lark_clarify_msg_id = ctx.event_message_id",
             "            _lark_clarify_chat_id = ctx._status_chat_id",
@@ -631,7 +643,7 @@ def _clarify_hook(indent: str) -> str:
             "            session_key=_lark_clarify_sk,",
             "        )",
             "        try:",
-            "            return _lark_clarify_orig(question, choices, multi_select)",
+            "            return _lark_clarify_orig(*args, **kwargs)",
             "        finally:",
             "            on_clarify_exit(",
             "                message_id=_lark_clarify_msg_id,",
@@ -696,6 +708,13 @@ def _remove_block_checked(content: str, begin: str, end: str) -> str:
 
 class Patcher:
     """管理 AST 注入的安装和移除."""
+
+    def __new__(cls, run_path: Path | None = None) -> Any:
+        path = run_path or _default_run_path()
+        if (path.parent / "run_turn_runner.py").is_file():
+            from .modular_patcher import ModularPatcher
+            return ModularPatcher(path)
+        return super().__new__(cls)
 
     MARKERS: list[tuple[str, str]] = MARKERS
 
@@ -1031,6 +1050,13 @@ def _safe_indent(lines: list[str], lineno: int) -> str:
 
 class CronPatcher:
     """注入 CRON_DELIVER hook 到 cron/scheduler.py 的 _deliver_result."""
+
+    def __new__(cls, cron_path: Path | None = None) -> Any:
+        path = cron_path or _default_cron_path()
+        if (path.parent / "scheduler_delivery.py").is_file():
+            from .modular_patcher import ModularCronPatcher
+            return ModularCronPatcher(path)
+        return super().__new__(cls)
 
     def __init__(self, cron_path: Path | None = None) -> None:
         self.cron_path = cron_path or _default_cron_path()
