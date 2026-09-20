@@ -176,6 +176,47 @@ class Config:
         return [["status", "elapsed", "context", "model"]]
 
     @property
+    def adaptive_backpressure_enabled(self) -> bool:
+        value = self._streaming_sec().get("adaptive_backpressure", True)
+        if isinstance(value, dict):
+            return bool(value.get("enabled", True))
+        return bool(value)
+
+    @property
+    def backpressure_min_ms(self) -> float:
+        value = self._streaming_sec().get("adaptive_backpressure", {})
+        raw = value.get("min_ms", 100) if isinstance(value, dict) else 100
+        return max(50.0, min(float(raw), 5000.0))
+
+    @property
+    def backpressure_max_ms(self) -> float:
+        value = self._streaming_sec().get("adaptive_backpressure", {})
+        raw = value.get("max_ms", 1500) if isinstance(value, dict) else 1500
+        return max(self.backpressure_min_ms, min(float(raw), 10000.0))
+
+    @property
+    def history_compact_after(self) -> int:
+        value = self._streaming_sec().get("history_compaction", {})
+        raw = value.get("compact_after", 48) if isinstance(value, dict) else 48
+        return max(8, min(int(raw), 128))
+
+    @property
+    def history_keep_recent(self) -> int:
+        value = self._streaming_sec().get("history_compaction", {})
+        raw = value.get("keep_recent", 24) if isinstance(value, dict) else 24
+        return max(4, min(int(raw), self.history_compact_after))
+
+    @property
+    def callback_ttl_sec(self) -> int:
+        return max(30, min(int(self._streaming_sec().get("callback_ttl_sec", 300)), 3600))
+
+    def bot_registry(self) -> Any:
+        """Return chat-to-bot routing; credentials are environment-variable references only."""
+        from .routing import BotRegistry
+
+        return BotRegistry.from_streaming_config(self._streaming_sec())
+
+    @property
     def env_app_id(self) -> str:
         return _get_secret("FEISHU_APP_ID") or _get_secret("LARK_APP_ID")
 
@@ -221,10 +262,7 @@ class Config:
                 result = dict(extra)
                 if "base_url" in platform and "base_url" not in result:
                     result["base_url"] = platform["base_url"]
-                if (
-                    "base_url" not in result
-                    and str(extra.get("domain", platform.get("domain", ""))).lower() == "lark"
-                ):
+                if "base_url" not in result and str(extra.get("domain", platform.get("domain", ""))).lower() == "lark":
                     result["base_url"] = LARK_DOMAIN
                 return result
         return {}

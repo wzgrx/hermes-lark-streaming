@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-20
+
+### 新增
+
+- `doctor`、脱敏 metrics、离线/真实 Feishu E2E smoke 与可选 HMAC sidecar。
+- 自适应 CardKit 背压、API 延迟/限流/300313 指标，以及终态原子 metrics 快照。
+- 多 bot 精确 chat 路由；凭据仅通过环境变量名引用，每个 bot 使用独立客户端。
+- 回调时效、HMAC 域隔离和有界 replay guard；Hermes 继续作为 approval/clarify 唯一 resolver。
+- 长任务 reasoning/tool 历史压缩、28KB/200 元素卡片检查、表格和多种思考标签清洗。
+- 日/韩 locale 回退、移动端 compact 快照、SBOM/checksum/provenance、PyPI trusted publishing 与回滚文档。
+
+### 变更
+
+- 包入口优先探测 Hermes 原生 `register_streaming_renderer` 协议；上游尚未提供时继续使用可验证、可回滚 AST 兼容层。
+- 发布产物包含 wheel、sdist、CycloneDX SBOM、SHA256SUMS 和 GitHub build provenance。
+
+### Added
+
+- Operational diagnostics, metrics, E2E smoke, adaptive backpressure, exact multi-bot routing,
+  signed sidecar events, long-run compaction, supply-chain attestations and expanded locale/mobile tests.
+
+
 ## [0.14.0] - 2026-09-20
 
 ### 新增

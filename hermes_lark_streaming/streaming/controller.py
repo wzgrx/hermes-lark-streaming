@@ -19,6 +19,8 @@ from ..feishu import (
     CARDKIT_STREAMING_CLOSED,
     FeishuAPIError,
 )
+from ..history import compact_terminal_segments
+from ..metrics import metrics
 from .diagnostics import compact_ids, extract_missing_element_id, segment_state_for_log, summarize_actions
 from .flush import CARDKIT_MS
 from .image import ImageResolver
@@ -77,6 +79,8 @@ class StreamingController:
     _client: FeishuClient | None
     _cfg: Config
     _ensure_init: Callable[..., Coroutine[Any, Any, None]]
+    _client_for_chat: Callable[[str], Coroutine[Any, Any, FeishuClient]]
+    _session_client: Callable[[CardSession], FeishuClient]
     _cleanup: Callable[[str], None]
     _cleanup_session: Callable[[CardSession], None]
     _consume_deferred_background_reviews: Callable[[CardSession], None]
@@ -120,7 +124,7 @@ class StreamingController:
 
         try:
             await self._ensure_init()
-            assert self._client is not None
+            session.client = await self._client_for_chat(session.chat_id)
 
             reply_to_message_id = session.anchor_id or session.message_id
             card = build_streaming_card_v2(
@@ -131,23 +135,23 @@ class StreamingController:
                 text_size=self._cfg.body_text_size,
                 width_mode=self._cfg.width_mode,
             )
-            card_id = await self._client.cardkit_create(card)
+            card_id = await self._session_client(session).cardkit_create(card)
             try:
-                card_msg_id = await self._client.reply_card_by_id(
+                card_msg_id = await self._session_client(session).reply_card_by_id(
                     reply_to_message_id,
                     card_id,
                 )
             except FeishuAPIError as error:
                 if error.code != CARDKIT_CONTENT_FAILED:
                     raise
-                card_id = await self._client.cardkit_create(card)
+                card_id = await self._session_client(session).cardkit_create(card)
                 try:
-                    card_msg_id = await self._client.reply_card_by_id(
+                    card_msg_id = await self._session_client(session).reply_card_by_id(
                         reply_to_message_id,
                         card_id,
                     )
                 except FeishuAPIError:
-                    card_msg_id = await self._client.send_card_to_chat(
+                    card_msg_id = await self._session_client(session).send_card_to_chat(
                         chat_id=session.chat_id,
                         card={"type": "card", "data": {"card_id": card_id}},
                     )
@@ -155,9 +159,9 @@ class StreamingController:
             session.element_count = 1  # loading element
             session.flush.set_throttle(CARDKIT_MS)
 
-            if session.image_resolver is None and self._client:
+            if session.image_resolver is None:
                 session.image_resolver = ImageResolver(
-                    client=self._client,
+                    client=self._session_client(session),
                     on_image_resolved=lambda: self._schedule_flush(session),
                 )
 
@@ -188,7 +192,7 @@ class StreamingController:
         if segment_state is None:
             return
 
-        assert self._client is not None
+        _ = self._session_client(session)
         segments = segment_state.segments
         all_steps = session.tool_use.build_display_steps()
 
@@ -232,7 +236,12 @@ class StreamingController:
                     and not session.split_disabled
                 ):
                     split_ok = await self._do_split_card(
-                        session, i, actions, new_el_ids, new_el_estimates, updated_tool_segs,
+                        session,
+                        i,
+                        actions,
+                        new_el_ids,
+                        new_el_estimates,
+                        updated_tool_segs,
                     )
                     if not split_ok:
                         return
@@ -256,7 +265,12 @@ class StreamingController:
                     and not session.split_disabled
                 ):
                     split_ok = await self._do_split_card(
-                        session, i + 1, actions, new_el_ids, new_el_estimates, updated_tool_segs,
+                        session,
+                        i + 1,
+                        actions,
+                        new_el_ids,
+                        new_el_estimates,
+                        updated_tool_segs,
                     )
                     if not split_ok:
                         return
@@ -301,20 +315,23 @@ class StreamingController:
                     new_el_total = 0
                     continue
                 estimate = estimate_tool_elements(start, end, all_steps)
-                actions.append(
-                    build_tool_update_action(element_id=seg.el_id, steps=all_steps[start:end])
-                )
+                actions.append(build_tool_update_action(element_id=seg.el_id, steps=all_steps[start:end]))
                 updated_tool_segs.append(seg)
                 new_el_estimates[seg.el_id] = estimate
                 new_el_total += estimate - seg.element_estimate
 
         if actions and not await self._do_batch_update(
-            session, segments, actions, new_el_ids, new_el_estimates, updated_tool_segs,
+            session,
+            segments,
+            actions,
+            new_el_ids,
+            new_el_estimates,
+            updated_tool_segs,
         ):
             return
 
         # ── 步骤 2: stream_element 刷脏文本 ──
-        for seg in segments[session.split_index:]:
+        for seg in segments[session.split_index :]:
             if not seg.created or not seg.dirty:
                 continue
             try:
@@ -327,7 +344,7 @@ class StreamingController:
                         session.sequence,
                         len(content),
                     )
-                    await self._client.cardkit_stream_element(
+                    await self._session_client(session).cardkit_stream_element(
                         session.card_id,
                         seg.text_el_id,
                         content,
@@ -346,7 +363,7 @@ class StreamingController:
                         session.sequence,
                         len(content),
                     )
-                    await self._client.cardkit_stream_element(
+                    await self._session_client(session).cardkit_stream_element(
                         session.card_id,
                         seg.el_id,
                         content,
@@ -366,7 +383,7 @@ class StreamingController:
         updated_tool_segs: list[Segment],
     ) -> bool:
         """执行 batch_update 并处理快照/标记。返回 False 表示失败."""
-        assert self._client is not None
+        _ = self._session_client(session)
         assert session.card_id is not None
         session.sequence += 1
         _logger.info(
@@ -381,16 +398,14 @@ class StreamingController:
         pre_flush_reasoning_elapsed = {
             seg.el_id: seg.elapsed_ms for seg in segments if seg.type == SegmentType.REASONING
         }
-        pre_flush_tool_offsets = {
-            seg.el_id: seg.tool_end_offset for seg in updated_tool_segs
-        }
+        pre_flush_tool_offsets = {seg.el_id: seg.tool_end_offset for seg in updated_tool_segs}
         pre_flush_tool_steps = session.tool_use.build_display_steps()
         pre_flush_tool_slices = {
-            seg.el_id: pre_flush_tool_steps[seg.tool_offset:tool_segment_end(seg, pre_flush_tool_steps)]
+            seg.el_id: pre_flush_tool_steps[seg.tool_offset : tool_segment_end(seg, pre_flush_tool_steps)]
             for seg in updated_tool_segs
         }
         try:
-            await self._client.cardkit_batch_update(
+            await self._session_client(session).cardkit_batch_update(
                 session.card_id,
                 actions,
                 sequence=session.sequence,
@@ -413,9 +428,7 @@ class StreamingController:
             current_tool_steps = session.tool_use.build_display_steps()
             for seg in updated_tool_segs:
                 offset_ok = pre_flush_tool_offsets.get(seg.el_id, -1) == seg.tool_end_offset
-                current_tool_slice = current_tool_steps[
-                    seg.tool_offset:tool_segment_end(seg, current_tool_steps)
-                ]
+                current_tool_slice = current_tool_steps[seg.tool_offset : tool_segment_end(seg, current_tool_steps)]
                 tool_slice_ok = pre_flush_tool_slices.get(seg.el_id) == current_tool_slice
                 if seg.el_id in new_el_estimates:
                     estimate = new_el_estimates[seg.el_id]
@@ -424,6 +437,7 @@ class StreamingController:
                 if seg.created and offset_ok and tool_slice_ok:
                     seg.dirty = False
         except FeishuAPIError as e:
+            session.flush.record_failure(rate_limited=e.code == CARDKIT_RATE_LIMITED)
             missing_el_id = extract_missing_element_id(e)
             action_summary = summarize_actions(actions)
             _logger.warning(
@@ -444,7 +458,7 @@ class StreamingController:
             # 缺失元素（300313）时回滚 stale segment：本地 created=True 但卡片上不存在，
             # 下一轮 flush 会用 add_elements 重建该元素，避免反复 partial_update 死循环。
             if missing_el_id:
-                for seg in segments[session.split_index:]:
+                for seg in segments[session.split_index :]:
                     if seg.el_id == missing_el_id and seg.created:
                         seg.created = False
                         seg.dirty = True
@@ -501,14 +515,19 @@ class StreamingController:
         actions.append(
             build_tool_update_action(
                 element_id=seg.el_id,
-                steps=all_steps[seg.tool_offset:split_offset],
+                steps=all_steps[seg.tool_offset : split_offset],
             )
         )
         updated_tool_segs.append(seg)
         new_el_estimates[seg.el_id] = old_estimate
         segment_state.split_tool_segment(index, split_offset)
         split_ok = await self._do_split_card(
-            session, index + 1, actions, new_el_ids, new_el_estimates, updated_tool_segs,
+            session,
+            index + 1,
+            actions,
+            new_el_ids,
+            new_el_estimates,
+            updated_tool_segs,
         )
         if not split_ok:
             return "failed"
@@ -527,7 +546,7 @@ class StreamingController:
         card_id 用于 session 已切到新卡、仍需封印旧卡的场景（clarify 切卡）；
         sequence 传入旧卡续用的递增序列（CardKit 要求单调递增，不能用新卡的计数）。
         """
-        assert self._client is not None
+        _ = self._session_client(session)
         old_card_id = card_id or session.card_id
         if not old_card_id:
             return
@@ -554,9 +573,9 @@ class StreamingController:
         try:
             seq = session.sequence if sequence is None else sequence
             seq += 1
-            await self._client.cardkit_close_streaming(old_card_id, sequence=seq)
+            await self._session_client(session).cardkit_close_streaming(old_card_id, sequence=seq)
             seq += 1
-            await self._client.cardkit_update(old_card_id, seal_card, sequence=seq)
+            await self._session_client(session).cardkit_update(old_card_id, seal_card, sequence=seq)
         except Exception:
             _logger.warning(
                 "CardKit seal failed for old card %s, continuing",
@@ -569,7 +588,7 @@ class StreamingController:
 
         不修改 session.card_id —— 调用方负责 set_card。
         """
-        assert self._client is not None
+        _ = self._session_client(session)
         try:
             card = build_streaming_card_v2(
                 show_tool_use=False,
@@ -579,9 +598,10 @@ class StreamingController:
                 text_size=self._cfg.body_text_size,
                 width_mode=self._cfg.width_mode,
             )
-            new_card_id = await self._client.cardkit_create(card)
-            new_msg_id = await self._client.reply_card_by_id(
-                session.anchor_id or session.message_id, new_card_id,
+            new_card_id = await self._session_client(session).cardkit_create(card)
+            new_msg_id = await self._session_client(session).reply_card_by_id(
+                session.anchor_id or session.message_id,
+                new_card_id,
             )
         except Exception:
             _logger.warning(
@@ -602,7 +622,7 @@ class StreamingController:
         updated_tool_segs: list[Segment],
     ) -> bool:
         """拆卡：先 flush pending actions，封旧卡，创建新卡。返回 False 表示失败需中断 flush."""
-        assert self._client is not None
+        _ = self._session_client(session)
         old_card_id = session.card_id
         assert old_card_id is not None
         segment_state = session.segment_state
@@ -611,7 +631,12 @@ class StreamingController:
         seal_start_idx = session.split_index
 
         if actions and not await self._do_batch_update(
-            session, segments, actions, new_el_ids, new_el_estimates, updated_tool_segs,
+            session,
+            segments,
+            actions,
+            new_el_ids,
+            new_el_estimates,
+            updated_tool_segs,
         ):
             return False
 
@@ -652,7 +677,8 @@ class StreamingController:
         if not session.has_card or session.state == SessionState.FAILED:
             _logger.info(
                 "clarify_split: no card to seal, msg=%s state=%s",
-                session.message_id[:12], session.state,
+                session.message_id[:12],
+                session.state,
             )
             return False
 
@@ -699,7 +725,8 @@ class StreamingController:
 
             _logger.info(
                 "clarify_split: sealed old + new card msg=%s card=%s",
-                session.message_id[:12], new_card_id[:12],
+                session.message_id[:12],
+                new_card_id[:12],
             )
             return True
         finally:
@@ -745,6 +772,15 @@ class StreamingController:
             segment_state.finalize_segments(len(all_tool_steps))
 
         active_segments = session.active_segments()
+        active_segments, all_tool_steps, compacted = compact_terminal_segments(
+            active_segments,
+            all_tool_steps,
+            compact_after=self._cfg.history_compact_after,
+            keep_recent=self._cfg.history_keep_recent,
+        )
+        if compacted["tool_steps"] or compacted["reasoning_rounds"]:
+            metrics.increment("history.tool_steps_compacted", compacted["tool_steps"])
+            metrics.increment("history.reasoning_rounds_compacted", compacted["reasoning_rounds"])
 
         _strip_answer_media_directives(active_segments)
         if session.image_resolver:
@@ -774,22 +810,24 @@ class StreamingController:
         streaming_closed = False
         for attempt in range(3):
             try:
-                assert self._client is not None
+                _ = self._session_client(session)
                 if session.card_id:
                     if not streaming_closed:
                         session.sequence += 1
-                        await self._client.cardkit_close_streaming(
+                        await self._session_client(session).cardkit_close_streaming(
                             session.card_id,
                             sequence=session.sequence,
                         )
                         streaming_closed = True
                     session.sequence += 1
-                    await self._client.cardkit_update(
+                    await self._session_client(session).cardkit_update(
                         session.card_id,
                         card,
                         sequence=session.sequence,
                     )
                 session.state = SessionState.COMPLETED
+                metrics.increment("card.completed")
+                metrics.persist()
                 return True
             except FeishuAPIError as e:
                 _logger.warning(
@@ -826,6 +864,8 @@ class StreamingController:
             session.sequence,
         )
         session.mark_failed()
+        metrics.increment("card.completion_failed")
+        metrics.persist()
         return False
 
     async def _do_cron_deliver(
@@ -837,8 +877,7 @@ class StreamingController:
         run_time: str = "",
         media_files: object = None,
     ) -> None:
-        await self._ensure_init()
-        assert self._client is not None
+        client = await self._client_for_chat(chat_id)
         # Hermes 的 cron 投递在调用注入钩子之前就把 MEDIA 标签剥进 media_files 了
         # (cron/scheduler_delivery.py)，钩子返回 True 会跳过它自己的附件投递 —— 所以这里自己补。
         paths = hook_media_paths(media_files)
@@ -847,8 +886,8 @@ class StreamingController:
             task_name=task_name,
             run_time=run_time,
         )
-        message_id = await self._client.send_card_to_chat(chat_id, card)
-        await self._deliver_card_media(chat_id, paths, reply_to_message_id=message_id)
+        message_id = await client.send_card_to_chat(chat_id, card)
+        await self._deliver_card_media(chat_id, paths, reply_to_message_id=message_id, client=client)
 
     async def _deliver_card_media(
         self,
@@ -856,15 +895,14 @@ class StreamingController:
         paths: list[str],
         *,
         reply_to_message_id: str | None = None,
+        client: FeishuClient | None = None,
     ) -> int:
         """静态卡片发出后补投附件（best-effort，绝不影响卡片投递结果）."""
-        client = self._client
-        if not paths or client is None:
+        if not paths:
             return 0
+        client = client or await self._client_for_chat(chat_id)
         try:
-            sent = await deliver_media_files(
-                client, chat_id, paths, reply_to_message_id=reply_to_message_id
-            )
+            sent = await deliver_media_files(client, chat_id, paths, reply_to_message_id=reply_to_message_id)
             _logger.info(
                 "static card media delivery: chat=%s files=%d sent=%d",
                 chat_id[:12],
@@ -873,9 +911,7 @@ class StreamingController:
             )
             return sent
         except Exception:
-            _logger.warning(
-                "static card media delivery failed: chat=%s", chat_id[:12], exc_info=True
-            )
+            _logger.warning("static card media delivery failed: chat=%s", chat_id[:12], exc_info=True)
             return 0
 
     async def _do_background_deliver(
@@ -886,10 +922,9 @@ class StreamingController:
         *,
         reply_to_message_id: str | None = None,
     ) -> None:
-        await self._ensure_init()
-        assert self._client is not None
+        client = await self._client_for_chat(chat_id)
         card = build_background_card(preview, content)
-        await self._client.send_card_to_chat(
+        await client.send_card_to_chat(
             chat_id,
             card,
             reply_to_message_id=reply_to_message_id,

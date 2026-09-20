@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,7 +40,9 @@ from lark_oapi.api.im.v1 import (
     ReplyMessageRequestBody,
 )
 
+from .card_limits import compact_card, inspect_card
 from .config import DEFAULT_DOMAIN
+from .metrics import metrics
 
 _logger = logging.getLogger("hermes_lark_streaming")
 
@@ -116,12 +119,7 @@ class FeishuClient:
     def __init__(self, config: FeishuClientConfig) -> None:
         self.config = config
         domain = config.base_url.strip().rstrip("/").removesuffix(_OPEN_APIS_SUFFIX) or DEFAULT_DOMAIN
-        builder = (
-            lark.Client.builder()
-            .app_id(config.app_id)
-            .app_secret(config.app_secret)
-            .domain(domain)
-        )
+        builder = lark.Client.builder().app_id(config.app_id).app_secret(config.app_secret).domain(domain)
         self._client = builder.build()
 
     @staticmethod
@@ -139,16 +137,40 @@ class FeishuClient:
     def _dumps(obj: Any) -> str:
         return json.dumps(obj, ensure_ascii=False)
 
+    @staticmethod
+    def _card_dumps(card: dict[str, Any]) -> str:
+        prepared = compact_card(card)
+        inspection = inspect_card(prepared)
+        if not inspection.safe:
+            metrics.increment("card.limit_reject")
+            raise FeishuAPIError(
+                f"card exceeds safe CardKit limits: bytes={inspection.json_bytes}, elements={inspection.elements}",
+                CARDKIT_CONTENT_FAILED,
+            )
+        if prepared != card:
+            metrics.increment("card.compacted")
+        return json.dumps(prepared, ensure_ascii=False)
+
     async def _checked_call(self, operation: str, call: Any) -> Any:
         """Run a Feishu SDK call and retry transient CardKit/Lark server errors."""
         attempts = len(_TRANSIENT_RETRY_DELAYS_SEC) + 1
         last_error: FeishuAPIError | None = None
         for attempt in range(attempts):
-            resp = await call()
+            started = time.monotonic()
+            metrics.increment(f"api.{operation}.attempt")
             try:
+                resp = await call()
                 self._check(resp, operation)
+                metrics.increment(f"api.{operation}.success")
                 return resp
             except FeishuAPIError as exc:
+                metrics.increment(f"api.{operation}.error")
+                if exc.code == CARDKIT_RATE_LIMITED:
+                    metrics.increment("api.rate_limited")
+                if exc.code == CARDKIT_ELEMENT_NOT_FOUND:
+                    metrics.increment("api.element_not_found")
+                    if attempt:
+                        metrics.increment("api.element_not_found_recovered")
                 last_error = exc
                 if exc.code not in CARDKIT_TRANSIENT_ERROR_CODES or attempt >= attempts - 1:
                     raise
@@ -162,6 +184,8 @@ class FeishuClient:
                     delay,
                 )
                 await asyncio.sleep(delay)
+            finally:
+                metrics.observe(f"api.{operation}", (time.monotonic() - started) * 1000)
         assert last_error is not None
         raise last_error
 
@@ -181,7 +205,7 @@ class FeishuClient:
                 .request_body(
                     ReplyMessageRequestBody.builder()
                     .msg_type("interactive")
-                    .content(self._dumps(card))
+                    .content(self._card_dumps(card))
                     .uuid(request_uuid)
                     .build()
                 )
@@ -199,7 +223,7 @@ class FeishuClient:
                     CreateMessageRequestBody.builder()
                     .receive_id(chat_id)
                     .msg_type("interactive")
-                    .content(self._dumps(card))
+                    .content(self._card_dumps(card))
                     .uuid(request_uuid)
                     .build()
                 )
@@ -228,11 +252,7 @@ class FeishuClient:
                 ReplyMessageRequest.builder()
                 .message_id(reply_to_message_id)
                 .request_body(
-                    ReplyMessageRequestBody.builder()
-                    .msg_type("file")
-                    .content(content)
-                    .uuid(request_uuid)
-                    .build()
+                    ReplyMessageRequestBody.builder().msg_type("file").content(content).uuid(request_uuid).build()
                 )
                 .build()
             )
@@ -289,7 +309,7 @@ class FeishuClient:
         """创建 CardKit 实体，返回 card_id."""
         request = (
             CreateCardRequest.builder()
-            .request_body(CreateCardRequestBody.builder().type("card_json").data(self._dumps(card)).build())
+            .request_body(CreateCardRequestBody.builder().type("card_json").data(self._card_dumps(card)).build())
             .build()
         )
         resp = await self._checked_call(
@@ -329,14 +349,11 @@ class FeishuClient:
                 )
                 return
             except FeishuAPIError as exc:
-                if exc.code != CARDKIT_ELEMENT_NOT_FOUND or attempt >= len(
-                    _ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC
-                ):
+                if exc.code != CARDKIT_ELEMENT_NOT_FOUND or attempt >= len(_ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC):
                     raise
                 delay = _ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC[attempt]
                 _logger.info(
-                    "cardkit_stream_element element not visible yet: card=%s el=%s "
-                    "attempt=%d/%d delay=%.1fs",
+                    "cardkit_stream_element element not visible yet: card=%s el=%s attempt=%d/%d delay=%.1fs",
                     card_id[:12],
                     element_id[:24],
                     attempt + 1,
@@ -353,7 +370,7 @@ class FeishuClient:
     ) -> None:
         """全量更新 CardKit 卡片."""
         body_builder = UpdateCardRequestBody.builder().card(
-            Card.builder().type("card_json").data(self._dumps(card)).build()
+            Card.builder().type("card_json").data(self._card_dumps(card)).build()
         )
         body_builder = body_builder.sequence(sequence)
         request = UpdateCardRequest.builder().card_id(card_id).request_body(body_builder.build()).build()
@@ -426,11 +443,7 @@ class FeishuClient:
                 request = (
                     CreateFileRequest.builder()
                     .request_body(
-                        CreateFileRequestBody.builder()
-                        .file_type(file_type)
-                        .file_name(path.name)
-                        .file(handle)
-                        .build()
+                        CreateFileRequestBody.builder().file_type(file_type).file_name(path.name).file(handle).build()
                     )
                     .build()
                 )
@@ -441,7 +454,9 @@ class FeishuClient:
         if resp.success() and resp.data and resp.data.file_key:
             return str(resp.data.file_key)
         _logger.warning(
-            "file upload rejected: %s code=%s", path.name, getattr(resp, "code", 0),
+            "file upload rejected: %s code=%s",
+            path.name,
+            getattr(resp, "code", 0),
         )
         return None
 
@@ -456,12 +471,7 @@ class FeishuClient:
             with image.open("rb") as handle:
                 request = (
                     CreateImageRequest.builder()
-                    .request_body(
-                        CreateImageRequestBody.builder()
-                        .image_type("message")
-                        .image(handle)
-                        .build()
-                    )
+                    .request_body(CreateImageRequestBody.builder().image_type("message").image(handle).build())
                     .build()
                 )
                 resp = await self._client.im.v1.image.acreate(request)
@@ -471,7 +481,9 @@ class FeishuClient:
         if resp.success() and resp.data and resp.data.image_key:
             return str(resp.data.image_key)
         _logger.warning(
-            "image upload rejected: %s code=%s", image.name, getattr(resp, "code", 0),
+            "image upload rejected: %s code=%s",
+            image.name,
+            getattr(resp, "code", 0),
         )
         return None
 
@@ -490,11 +502,7 @@ class FeishuClient:
                 ReplyMessageRequest.builder()
                 .message_id(reply_to_message_id)
                 .request_body(
-                    ReplyMessageRequestBody.builder()
-                    .msg_type("image")
-                    .content(content)
-                    .uuid(request_uuid)
-                    .build()
+                    ReplyMessageRequestBody.builder().msg_type("image").content(content).uuid(request_uuid).build()
                 )
                 .build()
             )

@@ -17,6 +17,7 @@ from .feishu import (
     FeishuClient,
     FeishuClientConfig,
 )
+from .metrics import metrics
 from .streaming.controller import StreamingController
 from .streaming.media import (
     deliver_media_files,
@@ -37,6 +38,8 @@ class StreamCardController(StreamingController):
         self._profile_home = (profile_home or hermes_home()).resolve()
         self._cfg = Config(self._profile_home)
         self._client: FeishuClient | None = None
+        self._clients: dict[str, FeishuClient] = {}
+        self._bot_registry = self._cfg.bot_registry()
         self._sessions: dict[str, CardSession] = {}
         self._session_keys: dict[str, CardSession] = {}
         self._interrupt_map: dict[str, str] = {}
@@ -54,7 +57,9 @@ class StreamCardController(StreamingController):
         if unscoped and self._unscoped_enabled is not None:
             return self._unscoped_enabled
         with self._credential_scope():
-            enabled = self._cfg.enabled and bool(self._cfg.feishu_app_id or self._cfg.env_app_id)
+            default_bot = self._bot_registry.resolve("")
+            bot_ready = bool(default_bot and all(default_bot.credentials()))
+            enabled = self._cfg.enabled and bool(self._cfg.feishu_app_id or self._cfg.env_app_id or bot_ready)
         if unscoped and enabled:
             self._unscoped_enabled = True
         return enabled
@@ -98,16 +103,39 @@ class StreamCardController(StreamingController):
             with self._credential_scope():
                 app_id = self._cfg.feishu_app_id or self._cfg.env_app_id
                 app_secret = self._cfg.feishu_app_secret or self._cfg.env_app_secret
+                base_url = self._cfg.feishu_base_url
+                default_bot = self._bot_registry.resolve("")
+                if (not app_id or not app_secret) and default_bot is not None:
+                    app_id, app_secret = default_bot.credentials()
+                    base_url = default_bot.base_url
                 if not app_id or not app_secret:
                     raise RuntimeError("feishu credentials not configured")
-                self._client = FeishuClient(
-                    FeishuClientConfig(
-                        app_id=app_id,
-                        app_secret=app_secret,
-                        base_url=self._cfg.feishu_base_url,
-                    )
-                )
+                self._client = FeishuClient(FeishuClientConfig(app_id=app_id, app_secret=app_secret, base_url=base_url))
+                self._clients["default"] = self._client
             self._initialized = True
+
+    async def _client_for_chat(self, chat_id: str) -> FeishuClient:
+        """Resolve one immutable client per configured bot; exact chat binding wins."""
+        await self._ensure_init()
+        bot = self._bot_registry.resolve(chat_id)
+        if bot is None:
+            assert self._client is not None
+            return self._client
+        cached = self._clients.get(bot.bot_id)
+        if cached is not None:
+            return cached
+        app_id, app_secret = bot.credentials()
+        if not app_id or not app_secret:
+            raise RuntimeError(f"credentials for bot {bot.bot_id!r} are not configured")
+        client = FeishuClient(FeishuClientConfig(app_id=app_id, app_secret=app_secret, base_url=bot.base_url))
+        self._clients[bot.bot_id] = client
+        return client
+
+    def _session_client(self, session: CardSession) -> FeishuClient:
+        client = session.client or self._client
+        if client is None:
+            raise RuntimeError("Feishu client is not initialized")
+        return client
 
     def _get_loop(self) -> asyncio.AbstractEventLoop | None:
         """获取事件循环，缓存以便跨线程复用."""
@@ -170,6 +198,11 @@ class StreamCardController(StreamingController):
             _logger.warning("no event loop available, skipping: msg=%s", message_id[:12])
             return
         session = CardSession(message_id, chat_id, loop)
+        session.flush.configure_adaptive(
+            enabled=self._cfg.adaptive_backpressure_enabled,
+            min_ms=self._cfg.backpressure_min_ms,
+            max_ms=self._cfg.backpressure_max_ms,
+        )
         session.session_key = session_key
         self._sessions[message_id] = session
         if session_key:
@@ -182,6 +215,7 @@ class StreamCardController(StreamingController):
         session.create_task = self._fire_and_forget(self._do_create_card(session), loop)
 
     def _mark_text_fallback_needed(self, session: CardSession) -> None:
+        metrics.increment("card.text_fallback")
         keys = {session.message_id}
         if session.anchor_id:
             keys.add(session.anchor_id)
@@ -286,7 +320,8 @@ class StreamCardController(StreamingController):
         future: ConcurrentFuture | None = None
         try:
             future = asyncio.run_coroutine_threadsafe(
-                self._do_clarify_split(session), loop,
+                self._do_clarify_split(session),
+                loop,
             )
             # 预算 = 卡片创建等待 + seal/建卡余量
             future.result(timeout=_CARD_CREATION_WAIT_SEC * 2 + 30)
@@ -378,6 +413,11 @@ class StreamCardController(StreamingController):
             if loop is not None:
                 reply_anchor_id = anchor_id if anchor_id and anchor_id != new_message_id else None
                 session = CardSession(new_message_id, chat_id, loop)
+                session.flush.configure_adaptive(
+                    enabled=self._cfg.adaptive_backpressure_enabled,
+                    min_ms=self._cfg.backpressure_min_ms,
+                    max_ms=self._cfg.backpressure_max_ms,
+                )
                 session.anchor_id = reply_anchor_id
                 session.session_key = session_key
                 self._sessions[new_message_id] = session
@@ -548,7 +588,9 @@ class StreamCardController(StreamingController):
             return sent
         except Exception:
             _logger.warning(
-                "media delivery failed: msg=%s", session.message_id[:12], exc_info=True,
+                "media delivery failed: msg=%s",
+                session.message_id[:12],
+                exc_info=True,
             )
             return 0
 
@@ -566,7 +608,10 @@ class StreamCardController(StreamingController):
         if not self.enabled or not content or not chat_id:
             return False
         coroutine = self._do_cron_deliver(
-            chat_id, content, task_name=task_name, run_time=run_time,
+            chat_id,
+            content,
+            task_name=task_name,
+            run_time=run_time,
             media_files=media_files,
         )
         try:
@@ -746,8 +791,10 @@ class StreamCardController(StreamingController):
         tokens: dict | None,
         context: dict | None,
     ) -> None:
-        if answer and session.segment_state and not any(
-            seg.type == SegmentType.ANSWER for seg in session.segment_state.segments
+        if (
+            answer
+            and session.segment_state
+            and not any(seg.type == SegmentType.ANSWER for seg in session.segment_state.segments)
         ):
             final_answer = strip_reasoning_tags(answer)
             if final_answer:

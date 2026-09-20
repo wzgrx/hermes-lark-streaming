@@ -35,6 +35,11 @@ def _commands() -> dict[str, Callable[[], int]]:
         "restore": _cmd_restore,
         "status": _cmd_status,
         "verify": _cmd_verify,
+        "doctor": _cmd_doctor,
+        "metrics": _cmd_metrics,
+        "smoke": _cmd_smoke,
+        "lark-cli-smoke": _cmd_lark_cli_smoke,
+        "sidecar": _cmd_sidecar,
     }
 
 
@@ -47,6 +52,11 @@ def _print_usage() -> None:
     print("  restore    Restore from backup")
     print("  status     Show current patch status")
     print("  verify     Verify compatibility without patching")
+    print("  doctor     Run structured configuration/runtime diagnostics [--json]")
+    print("  metrics    Show privacy-preserving runtime metrics [--json]")
+    print("  smoke      CardKit dry-run; add --execute --chat-id CHAT for live E2E")
+    print("  lark-cli-smoke  Inspect optional lark-cli; add --execute for read-only checks")
+    print("  sidecar    Run optional health/metrics sidecar [--host HOST --port PORT]")
 
 
 def _get_patcher() -> Patcher | None:
@@ -246,6 +256,60 @@ def _cmd_verify() -> int:
             return 1
         print("Cron target compatible.")
 
+    return 0
+
+
+def _cmd_doctor() -> int:
+    _load_hermes_environment()
+    from .doctor import print_report
+
+    return print_report(as_json="--json" in sys.argv[2:])
+
+
+def _cmd_metrics() -> int:
+    import json
+
+    from .metrics import metrics
+
+    snapshot = metrics.load_persisted() or metrics.snapshot()
+    print(json.dumps(snapshot, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_smoke() -> int:
+    from .e2e import run
+
+    args = sys.argv[2:]
+    chat_id = ""
+    if "--chat-id" in args:
+        index = args.index("--chat-id")
+        if index + 1 < len(args):
+            chat_id = args[index + 1]
+    _load_hermes_environment()
+    return run(execute="--execute" in args, chat_id=chat_id)
+
+
+def _cmd_lark_cli_smoke() -> int:
+    import json
+
+    from .doctor import lark_cli_smoke
+
+    print(json.dumps(lark_cli_smoke(execute="--execute" in sys.argv[2:]), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_sidecar() -> int:
+    _load_hermes_environment()
+    from .sidecar import serve
+
+    args = sys.argv[2:]
+    host = "127.0.0.1"
+    port = 8788
+    if "--host" in args and args.index("--host") + 1 < len(args):
+        host = args[args.index("--host") + 1]
+    if "--port" in args and args.index("--port") + 1 < len(args):
+        port = int(args[args.index("--port") + 1])
+    serve(host, port)
     return 0
 
 

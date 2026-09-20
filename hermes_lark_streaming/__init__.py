@@ -1,12 +1,15 @@
 """Hermes Lark streaming package entry point."""
 
-__version__ = "0.14.0"
+__version__ = "0.15.0"
 
 
 def register(ctx: object) -> None:
     """Register package presence with Hermes.
 
-    Gateway and cron lifecycle integration is installed by the AST patcher;
-    the entry point stays intentionally side-effect free.
+    Hermes currently uses the compatibility patcher.  Future runtimes can expose
+    ``register_streaming_renderer`` and will be selected without source rewriting.
     """
+    from .native_hooks import try_register
+
+    try_register(ctx)
     return None

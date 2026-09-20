@@ -55,8 +55,7 @@ class TestSplitReasoningText:
         text = "<thinking>ongoing reasoning"
         result = split_reasoning_text(text)
         assert result["reasoning_text"] == "ongoing reasoning"
-        # reasoning_text 和 answer_text 都包含内容
-        assert result["answer_text"] is not None
+        assert result["answer_text"] is None
 
 
 class TestExtractThinkingContent:
@@ -82,18 +81,24 @@ class TestExtractThinkingContent:
 
 class TestStripReasoningTags:
     def test_removes_tag_markers(self) -> None:
-        # 标签被移除，但标签间内容保留
+        # reasoning 内容不会泄漏到最终答案。
         result = strip_reasoning_tags("<thinking>content</thinking>")
         assert "<thinking>" not in result
         assert "</thinking>" not in result
+        assert "content" not in result
 
     def test_mixed_text_keeps_surrounding(self) -> None:
         text = "before<thinking>inner</thinking>after"
         result = strip_reasoning_tags(text)
         assert "before" in result
         assert "after" in result
+        assert "inner" not in result
         # 标签标记被移除
         assert "<thinking>" not in result
+
+    @pytest.mark.parametrize("tag", ["analysis", "reasoning", "think"])
+    def test_model_specific_tags_do_not_leak(self, tag: str) -> None:
+        assert strip_reasoning_tags(f"<{tag}>private chain</{tag}>public") == "public"
 
     def test_no_tags_unchanged(self) -> None:
         assert strip_reasoning_tags("no tags here") == "no tags here"

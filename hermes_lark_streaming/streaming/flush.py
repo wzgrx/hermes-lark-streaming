@@ -7,6 +7,8 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 
+from ..metrics import metrics
+
 _logger = logging.getLogger("hermes_lark_streaming")
 
 
@@ -23,6 +25,11 @@ class FlushController:
 
     def __init__(self, throttle_ms: float = CARDKIT_MS, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         self._throttle_ms = throttle_ms
+        self._adaptive = False
+        self._min_throttle = throttle_ms
+        self._max_throttle = max(throttle_ms, 1.5)
+        self._success_streak = 0
+        self._latency_ewma_ms = 0.0
         self._flush_in_progress = False
         self._needs_reflush = False
         self._pending_timer: asyncio.TimerHandle | None = None
@@ -105,6 +112,46 @@ class FlushController:
     def set_throttle(self, ms: float) -> None:
         self._throttle_ms = ms
 
+    def configure_adaptive(self, *, enabled: bool, min_ms: float, max_ms: float) -> None:
+        """Configure adaptive interval; public values are milliseconds."""
+        self._adaptive = enabled
+        self._min_throttle = max(0.05, min_ms / 1000.0)
+        self._max_throttle = max(self._min_throttle, max_ms / 1000.0)
+        self._throttle_ms = min(max(self._throttle_ms, self._min_throttle), self._max_throttle)
+
+    def record_failure(self, *, rate_limited: bool = False) -> None:
+        if not self._adaptive:
+            return
+        factor = 2.0 if rate_limited else 1.35
+        self._throttle_ms = min(self._max_throttle, max(self._min_throttle, self._throttle_ms * factor))
+        self._success_streak = 0
+        metrics.increment("backpressure.rate_limited" if rate_limited else "backpressure.failure")
+
+    def adaptive_snapshot(self) -> dict[str, float | int | bool]:
+        return {
+            "enabled": self._adaptive,
+            "current_ms": round(self._throttle_ms * 1000, 2),
+            "min_ms": round(self._min_throttle * 1000, 2),
+            "max_ms": round(self._max_throttle * 1000, 2),
+            "latency_ewma_ms": round(self._latency_ewma_ms, 2),
+            "success_streak": self._success_streak,
+        }
+
+    def _record_success(self, elapsed_ms: float) -> None:
+        self._latency_ewma_ms = (
+            elapsed_ms if not self._latency_ewma_ms else self._latency_ewma_ms * 0.8 + elapsed_ms * 0.2
+        )
+        metrics.observe("flush", elapsed_ms)
+        if not self._adaptive:
+            return
+        self._success_streak += 1
+        if elapsed_ms > self._throttle_ms * 2000:
+            self._throttle_ms = min(self._max_throttle, self._throttle_ms * 1.2)
+            self._success_streak = 0
+        elif self._success_streak >= 5:
+            self._throttle_ms = max(self._min_throttle, self._throttle_ms * 0.9)
+            self._success_streak = 0
+
     def set_card_message_ready(self, ready: bool) -> None:
         """设置卡片消息已就绪，初始化时间戳."""
         self._card_message_ready = ready
@@ -130,11 +177,19 @@ class FlushController:
 
         self._flush_in_progress = True
         self._needs_reflush = False
+        started = time.monotonic()
+        succeeded = False
         try:
             await do_flush()
+            succeeded = True
         except Exception:
+            self.record_failure()
+            metrics.increment("flush.error")
             _logger.debug("flush error suppressed", exc_info=True)
         finally:
+            if succeeded:
+                metrics.increment("flush.success")
+                self._record_success((time.monotonic() - started) * 1000)
             self._flush_in_progress = False
             self._last_update_time = time.monotonic()
             # 唤醒等待者
