@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-09-20
+
+### 修复
+
+- 终态/分卡封存现在同时按 28 KiB 和递归元素数压缩。对于大量短工具步骤造成的
+  结构开销，会先缩短冗长文本，再删除最旧的工具/思考面板和旧答案分片，同时保留
+  最新答案与可见压缩标记，避免 `card exceeds safe CardKit limits` 导致旧卡封存失败。
+- 添加 200 元素上限和“元素数未超但结构字节超限”两类回归测试。
+
 ## [0.16.0] - 2026-09-20
 
 ### 新增
