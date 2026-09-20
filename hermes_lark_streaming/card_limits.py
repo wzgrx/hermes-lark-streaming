@@ -88,8 +88,11 @@ def _trim_verbose_text(card: dict[str, Any], max_bytes: int) -> bool:
         if not candidates:
             break
         length, parent, key = max(candidates, key=lambda item: item[0])
-        keep = max(_MIN_TEXT_CHARS, length // 2)
-        parent[key] = "… " + str(parent[key])[-keep:]
+        prefix = "… "
+        target_length = max(_MIN_TEXT_CHARS, length // 2)
+        keep = max(0, target_length - len(prefix))
+        original = str(parent[key])
+        parent[key] = prefix + original[-keep:] if keep else prefix.rstrip()
         changed = True
     return changed
 
@@ -137,6 +140,11 @@ def _remove_top_level_history(card: dict[str, Any], max_bytes: int) -> bool:
                 ),
                 None,
             )
+        if candidate is None and footer:
+            # Remove the footer markdown before its separator. Removing the `hr`
+            # first would make the footer look like the newest answer on the
+            # next pass and could evict the real answer instead.
+            candidate = max(footer)
         if candidate is None:
             candidate = next(
                 (i for i, element in enumerate(elements) if i != answer and not _is_compaction_marker(element)),

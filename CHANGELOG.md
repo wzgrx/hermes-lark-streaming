@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-09-20
+
+### 修复
+
+- 修复自定义紧缩字节预算下，文本缩至最小长度后前缀导致长度不再下降的循环。
+- 删除终态 footer 时先删 footer 正文再删分隔线，避免 footer 被误判为最新答案并挤掉
+  真正的最终回复。
+- 新增极小预算的终止性与“保留最新答案”回归测试。
+
 ## [0.16.1] - 2026-09-20
 
 ### 修复
