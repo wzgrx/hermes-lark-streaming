@@ -45,3 +45,34 @@ jobs:
         env:
           HERMES_MODULAR_SOURCE: ${{ github.workspace }}/_hermes-agent
         run: python -m pytest tests -q
+
+
+  hermes-compat-matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        hermes-ref: [v2026.9.11, v2026.9.14, main]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Fetch Hermes compatibility target
+        uses: actions/checkout@v6
+        with:
+          repository: NousResearch/hermes-agent
+          ref: ${{ matrix.hermes-ref }}
+          path: _hermes-agent
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - name: Verify patch round-trip and callback behavior
+        env:
+          HERMES_MODULAR_SOURCE: ${{ github.workspace }}/_hermes-agent
+        run: python -m pytest tests/test_modular_patcher.py tests/test_patcher.py -q

@@ -60,7 +60,7 @@ def _stop_site(source: str) -> tuple[int, str]:
 class ModularPatcher:
     """Same install/status/remove interface, explicit module ownership."""
 
-    MARKERS: ClassVar[list[tuple[str, str]]] = p.MARKERS
+    MARKERS: ClassVar[list[tuple[str, str]]] = [*p.MARKERS, (p.MK_APPROVAL, p.MK_APPROVAL_END)]
 
     def __init__(self, run_path: Path) -> None:
         self.run_path = run_path
@@ -126,6 +126,7 @@ class ModularPatcher:
             p._background_review_hook,
         )
         add("run_turn_runner.py", lambda s: _after_assignment(s, "agent.clarify_callback"), p._clarify_hook)
+        add("run_turn_runner.py", lambda s: _function(s, "_approval_notify_sync"), p._approval_hook)
         add(
             "run_turn.py",
             lambda s: _before(s, 'if not result.get("interrupted"):'),

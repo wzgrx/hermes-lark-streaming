@@ -349,6 +349,12 @@ async def on_background_deliver(
 
 
 @_safe_hook()
+def on_approval_enter(*, ctrl: Any, message_id: str) -> None:
+    """Pause CardKit before Hermes sends an actionable native approval card."""
+    ctrl.on_approval_enter(message_id=message_id)
+
+
+@_safe_hook()
 def on_clarify_enter(
     *,
     ctrl: Any,

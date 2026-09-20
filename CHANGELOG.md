@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-20
+
+### 新增
+
+- 审批交互边界：Hermes 原生审批卡片显示时暂停流式卡，工具结束后封存旧卡并在新卡继续，保留原生按钮、超时和回调语义。
+- 后台复盘通知在主回复完成前到达时，收纳到终态卡片的折叠面板，避免插入一条独立消息。
+- 增加 Hermes `v2026.9.11`、`v2026.9.14` 和 `main` 的固定兼容矩阵，与每日 main 预检并行。
+
+### 修复
+
+- CardKit `300313` 双层自愈：`stream_element` 使用原 sequence 进行 200/400/800ms 有界重试；`batch_update` 发现缺失元素后回滚本地状态并请求互斥队列立即重刷，不等待新 token。
+- 旧版单文件 Hermes 同时存在文本与 TTS fallback 两个 `_stream_delta_cb` 时，只注入调用 `_stream_consumer.on_delta` 的主文本回调，避免原生文本与卡片重复。
+- 已处理的 `300313` 不再输出误导性的长堆栈，但保留结构化元素诊断。
+
+### Added
+
+- Approval interaction boundaries, in-card background-review notices, and a pinned Hermes compatibility matrix.
+
+### Fixed
+
+- Bounded CardKit 300313 retries plus immediate serialized reflush, and primary-answer callback selection for legacy dual-callback Hermes layouts.
+
 ## [0.13.0] - 2026-09-20
 
 ### 新增

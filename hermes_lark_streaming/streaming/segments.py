@@ -10,6 +10,7 @@ class SegmentType(StrEnum):
     REASONING = "reasoning"
     ANSWER = "answer"
     TOOL = "tool"
+    NOTICE = "notice"
 
 
 class Segment:
@@ -81,6 +82,15 @@ class SegmentState:
         self.segments.append(seg)
         return seg
 
+    def _new_notice(self, text: str) -> Segment:
+        c = self._counter
+        self._counter += 1
+        seg = Segment(SegmentType.NOTICE, f"notice_{c}_panel")
+        seg.text = text
+        self._finalize_prev_reasoning(time.time())
+        self.segments.append(seg)
+        return seg
+
     def _new_tool(self, tool_offset: int) -> Segment:
         c = self._counter
         self._counter += 1
@@ -113,6 +123,11 @@ class SegmentState:
             self.segments[-1].dirty = True
         else:
             self._new_answer(text)
+
+    def on_notice(self, text: str) -> None:
+        """Append a non-conversational lifecycle notice to the card."""
+        if text.strip():
+            self._new_notice(text.strip())
 
     def on_tool_event(self, tool_step_count: int) -> None:
         """处理工具调用事件，同类型标记 dirty 否则新建 segment 并终结前序 tool segment."""

@@ -88,7 +88,10 @@ CARDKIT_RATE_LIMITED = 230020  # 频控
 CARDKIT_CONTENT_FAILED = 230099  # 卡片内容创建失败（通用码，需检查子错误）
 CARDKIT_ELEMENT_LIMIT = 11310  # 子码: 卡片元素数量超限
 CARDKIT_STREAMING_CLOSED = 300309  # 卡片流式模式已关闭
+CARDKIT_ELEMENT_NOT_FOUND = 300313  # add_elements 后服务端元素尚未可见
 MSG_NOT_FOUND = 1000023  # 消息不存在/已删除
+
+_ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC = (0.2, 0.4, 0.8)
 
 
 @dataclass(frozen=True)
@@ -315,10 +318,32 @@ class FeishuClient:
             .request_body(body_builder.build())
             .build()
         )
-        await self._checked_call(
-            "cardkit_stream_element",
-            lambda: asyncio.to_thread(self._client.cardkit.v1.card_element.content, request),
-        )
+        # CardKit 在 add_elements 返回后仍可能短暂返回 300313：元素已写入，
+        # 但流式内容接口的读视图尚未看到它。固定 sequence 的有界重试可以
+        # 吸收这个最终一致窗口，且不会把真正的永久缺失变成无限循环。
+        for attempt in range(len(_ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC) + 1):
+            try:
+                await self._checked_call(
+                    "cardkit_stream_element",
+                    lambda: asyncio.to_thread(self._client.cardkit.v1.card_element.content, request),
+                )
+                return
+            except FeishuAPIError as exc:
+                if exc.code != CARDKIT_ELEMENT_NOT_FOUND or attempt >= len(
+                    _ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC
+                ):
+                    raise
+                delay = _ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC[attempt]
+                _logger.info(
+                    "cardkit_stream_element element not visible yet: card=%s el=%s "
+                    "attempt=%d/%d delay=%.1fs",
+                    card_id[:12],
+                    element_id[:24],
+                    attempt + 1,
+                    len(_ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC),
+                    delay,
+                )
+                await asyncio.sleep(delay)
 
     async def cardkit_update(
         self,

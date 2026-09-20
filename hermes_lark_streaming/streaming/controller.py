@@ -79,6 +79,8 @@ class StreamingController:
     _ensure_init: Callable[..., Coroutine[Any, Any, None]]
     _cleanup: Callable[[str], None]
     _cleanup_session: Callable[[CardSession], None]
+    _consume_deferred_background_reviews: Callable[[CardSession], None]
+    _discard_deferred_background_reviews: Callable[[CardSession], None]
     _flush_deferred_background_reviews: Callable[[CardSession], None]
     _wait_for_card_creation: Callable[[CardSession], Coroutine[Any, Any, bool]]
 
@@ -437,7 +439,7 @@ class StreamingController:
                 compact_ids(new_el_ids),
                 compact_ids([seg.el_id for seg in updated_tool_segs]),
                 action_summary,
-                exc_info=True,
+                exc_info=not bool(missing_el_id),
             )
             # 缺失元素（300313）时回滚 stale segment：本地 created=True 但卡片上不存在，
             # 下一轮 flush 会用 add_elements 重建该元素，避免反复 partial_update 死循环。
@@ -452,9 +454,10 @@ class StreamingController:
                         if session.element_count < 0:
                             session.element_count = 0
                         _logger.info(
-                            "CardKit recovered stale segment %s -> will re-add on next flush",
+                            "CardKit recovered stale segment %s -> re-adding immediately",
                             seg.el_id,
                         )
+                        session.flush.request_reflush()
                         break
             self._handle_flush_error(e)
             return False
@@ -714,10 +717,15 @@ class StreamingController:
 
     async def _do_complete_card(self, session: CardSession) -> bool:
         """完成流式卡片：close streaming + 全量重建卡片（保持 segments 顺序）."""
+        card_sent = False
         try:
-            return await self._do_complete_card_inner(session)
+            card_sent = await self._do_complete_card_inner(session)
+            return card_sent
         finally:
-            self._flush_deferred_background_reviews(session)
+            if card_sent:
+                self._discard_deferred_background_reviews(session)
+            else:
+                self._flush_deferred_background_reviews(session)
             self._cleanup_session(session)
 
     async def _do_complete_card_inner(self, session: CardSession) -> bool:
@@ -725,6 +733,7 @@ class StreamingController:
             return False
 
         await session.flush.wait_for_flush()
+        self._consume_deferred_background_reviews(session)
         session.flush.mark_completed()
 
         segment_state = session.segment_state

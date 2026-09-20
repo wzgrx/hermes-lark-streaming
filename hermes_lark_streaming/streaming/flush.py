@@ -93,6 +93,15 @@ class FlushController:
                 r.set_result(None)
         self._flush_resolvers.clear()
 
+    def request_reflush(self) -> None:
+        """请求当前 flush 结束后立即再执行一轮.
+
+        这个入口专门用于已在 flush 内部发现可自愈的服务端竞态；直接设置
+        ``_needs_reflush`` 比重新走节流定时器更确定，同时仍由现有互斥机制串行化。
+        """
+        if not self._completed:
+            self._needs_reflush = True
+
     def set_throttle(self, ms: float) -> None:
         self._throttle_ms = ms
 
