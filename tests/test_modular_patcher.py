@@ -155,3 +155,14 @@ def test_modular_approval_boundary_is_injected(modular_root):
     )
     rendered = ast.unparse(callback)
     assert "on_approval_enter(message_id=self._ctx.event_message_id)" in rendered
+
+
+def test_modular_cron_hook_requires_message_id_evidence(modular_root):
+    obj = CronPatcher(modular_root / "cron/scheduler.py")
+    obj.apply()
+    source = (modular_root / "cron/scheduler_delivery.py").read_text()
+    assert "_hermes_lark_cron_receipt" in source
+    assert "_hermes_lark_cron_receipt.get('message_id')" in source
+    # A legacy truthy boolean receipt remains visible as unverified; the new
+    # structured receipt with message_id takes the verified path.
+    assert "unverified_targets.append(t.where)" in source

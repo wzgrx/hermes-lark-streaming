@@ -13,6 +13,10 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 
 ---
 
+## Cron delivery evidence
+
+The modern Hermes Cron hook waits for CardKit to return a real `message_id` and passes a structured receipt back to the scheduler. Successful cards clear `last_delivery_unverified`; legacy boolean-only receipts remain explicitly unverified.
+
 ## Features
 
 - **Streaming output** — AI responses rendered in real-time interactive cards with typewriter effect

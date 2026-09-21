@@ -991,7 +991,7 @@ class StreamingController:
         task_name: str = "",
         run_time: str = "",
         media_files: object = None,
-    ) -> None:
+    ) -> str:
         client = await self._client_for_chat(chat_id)
         # Hermes 的 cron 投递在调用注入钩子之前就把 MEDIA 标签剥进 media_files 了
         # (cron/scheduler_delivery.py)，钩子返回 True 会跳过它自己的附件投递 —— 所以这里自己补。
@@ -1002,7 +1002,10 @@ class StreamingController:
             run_time=run_time,
         )
         message_id = await client.send_card_to_chat(chat_id, card)
+        if not message_id:
+            raise RuntimeError("Feishu cron card send returned no message_id")
         await self._deliver_card_media(chat_id, paths, reply_to_message_id=message_id, client=client)
+        return str(message_id)
 
     async def _deliver_card_media(
         self,

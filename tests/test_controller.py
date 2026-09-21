@@ -1878,7 +1878,8 @@ class TestCronDeliver:
         threading.Thread(target=loop.run_forever, daemon=True).start()
         try:
             result = ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=loop)
-            assert result is True
+            assert result["success"] is True
+            assert result["message_id"] == "msg_123"
             mock_client.send_card_to_chat.assert_called_once()
             args = mock_client.send_card_to_chat.call_args[0]
             assert args[0] == "c1"
@@ -1902,7 +1903,8 @@ class TestCronDeliver:
         with patch("hermes_lark_streaming.controller.FeishuClient", return_value=mock_client):
             result = ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=None)
 
-        assert result is True
+        assert result["success"] is True
+        assert result["message_id"] == "msg_123"
         assert ctrl._initialized is True
         mock_client.send_card_to_chat.assert_called_once()
 
@@ -1966,11 +1968,23 @@ class TestCronDeliver:
 
         loop = asyncio.new_event_loop()
         try:
-            assert ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=loop) is True
+            receipt = ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=loop)
+            assert receipt["message_id"] == "msg_123"
             mock_client.send_card_to_chat.assert_called_once()
         finally:
             if not loop.is_closed():
                 loop.close()
+
+    def test_missing_message_id_is_not_reported_as_verified(self) -> None:
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        mock_client = AsyncMock()
+        mock_client.send_card_to_chat.return_value = ""
+        ctrl._client = mock_client
+        ctrl._initialized = True
+
+        assert ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=None) is False
 
     def test_returns_false_on_send_failure(self) -> None:
         import threading
@@ -2013,8 +2027,8 @@ class TestCronDeliver:
                     content="价格跌到 1230 了",
                     loop=loop,
                     media_files=[(str(chart), False)],
-                )
-                is True
+                )["message_id"]
+                == "msg_card"
             )
         finally:
             if not loop.is_closed():
@@ -2047,8 +2061,8 @@ class TestCronDeliver:
             assert (
                 ctrl.on_cron_deliver(
                     chat_id="c1", content="日报好了", loop=loop, media_files=[(str(report), False)]
-                )
-                is True
+                )["message_id"]
+                == "msg_card"
             )
         finally:
             if not loop.is_closed():
@@ -2069,7 +2083,8 @@ class TestCronDeliver:
 
         loop = asyncio.new_event_loop()
         try:
-            assert ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=loop) is True
+            receipt = ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=loop)
+            assert receipt["message_id"] == "msg_card"
         finally:
             if not loop.is_closed():
                 loop.close()
@@ -2096,8 +2111,8 @@ class TestCronDeliver:
             assert (
                 ctrl.on_cron_deliver(
                     chat_id="c1", content="text", loop=loop, media_files=[(str(chart), False)]
-                )
-                is True
+                )["message_id"]
+                == "msg_card"
             )
         finally:
             if not loop.is_closed():
@@ -2123,8 +2138,8 @@ class TestCronDeliver:
                     content="text",
                     loop=loop,
                     media_files=[("/tmp/does-not-exist-hermes.png", False)],
-                )
-                is True
+                )["message_id"]
+                == "msg_card"
             )
         finally:
             if not loop.is_closed():
