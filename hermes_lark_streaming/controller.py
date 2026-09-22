@@ -186,7 +186,11 @@ class StreamCardController(StreamingController):
         if not self.enabled:
             return
         if not message_id:
-            _logger.warning("on_message_started: missing message_id, chat=%s", chat_id[:12])
+            # Hermes permits keyless/synthetic turns. Without a transport message id
+            # CardKit has no safe reply anchor, so native delivery intentionally owns
+            # the turn. This is an expected compatibility path, not a warning.
+            metrics.increment("session.keyless_native_fallback")
+            _logger.debug("on_message_started: keyless turn uses native delivery, chat=%s", chat_id[:12])
             return
         if message_id in self._sessions:
             return
@@ -603,8 +607,8 @@ class StreamCardController(StreamingController):
         task_name: str = "",
         run_time: str = "",
         media_files: object = None,
-    ) -> bool:
-        """Cron 推送 — 包装为静态卡片发送，成功返回 True."""
+    ) -> dict[str, object] | bool:
+        """Cron 推送 — 包装为静态卡片发送；成功返回带 message_id 的证据回执."""
         if not self.enabled or not content or not chat_id:
             return False
         coroutine = self._do_cron_deliver(
@@ -621,11 +625,20 @@ class StreamCardController(StreamingController):
                 except Exception:
                     coroutine.close()
                     raise
-                future.result(timeout=30)
+                message_id = future.result(timeout=30)
             else:
-                asyncio.run(coroutine)
-            _logger.info("cron card delivered: chat=%s len=%d", chat_id[:12], len(content))
-            return True
+                message_id = asyncio.run(coroutine)
+            if not message_id:
+                raise RuntimeError("Feishu cron card send returned no message_id")
+            _logger.info(
+                "cron card delivered: chat=%s len=%d message_id=%s",
+                chat_id[:12], len(content), str(message_id)[:16],
+            )
+            return {
+                "success": True,
+                "message_id": str(message_id),
+                "raw_response": {"delivery": "feishu_card"},
+            }
         except Exception:
             _logger.warning("cron card delivery failed", exc_info=True)
             return False

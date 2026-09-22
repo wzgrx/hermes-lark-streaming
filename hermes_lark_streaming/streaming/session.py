@@ -44,6 +44,7 @@ class CardSession:
     __slots__ = (
         "_loop",
         "anchor_id",
+        "anchor_recovery_attempts",
         "approval_pending_split",
         "bot_id",
         "card_id",
@@ -84,6 +85,7 @@ class CardSession:
     ) -> None:
         self.message_id = message_id
         self.anchor_id: str | None = None
+        self.anchor_recovery_attempts = 0
         self.approval_pending_split = False
         self.chat_id = chat_id
         self.client: Any | None = None

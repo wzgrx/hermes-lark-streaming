@@ -66,7 +66,12 @@ def test_modular_delta_preserves_tts_without_duplicate_text(modular_root):
     callback = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "stream_delta_cb")
     module = ast.Module(body=[callback], type_ignores=[])
     stts, native = Mock(), Mock()
-    ctx = SimpleNamespace(event_message_id="message-1", _run_still_current=lambda: True)
+    native.stream_deltas_enabled = True
+    ctx = SimpleNamespace(
+        event_message_id="message-1",
+        _run_still_current=lambda: True,
+        stream_consumer_holder=[native],
+    )
     namespace = {"ctx": ctx, "stts": stts, "delta_sinks": [native, stts], "Optional": Optional}
     exec(compile(ast.fix_missing_locations(module), "<modular-delta>", "exec"), namespace)
     with patch("hermes_lark_streaming.patch.on_answer_delta", return_value=True) as hook:
@@ -74,6 +79,7 @@ def test_modular_delta_preserves_tts_without_duplicate_text(modular_root):
     hook.assert_called_once_with(message_id="message-1", text="hello")
     stts.on_delta.assert_called_once_with("hello")
     native.on_delta.assert_not_called()
+    assert native.stream_deltas_enabled is False
 
 
 def test_modular_delta_yields_to_native_when_card_is_unavailable(modular_root):
@@ -155,3 +161,14 @@ def test_modular_approval_boundary_is_injected(modular_root):
     )
     rendered = ast.unparse(callback)
     assert "on_approval_enter(message_id=self._ctx.event_message_id)" in rendered
+
+
+def test_modular_cron_hook_requires_message_id_evidence(modular_root):
+    obj = CronPatcher(modular_root / "cron/scheduler.py")
+    obj.apply()
+    source = (modular_root / "cron/scheduler_delivery.py").read_text()
+    assert "_hermes_lark_cron_receipt" in source
+    assert "_hermes_lark_cron_receipt.get('message_id')" in source
+    # A legacy truthy boolean receipt remains visible as unverified; the new
+    # structured receipt with message_id takes the verified path.
+    assert "unverified_targets.append(t.where)" in source

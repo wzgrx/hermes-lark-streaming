@@ -222,16 +222,20 @@ class ModularCronPatcher(ModularPatcher):
                 "            and not getattr(t.transport, 'is_relay', False)",
                 "            and not t.in_channel_surface and not t.thread_id):",
                 "        from hermes_lark_streaming.patch import on_cron_deliver",
-                "        if on_cron_deliver(chat_id=t.chat_id, content=cleaned_delivery_content.strip(),",
+                "        _hermes_lark_cron_receipt = on_cron_deliver(",
+                "            chat_id=t.chat_id, content=cleaned_delivery_content.strip(),",
                 (
-                    "                           loop=loop, task_name=job.get('name', ''), "
+                    "            loop=loop, task_name=job.get('name', ''), "
                     "run_time=job.get('next_run_at', ''),"
                 ),
-                "                           media_files=locals().get('media_files') or []):",
+                "            media_files=locals().get('media_files') or [])",
+                "        if _hermes_lark_cron_receipt:",
                 "            _maybe_mirror_cron_delivery(",
                 "                job, t.platform_name, t.chat_id, t.mirror_text, thread_id=t.thread_id,",
                 "                user_id=t.origin_user_id, enabled=t.mirror_this_target)",
-                "            unverified_targets.append(t.where)",
+                "            if not (isinstance(_hermes_lark_cron_receipt, dict)",
+                "                    and _hermes_lark_cron_receipt.get('message_id')):",
+                "                unverified_targets.append(t.where)",
                 "            continue",
                 *p._hook_exception_lines("cron_deliver"),
             ],

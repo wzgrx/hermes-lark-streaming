@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Mark Hermes' native stream consumer as intentionally unfed when CardKit owns a delta, eliminating the core's false "possible duplicate send" warning without suppressing the native fallback path.
+
+### 修复
+
+- Hermes keyless/synthetic turn 缺少 transport message_id 时静默交回原生投递，并记录脱敏指标；不再把预期兼容路径误报成 Gateway warning。
+- CardKit sequence 仅在 API 成功后提交；失败的 batch/stream/close/update 重试复用同一
+  sequence，避免一次缺失元素把后续 close/update 推入持续 300317 冲突。
+- 初始 loading anchor 改为带可见文本的稳定元素，避免服务端接受建卡后裁掉空白
+  custom-icon 元素，随后所有 add_elements 都报 300315。
+- loading anchor 意外缺失时执行一次有界全卡重建，并串行重刷当前 segments；第二次
+  缺失直接转文本兜底，避免无限重试。
+- Cron CardKit 成功回执携带真实 `message_id`，使 Hermes 清除
+  `last_delivery_unverified`。
+
+
 ## [0.16.2] - 2026-09-20
 
 ### 修复

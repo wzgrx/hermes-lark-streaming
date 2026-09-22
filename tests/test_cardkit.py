@@ -343,6 +343,18 @@ class TestBuildStreamingCardV2:
         assert card["config"]["streaming_mode"] is True
         assert card["body"]["elements"]
 
+    def test_loading_anchor_has_persistent_visible_content(self) -> None:
+        card = build_streaming_card_v2(
+            show_tool_use=False,
+            show_reasoning=False,
+            show_streaming_element=False,
+        )
+        assert len(card["body"]["elements"]) == 1
+        loading = card["body"]["elements"][0]
+        assert loading["element_id"] == "loading_icon"
+        assert loading["content"].strip()
+        assert "custom_icon" not in str(loading)
+
     def test_with_tool_steps(self) -> None:
         card = build_streaming_card_v2(tool_steps=[_STEP_RUNNING], elapsed_ms=100)
         assert any(e.get("element_id") == TOOL_PANEL_ELEMENT_ID for e in card["body"]["elements"])
