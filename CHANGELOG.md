@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Mark Hermes' native stream consumer as intentionally unfed when CardKit owns a delta, eliminating the core's false "possible duplicate send" warning without suppressing the native fallback path.
+
 ### 修复
 
 - Hermes keyless/synthetic turn 缺少 transport message_id 时静默交回原生投递，并记录脱敏指标；不再把预期兼容路径误报成 Gateway warning。
