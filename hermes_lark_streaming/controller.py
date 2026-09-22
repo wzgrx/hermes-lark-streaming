@@ -186,7 +186,11 @@ class StreamCardController(StreamingController):
         if not self.enabled:
             return
         if not message_id:
-            _logger.warning("on_message_started: missing message_id, chat=%s", chat_id[:12])
+            # Hermes permits keyless/synthetic turns. Without a transport message id
+            # CardKit has no safe reply anchor, so native delivery intentionally owns
+            # the turn. This is an expected compatibility path, not a warning.
+            metrics.increment("session.keyless_native_fallback")
+            _logger.debug("on_message_started: keyless turn uses native delivery, chat=%s", chat_id[:12])
             return
         if message_id in self._sessions:
             return

@@ -136,9 +136,14 @@ def test_on_message_started_ignores_missing_message_id(message_id: str | None) -
     ctrl = StreamCardController()
     _enable(ctrl)
 
-    ctrl.on_message_started(message_id=message_id, chat_id="chat")
+    with patch.object(controller_module._logger, "warning") as warning, patch.object(
+        controller_module.metrics, "increment"
+    ) as increment:
+        ctrl.on_message_started(message_id=message_id, chat_id="chat")
 
     assert ctrl._sessions == {}
+    warning.assert_not_called()
+    increment.assert_called_once_with("session.keyless_native_fallback")
 
 
 def test_on_message_started_registers_anchor_alias_and_cleanup() -> None:

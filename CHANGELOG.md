@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 修复
 
+- Hermes keyless/synthetic turn 缺少 transport message_id 时静默交回原生投递，并记录脱敏指标；不再把预期兼容路径误报成 Gateway warning。
 - CardKit sequence 仅在 API 成功后提交；失败的 batch/stream/close/update 重试复用同一
   sequence，避免一次缺失元素把后续 close/update 推入持续 300317 冲突。
 - 初始 loading anchor 改为带可见文本的稳定元素，避免服务端接受建卡后裁掉空白
