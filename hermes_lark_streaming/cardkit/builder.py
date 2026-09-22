@@ -20,7 +20,6 @@ REASONING_ELEMENT_ID = "reasoning_content"
 REASONING_TEXT_ELEMENT_ID = "reasoning_text"
 TOOL_PANEL_ELEMENT_ID = "tool_panel"
 _LOADING_ELEMENT_ID = "loading_icon"
-_LOADING_IMG_KEY = "img_v3_02vb_496bec09-4b43-4773-ad6b-0cdd103cd2bg"
 
 
 def _collapsible_panel(
@@ -94,14 +93,19 @@ def _build_header(status: str) -> dict[str, Any]:
 
 
 def _loading_element() -> dict:
+    """Build a stable insertion anchor that CardKit keeps in its element tree.
+
+    A blank markdown element whose only visible payload was a custom icon could be
+    accepted at card creation but omitted from the server-side element tree. Later
+    add_elements calls then failed with 300315 for loading_icon. Keep real text in
+    the anchor; the terminal full-card update removes it.
+    """
+    en_text = "⏳ Processing…"
+    zh_text = "⏳ 正在处理…"
     return {
         "tag": "markdown",
-        "content": " ",
-        "icon": {
-            "tag": "custom_icon",
-            "img_key": _LOADING_IMG_KEY,
-            "size": "16px 16px",
-        },
+        "content": en_text,
+        "i18n_content": _i18n(en_text, zh_text),
         "element_id": _LOADING_ELEMENT_ID,
     }
 

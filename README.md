@@ -15,7 +15,7 @@
 
 ## Cron 投递证据
 
-现代 Hermes Cron 钩子会等待 CardKit 返回真实 `message_id`，再把结构化回执交回调度器。成功卡片会清除 `last_delivery_unverified`；旧版只有布尔值的回执仍标记为未核验，不会被静默当成有证据的成功。
+现代 Hermes Cron 钩子会等待 CardKit 返回真实 `message_id`，再把结构化回执交回调度器。成功卡片会清除 `last_delivery_unverified`；旧版只有布尔值的回执仍标记为未核验，不会被静默当成有证据的成功。流式 API 的 sequence 只在成功后提交；300315 缺失 loading anchor 会执行一次有界重建，从根源阻断后续 300317 序号冲突。
 
 ## 功能
 
@@ -35,7 +35,7 @@
 - **复盘收纳** — Self-improvement/background review 通知在完成前到达时合并进终态卡片
 - **崩溃安全投递** — 稳定 UUID + `delivered/not_sent/unknown` 台账，避免网络超时后重复答案
 - **Hermes 原生观测** — 兼容 0.21.3/main 的流、工具、审批 hooks；CardKit 仍由单一 owner 投递
-- **300313 自愈** — 元素可见性有界重试 + 缺失元素立即串行重建，避免卡住和重试风暴
+- **元素/序号自愈** — 300313 元素可见性有界重试、300315 loading anchor 单次重建、失败 sequence 原位重试，避免连锁 300317
 - **多语言** — 卡片文本（状态、工具面板、思考标签等）内置中英双语，根据飞书客户端语言自动切换
 
 ---
@@ -52,7 +52,7 @@
 
 ## 运行要求
 
-- Hermes `>= 0.14.0`（2026.5.16）已安装并配置飞书平台
+- Hermes `>= 0.21.3`（本 fork 的固定兼容矩阵为 `v2026.9.11`、`v2026.9.14` 与当前 `main`）并已配置飞书平台；旧版单文件布局仅保留兼容代码，不列入当前发布门禁
 - `Python >= 3.11`
 - `lark-oapi >= 1.7.3` — 飞书/Lark 官方 Python SDK
 - `PyYAML >= 6.0` — YAML 解析库

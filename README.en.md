@@ -15,7 +15,7 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 
 ## Cron delivery evidence
 
-The modern Hermes Cron hook waits for CardKit to return a real `message_id` and passes a structured receipt back to the scheduler. Successful cards clear `last_delivery_unverified`; legacy boolean-only receipts remain explicitly unverified.
+The modern Hermes Cron hook waits for CardKit to return a real `message_id` and passes a structured receipt back to the scheduler. Successful cards clear `last_delivery_unverified`; legacy boolean-only receipts remain explicitly unverified. Streaming API sequences are committed only after success; a missing 300315 loading anchor gets one bounded rebuild so it cannot cascade into 300317 sequence conflicts.
 
 ## Features
 
@@ -28,6 +28,7 @@ The modern Hermes Cron hook waits for CardKit to return a real `message_id` and 
 - **Card style** — Configurable card header/footer toggle and body/footer text sizes
 - **Crash-safe delivery** — Stable UUIDs and a `delivered/not_sent/unknown` ledger prevent duplicate answers after ambiguous timeouts
 - **Native Hermes observation** — Uses 0.21.3/main stream/tool/approval hooks for metrics while preserving one CardKit delivery owner
+- **Element/sequence recovery** — Bounded 300313 visibility retries, one 300315 loading-anchor rebuild, and commit-on-success sequences prevent cascading 300317 conflicts
 - **Message guard** — Auto-terminates updates when message is deleted/recalled
 - **Image resolution** — Detects markdown image references, downloads and re-uploads as Feishu img_key
 - **Abort handling** — Gracefully handles `/stop` command and message interrupts with aborted state card and automatic new session
@@ -49,7 +50,7 @@ When long conversations or excessive tool steps cause the card to approach Feish
 
 ## Requirements
 
-- Hermes `>= 0.14.0` (2026.5.16) with Feishu/Lark platform configured
+- Hermes `>= 0.21.3` (this fork gates `v2026.9.11`, `v2026.9.14`, and current `main`) with Feishu/Lark configured; legacy single-file support remains best-effort and is outside the release gate
 - `Python >= 3.11`
 - `lark-oapi >= 1.7.3` — Feishu/Lark official Python SDK
 - `PyYAML >= 6.0` — YAML parser

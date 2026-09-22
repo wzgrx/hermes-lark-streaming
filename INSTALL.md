@@ -6,7 +6,7 @@ human following the commands verbatim.
 
 ## Requirements
 
-- Hermes Agent `>= 0.14.0` is installed and the `hermes` command is on `PATH`
+- Hermes Agent `>= 0.21.3` is installed and the `hermes` command is on `PATH`
   (`hermes --version` works).
 - If `hermes` is not on `PATH`, stop — fix the Hermes installation first.
 
@@ -146,7 +146,7 @@ hermes gateway restart
 |---|---|---|
 | `ModuleNotFoundError: hermes_lark_streaming` | Plugin not installed in the Python you used | Reinstall using the exact `HERMES_PYTHON` from Step 1 |
 | `status` shows `warning: running under ...` | CLI invoked with wrong interpreter | Rerun with the `$HERMES_PYTHON` path shown in the warning |
-| `verify` reports `Incompatible:` | Hermes version unsupported or changed anchors | Check Hermes version `>= 0.14.0`; wait for a plugin update |
+| `verify` reports `Incompatible:` | Hermes version unsupported or changed anchors | Check Hermes version `>= 0.21.3`; wait for a plugin update |
 | `gateway/run.py not found` | Hermes install layout not recognized | Run `cat "$(which hermes)"` to find the venv, then set `HERMES_PYTHON` manually |
 | Credentials `MISSING` in `status` | Env vars / config not set, or not persisted | Complete Step 4; ensure credentials are in `~/.hermes/.env` or `config.yaml`, then restart the gateway |
 | Gateway fails to load plugin after restart | Plugin installed into the wrong venv | Confirm `status` shows no warning before restarting |
