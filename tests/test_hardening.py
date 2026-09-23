@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -187,6 +188,56 @@ def test_metrics_cli_reads_persisted_snapshot(capsys) -> None:
     output = json.loads(capsys.readouterr().out)
     assert output["counters"]["card.cli_test"] >= 1
     assert output["schema"] == 1
+
+
+def test_metrics_cli_marks_snapshot_from_previous_gateway_stale(capsys, monkeypatch) -> None:
+    metrics_module.metrics.persist()
+    monkeypatch.setattr(metrics_module, "_gateway_runtime_identity", lambda: (os.getpid() + 1, 123))
+
+    assert _cmd_metrics() == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["snapshot_status"] == "stale"
+    assert output["pid"] == os.getpid()
+
+
+def test_metrics_cli_marks_matching_gateway_snapshot_current(capsys, monkeypatch) -> None:
+    metrics_module.metrics.persist()
+    snapshot = metrics_module.metrics.load_persisted()
+    assert snapshot is not None
+    monkeypatch.setattr(
+        metrics_module,
+        "_gateway_runtime_identity",
+        lambda: (snapshot["pid"], snapshot["process_start_time"]),
+    )
+
+    assert _cmd_metrics() == 0
+    assert json.loads(capsys.readouterr().out)["snapshot_status"] == "current"
+
+
+def test_metrics_cli_rejects_reused_gateway_pid(capsys, monkeypatch) -> None:
+    metrics_module.metrics.persist()
+    snapshot = metrics_module.metrics.load_persisted()
+    assert snapshot is not None
+    monkeypatch.setattr(
+        metrics_module,
+        "_gateway_runtime_identity",
+        lambda: (snapshot["pid"], snapshot["process_start_time"] + 1),
+    )
+
+    assert _cmd_metrics() == 0
+    assert json.loads(capsys.readouterr().out)["snapshot_status"] == "stale"
+
+
+def test_metrics_cli_marks_legacy_or_unreachable_gateway_unverified(capsys, monkeypatch) -> None:
+    metrics_module.metrics.persist()
+    snapshot = metrics_module.metrics.load_persisted()
+    assert snapshot is not None
+    snapshot.pop("process_start_time", None)
+    metrics_module.metrics.path.write_text(json.dumps(snapshot), encoding="utf-8")
+    monkeypatch.setattr(metrics_module, "_gateway_runtime_identity", lambda: None)
+
+    assert _cmd_metrics() == 0
+    assert json.loads(capsys.readouterr().out)["snapshot_status"] == "unverified"
 
 
 def test_metrics_cli_selects_sidecar_without_masking_gateway(capsys, monkeypatch) -> None:

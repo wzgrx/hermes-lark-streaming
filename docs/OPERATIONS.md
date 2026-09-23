@@ -17,8 +17,12 @@ error-code bucket, for example `api.cardkit_stream_element.error_code.300309`
 (stream already closed), `.300313` (element missing), `.300317` (sequence
 conflict), or `.other`. Compare these with the corresponding `attempt` and
 `success` counters before changing retry behavior. The metrics command reads
-the last persisted gateway snapshot, so check `started_at` and `updated_at`
-before treating it as the current process. `process_role` must be `gateway`;
+the last persisted gateway snapshot. `snapshot_status=current` means its PID and
+process-start fingerprint match the host-verified live Gateway;
+`snapshot_status=stale` means an older Gateway wrote it, and
+`snapshot_status=unverified` means the host identity or a legacy fingerprint is
+missing. In the latter two cases, do not interpret error counters as current.
+Also check `started_at` and `updated_at`. `process_role` must be `gateway`;
 the `--sidecar` selector reads a separate sidecar snapshot. Error counts include individual
 retry attempts, not just failed cards.
 Active Gateway cards now publish a best-effort snapshot at creation and at most

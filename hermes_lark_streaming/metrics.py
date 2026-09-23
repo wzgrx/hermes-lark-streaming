@@ -15,6 +15,39 @@ from typing import Any
 _logger = logging.getLogger("hermes_lark_streaming")
 
 
+def _process_start_time(pid: int) -> int | None:
+    """Linux process fingerprint, comparable with Hermes gateway_state.json."""
+    try:
+        return int(Path(f"/proc/{pid}/stat").read_text(encoding="utf-8").split()[21])
+    except (IndexError, OSError, ValueError):
+        return None
+
+
+def _gateway_runtime_identity() -> tuple[int, int] | None:
+    """Ask the host to verify the live Gateway, including its PID-reuse guard."""
+    try:
+        from gateway.status import get_process_start_time, live_gateway_pid_for_home  # type: ignore[import-not-found]
+
+        home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
+        pid = live_gateway_pid_for_home(home)
+        start_time = get_process_start_time(pid) if pid is not None else None
+    except Exception:
+        return None
+    return (pid, start_time) if pid is not None and start_time is not None else None
+
+
+def gateway_snapshot_status(snapshot: dict[str, Any]) -> str:
+    """Classify a persisted snapshot without presenting an old PID as current."""
+    pid = snapshot.get("pid")
+    start_time = snapshot.get("process_start_time")
+    if type(pid) is not int or type(start_time) is not int:
+        return "unverified"
+    identity = _gateway_runtime_identity()
+    if identity is None:
+        return "unverified"
+    return "current" if identity == (pid, start_time) else "stale"
+
+
 class MetricsStore:
     """Small in-process counter/latency store with an atomic JSON snapshot.
 
@@ -85,6 +118,8 @@ class MetricsStore:
             return {
                 "schema": 1,
                 "process_role": self._role,
+                "pid": os.getpid(),
+                "process_start_time": _process_start_time(os.getpid()),
                 "started_at": self._started_at,
                 "updated_at": time.time(),
                 "uptime_sec": round(time.time() - self._started_at, 3),

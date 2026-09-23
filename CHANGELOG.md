@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 修复
 
+- `metrics` 输出新增 `snapshot_status`：通过 Gateway PID 与启动指纹识别重启后
+  遗留的旧快照；旧格式或无法核验的宿主状态标为 `unverified`，避免把历史错误计数
+  当作当前进程的故障。
 - 活跃卡片现在以限频、原子方式持久化 Gateway 指标，不必等长任务结束才看到
   `300309`/`300313` 等错误码；同进程快照串行写入，终态快照不受限频影响，
   指标文件写入失败只影响观测而不中断卡片投递。

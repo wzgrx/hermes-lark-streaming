@@ -271,7 +271,7 @@ def _cmd_doctor() -> int:
 def _cmd_metrics() -> int:
     import json
 
-    from .metrics import metrics
+    from .metrics import gateway_snapshot_status, metrics
 
     role = "sidecar" if "--sidecar" in sys.argv[2:] else "gateway"
     snapshot = metrics.load_persisted(role=role)
@@ -281,6 +281,8 @@ def _cmd_metrics() -> int:
             "detail": f"No readable persisted {role} metrics snapshot",
         }, ensure_ascii=False))
         return 1
+    if role == "gateway":
+        snapshot["snapshot_status"] = gateway_snapshot_status(snapshot)
     print(json.dumps(snapshot, ensure_ascii=False, indent=2))
     return 0
 
