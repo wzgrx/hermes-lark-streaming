@@ -7,9 +7,13 @@ Usage:
 from __future__ import annotations
 
 import ast
+import hashlib
+import io
 import logging
+import os
 import shutil
 import subprocess
+import tempfile
 import textwrap
 import urllib.request
 from pathlib import Path
@@ -35,88 +39,104 @@ from hermes_lark_streaming.patcher import (
     _tool_hook,
 )
 
-RUN_SRC = Path.home() / ".hermes" / "hermes-agent" / "gateway" / "run.py"
-RUN_BAK = RUN_SRC.with_suffix(RUN_SRC.suffix + ".hermes_lark.bak")
 SAMPLES_DIR = Path(__file__).parent / "samples"
 SAMPLE_RUN = SAMPLES_DIR / "run.py"
-
-# These tests exercise the legacy monolithic patcher. Latest main is modular;
-# its compatibility is covered separately in test_modular_patcher.py.
-LEGACY_REV = "63279301bcbdc185c1b07b98a9312eb0c862f26d"
-_RUN_URL = f"https://raw.githubusercontent.com/NousResearch/hermes-agent/{LEGACY_REV}/gateway/run.py"
-_CRON_URL = f"https://raw.githubusercontent.com/NousResearch/hermes-agent/{LEGACY_REV}/cron/scheduler.py"
-
-CRON_SRC = Path.home() / ".hermes" / "hermes-agent" / "cron" / "scheduler.py"
-CRON_BAK = CRON_SRC.with_suffix(CRON_SRC.suffix + ".hermes_lark.bak")
 SAMPLE_CRON = SAMPLES_DIR / "scheduler.py"
+HERMES_REPO = Path.home() / ".hermes" / "hermes-agent"
 
-def _ensure_sample() -> Path:
-    if (RUN_SRC.parent / "run_turn_runner.py").exists():
-        return _pinned_legacy_sample("gateway/run.py", SAMPLE_RUN, _RUN_URL)
-    src = RUN_BAK if RUN_BAK.exists() else RUN_SRC
-    SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
-    if src.exists():
-        shutil.copy2(src, SAMPLE_RUN)
-        return SAMPLE_RUN
-    # CI fallback: download from GitHub
-    try:
-        urllib.request.urlretrieve(_RUN_URL, SAMPLE_RUN)
-    except Exception as exc:
-        pytest.skip(f"run.py not found locally and download failed: {exc}")
-    if not SAMPLE_RUN.exists() or SAMPLE_RUN.stat().st_size == 0:
-        pytest.skip("run.py download returned empty file")
-    return SAMPLE_RUN
+# Legacy monolithic patcher fixtures are pinned independently of the current
+# modular Hermes checkout. Changes to the installed gateway cannot change the
+# regression baseline or make these tests silently skip in CI.
+LEGACY_REV = "63279301bcbdc185c1b07b98a9312eb0c862f26d"
+LEGACY_SHA256 = {
+    "gateway/run.py": "0e86f4db0a0b3628d09dd6382974115945136bfbedc7cc7078d062e4aabcab19",
+    "cron/scheduler.py": "51af6692a2483605275c5d996bb54689f475c2da502bef85825514dd815fa7da",
+}
 
 
-def _pinned_legacy_sample(relative: str, target: Path, url: str) -> Path:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(
-        ["git", "-C", str(RUN_SRC.parent.parent), "show", f"{LEGACY_REV}:{relative}"],
-        capture_output=True,
-    )
-    if result.returncode == 0:
-        target.write_bytes(result.stdout)
+def _legacy_sample(relative: str, target: Path) -> Path:
+    expected = LEGACY_SHA256[relative]
+    if target.exists():
+        data = target.read_bytes()
     else:
-        urllib.request.urlretrieve(url, target)
+        result = subprocess.run(
+            ["git", "-C", str(HERMES_REPO), "show", f"{LEGACY_REV}:{relative}"],
+            capture_output=True,
+            check=False,
+        ) if HERMES_REPO.is_dir() else None
+        if result is not None and result.returncode == 0:
+            data = result.stdout
+        else:
+            url = f"https://raw.githubusercontent.com/NousResearch/hermes-agent/{LEGACY_REV}/{relative}"
+            with urllib.request.urlopen(url, timeout=15) as response:
+                data = response.read()
+    if hashlib.sha256(data).hexdigest() != expected:
+        raise ValueError(f"Hermes legacy fixture checksum mismatch: {relative}")
+    if not target.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as output:
+                temporary = Path(output.name)
+                output.write(data)
+            os.replace(temporary, target)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
     return target
 
 
 @pytest.fixture()
 def run_copy(tmp_path: Path) -> Path:
-    src = _ensure_sample()
+    src = _legacy_sample("gateway/run.py", SAMPLE_RUN)
     dst = tmp_path / "run.py"
     shutil.copy2(src, dst)
-    # The installed repository may already carry the overlay in Git. Test
-    # installation against a clean disposable source, never against live files.
     Patcher(dst).remove()
     return dst
 
 
-def _ensure_cron_sample() -> Path:
-    if (CRON_SRC.parent / "scheduler_delivery.py").exists():
-        return _pinned_legacy_sample("cron/scheduler.py", SAMPLE_CRON, _CRON_URL)
-    src = CRON_BAK if CRON_BAK.exists() else CRON_SRC
-    SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
-    if src.exists():
-        shutil.copy2(src, SAMPLE_CRON)
-        return SAMPLE_CRON
-    try:
-        urllib.request.urlretrieve(_CRON_URL, SAMPLE_CRON)
-    except Exception as exc:
-        pytest.skip(f"scheduler.py not found locally and download failed: {exc}")
-    if not SAMPLE_CRON.exists() or SAMPLE_CRON.stat().st_size == 0:
-        pytest.skip("scheduler.py download returned empty file")
-    return SAMPLE_CRON
-
-
 @pytest.fixture()
 def scheduler_copy(tmp_path: Path) -> Path:
-    src = _ensure_cron_sample()
+    src = _legacy_sample("cron/scheduler.py", SAMPLE_CRON)
     dst = tmp_path / "scheduler.py"
     shutil.copy2(src, dst)
     CronPatcher(dst).remove()
     return dst
 
+
+
+def test_legacy_sample_reuses_only_verified_cache(tmp_path: Path) -> None:
+    target = tmp_path / "run.py"
+    target.write_bytes(b"corrupt")
+    with patch("urllib.request.urlopen") as download, pytest.raises(ValueError, match="checksum mismatch"):
+        _legacy_sample("gateway/run.py", target)
+    download.assert_not_called()
+    assert target.read_bytes() == b"corrupt"
+
+
+def test_legacy_sample_rejects_bad_download_without_cache(tmp_path: Path) -> None:
+    target = tmp_path / "run.py"
+    with (
+        patch("urllib.request.urlopen", return_value=io.BytesIO(b"bad")),
+        patch(__name__ + ".HERMES_REPO", tmp_path / "missing"),
+        pytest.raises(ValueError, match="checksum mismatch"),
+    ):
+        _legacy_sample("gateway/run.py", target)
+    assert not target.exists()
+
+
+def test_legacy_sample_publishes_verified_download(tmp_path: Path) -> None:
+    target = tmp_path / "nested" / "run.py"
+    payload = b"pinned fixture"
+    with (
+        patch.dict(LEGACY_SHA256, {"gateway/run.py": hashlib.sha256(payload).hexdigest()}),
+        patch("urllib.request.urlopen", return_value=io.BytesIO(payload)) as download,
+        patch(__name__ + ".HERMES_REPO", tmp_path / "missing"),
+    ):
+        assert _legacy_sample("gateway/run.py", target) == target
+    download.assert_called_once()
+    assert target.read_bytes() == payload
+    assert list(target.parent.iterdir()) == [target]
 
 def _patcher(path: Path) -> Patcher:
     return Patcher(run_path=path)
