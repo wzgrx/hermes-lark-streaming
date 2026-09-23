@@ -341,14 +341,31 @@ class DeliveryLedger:
     def summary(self) -> dict[str, Any]:
         with self._transaction():
             entries = self._read()
+        now = time.time()
         counts = {status.value: 0 for status in DeliveryStatus}
+        unresolved: list[DeliveryEntry] = []
+        expired_pending = 0
         for entry in entries.values():
             counts[entry.status.value] += 1
+            if entry.status in {DeliveryStatus.PENDING, DeliveryStatus.UNKNOWN}:
+                unresolved.append(entry)
+            if (
+                entry.status is DeliveryStatus.PENDING
+                and now - entry.created_at >= IDEMPOTENCY_RETRY_WINDOW_SEC
+            ):
+                expired_pending += 1
         return {
             "schema": self.SCHEMA,
             "path": str(self.path),
             "entries": len(entries),
             "counts": counts,
+            "unresolved_count": len(unresolved),
+            "unresolved_capacity_remaining": max(0, self.max_entries - len(unresolved)),
+            "oldest_unresolved_age_sec": (
+                max(0, int(now - min(entry.created_at for entry in unresolved)))
+                if unresolved else None
+            ),
+            "expired_pending_count": expired_pending,
         }
 
 

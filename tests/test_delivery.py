@@ -273,6 +273,26 @@ def test_unresolved_delivery_evidence_survives_age_and_capacity(
     assert restarted.get("old-unknown").status is DeliveryStatus.UNKNOWN
 
 
+def test_summary_reports_unresolved_capacity_and_expired_pending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ledger = DeliveryLedger(tmp_path / "delivery.json", max_entries=32)
+    now = time.time()
+    monkeypatch.setattr(time, "time", lambda: now - 4000)
+    ledger.begin("old-pending", "card.reply")
+    ledger.begin("old-unknown", "cron.card")
+    ledger.failed("old-unknown", DeliveryStatus.UNKNOWN)
+    monkeypatch.setattr(time, "time", lambda: now)
+
+    summary = ledger.summary()
+    assert summary["unresolved_count"] == 2
+    assert summary["unresolved_capacity_remaining"] == 30
+    assert summary["oldest_unresolved_age_sec"] == 4000
+    assert summary["expired_pending_count"] == 1
+    assert summary["counts"]["unknown"] == 1
+    assert "old-pending" not in json.dumps(summary)
+
+
 def test_unresolved_capacity_holds_new_send_without_erasing_evidence(tmp_path: Path) -> None:
     ledger = DeliveryLedger(tmp_path / "delivery.json", max_entries=32)
     for index in range(32):

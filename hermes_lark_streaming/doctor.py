@@ -10,7 +10,7 @@ import sys
 from typing import Any
 
 from .config import Config
-from .delivery import delivery_ledger
+from .delivery import DeliveryLedgerError, delivery_ledger
 from .metrics import metrics
 from .native_hooks import runtime_capability
 from .sdk import probe_channel_sdk, probe_lark_oapi
@@ -57,11 +57,30 @@ def build_report() -> dict[str, Any]:
     routing = cfg.bot_registry().diagnostics()
     if routing["enabled"]:
         add("multi-bot", all(bot["configured"] for bot in routing["bots"]), f"{routing['bot_count']} bot(s)")
+    try:
+        delivery = delivery_ledger.summary()
+    except DeliveryLedgerError as exc:
+        # Doctor is the repair entry point; a damaged ledger must remain
+        # untouched while the rest of the diagnostic report stays available.
+        add("delivery-ledger", False, str(exc))
+        delivery = {
+            "schema": delivery_ledger.SCHEMA,
+            "path": str(delivery_ledger.path),
+            "entries": None,
+            "counts": None,
+            "error": str(exc),
+        }
+    if delivery.get("unresolved_capacity_remaining") == 0:
+        add(
+            "delivery-ledger-capacity",
+            False,
+            "unresolved delivery evidence fills the ledger; inspect receipts before new sends",
+        )
     return {
         "schema": 1,
         "integration": {"strategy": "native-observer+ast" if native["available"] else "ast", **native},
         "sdk": {"lark_oapi": sdk, "channel_sdk": probe_channel_sdk()},
-        "delivery": delivery_ledger.summary(),
+        "delivery": delivery,
         "ok": all(item["ok"] for item in checks if item["name"] not in {"lark-cli", "native-observers"}),
         "checks": checks,
         "routing": routing,
@@ -82,7 +101,16 @@ def print_report(*, as_json: bool = False) -> int:
         print(f"Hermes Lark Streaming doctor: {'PASS' if report['ok'] else 'CHECK'}")
         for item in report["checks"]:
             print(f"  {'OK' if item['ok'] else '--'} {item['name']}: {item['detail']}")
-        print(f"  delivery ledger: {report['delivery']['entries']} entries at {report['delivery']['path']}")
+        delivery = report["delivery"]
+        if delivery.get("error"):
+            print(f"  delivery ledger: inspection required at {delivery['path']}")
+        else:
+            print(
+                f"  delivery ledger: {delivery['entries']} entries, "
+                f"{delivery['unresolved_count']} unresolved "
+                f"({delivery['unresolved_capacity_remaining']} slots remaining) "
+                f"at {delivery['path']}"
+            )
         print(f"  metrics: {report['metrics_path']}")
     return 0 if report["ok"] else 1
 

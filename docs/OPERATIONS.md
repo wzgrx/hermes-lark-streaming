@@ -127,7 +127,11 @@ outbound call. A verified receipt is reused without another send; a prior unknow
 outcome is held for inspection; a confirmed rejection permits a fresh UUID. An
 occurrence without both fields
 uses the immediate ambiguous-outcome guard but has no durable Cron dedup key.
-The ledger remains bounded to 1,024 entries or seven days, whichever comes first.
+The ledger retains unresolved attempts until a verified terminal outcome; only terminal
+entries expire after seven days. At 1,024 unresolved attempts, new sends are held while
+existing evidence remains intact. `doctor --json` reports the unresolved count, the oldest
+unresolved age, expired pending attempts, and remaining unresolved capacity without exposing
+message content or target identifiers.
 
 ## Native Hermes hooks
 
