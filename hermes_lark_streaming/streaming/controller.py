@@ -696,6 +696,18 @@ class StreamingController:
                 await self._reseed_card_after_missing_element(
                     session, segments, missing_el_id, operation="batch_update",
                 )
+            elif missing_el_id and any(
+                seg.type == SegmentType.REASONING
+                and seg.created
+                and seg.text_el_id == missing_el_id
+                for seg in segments[session.split_index :]
+            ):
+                # The panel still exists locally but CardKit pruned its nested
+                # text element. Re-adding only the panel ID would collide with
+                # the existing panel; reseed the whole card and replay instead.
+                await self._reseed_card_after_missing_element(
+                    session, segments, missing_el_id, operation="batch_update",
+                )
             elif missing_el_id:
                 for seg in segments[session.split_index :]:
                     if seg.el_id == missing_el_id and seg.created:

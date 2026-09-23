@@ -1601,6 +1601,43 @@ class TestDoFlush:
         assert session.anchor_recovery_attempts == 0
 
     @pytest.mark.asyncio
+    async def test_missing_nested_reasoning_text_in_batch_reseeds_card(self) -> None:
+        ctrl = _setup_ctrl()
+        client = ctrl._client
+        session = _make_session("msg_reasoning_nested")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_reasoning_nested"
+        session.card_msg_id = "msg_reasoning_nested_card"
+        session.segment_state.on_reasoning_delta("reasoning")
+        seg = session.segment_state.segments[0]
+        seg.created = True
+        seg.elapsed_ms = 1500.0
+        seg.element_estimate = estimate_segment_elements(seg, session.tool_use.build_display_steps())
+        session.element_count = 1 + seg.element_estimate
+        ctrl._sessions[session.message_id] = session
+        client.cardkit_batch_update = AsyncMock(
+            side_effect=[
+                FeishuAPIError(
+                    f"cardkit_batch_update: code=300313, msg=not find elementID : {seg.text_el_id};",
+                    300313,
+                ),
+                None,
+            ]
+        )
+
+        await ctrl._do_flush(session)
+        assert session.anchor_recovery_attempts == 1
+        assert seg.created is False
+        assert seg.reasoning_finalized is False
+        client.cardkit_update.assert_awaited_once()
+
+        await ctrl._do_flush(session)
+        assert seg.created is True
+        assert seg.dirty is False
+        assert session.sequence == 4
+        assert client.cardkit_batch_update.await_count == 2
+
+    @pytest.mark.asyncio
     async def test_stream_failure_does_not_advance_sequence(self) -> None:
         ctrl = _setup_ctrl()
         session = _make_session("msg_stream_seq")

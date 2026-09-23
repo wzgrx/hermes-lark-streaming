@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 修复
 
-- CardKit `stream_element` 若遇到服务端丢失答案或推理文本元素，现在有界重建当前卡片并重放本地 segments；新卡重置恢复额度，重复失败转入既有文本兜底。这补齐了上游 #98/#114 只处理 batch/锚点路径的缺口。
+- CardKit `stream_element` 遇到服务端丢失答案或推理文本元素、或 batch 更新发现推理面板内的文本元素丢失时，有界重建当前卡片并重放本地 segments；新卡重置恢复额度，重复失败转入既有文本兜底。这补齐了上游 #98/#114 的剩余元素路径。
 - 未确认的卡片/Cron 投递记录现在优先保留，不受七天终态清理影响；飞书 UUID
   一小时去重窗口前停止自动重试，防止过期 UUID 再次生成可见消息。
 - `doctor` 在投递台账损坏时继续提供其余诊断且原文件保持不变；新增未确认记录
