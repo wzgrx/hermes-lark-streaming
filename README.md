@@ -15,7 +15,9 @@
 
 ## Cron 投递证据
 
-现代 Hermes Cron 钩子会等待 CardKit 返回真实 `message_id`，再把结构化回执交回调度器。成功卡片会清除 `last_delivery_unverified`；旧版只有布尔值的回执仍标记为未核验，不会被静默当成有证据的成功。流式 API 的 sequence 只在成功后提交；300315 缺失 loading anchor 会执行一次有界重建，从根源阻断后续 300317 序号冲突。
+现代 Hermes Cron 钩子会等待 CardKit 返回真实 `message_id`，再把结构化回执交回调度器。成功卡片会清除 `last_delivery_unverified`；旧版只有布尔值的回执仍标记为未核验，不会被静默当成有证据的成功。
+
+流式 API 的 sequence 只在成功后提交。服务端丢失 loading anchor、答案文本、推理文本或推理面板内部文本元素时，插件至多重建当前卡片一次并重放本地 segments；新卡独立计算恢复额度，持续失败则进入 Hermes 文本兜底，避免连续 300313/300315/300317。
 
 ## 功能
 
@@ -35,7 +37,7 @@
 - **复盘收纳** — Self-improvement/background review 通知在完成前到达时合并进终态卡片
 - **崩溃安全投递** — 稳定 UUID + `delivered/not_sent/unknown` 台账，避免网络超时后重复答案
 - **Hermes 原生观测** — 兼容 0.21.3/main 的流、工具、审批 hooks；CardKit 仍由单一 owner 投递
-- **元素/序号自愈** — 300313 元素可见性有界重试、300315 loading anchor 单次重建、失败 sequence 原位重试，避免连锁 300317
+- **元素/序号自愈** — 300313 元素可见性有界重试，loading anchor 与流式/嵌套文本丢失时单次重建并重放，失败 sequence 原位重试，避免连锁 300317
 - **多语言** — 卡片文本（状态、工具面板、思考标签等）内置中英双语，根据飞书客户端语言自动切换
 
 ---

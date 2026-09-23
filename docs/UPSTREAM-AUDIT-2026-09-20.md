@@ -1,4 +1,4 @@
-# 上游 Issue / PR 审计（复核于 2026-09-22）
+# 上游 Issue / PR 审计（复核于 2026-09-23）
 
 对象：[`Cheerwhy/hermes-lark-streaming`](https://github.com/Cheerwhy/hermes-lark-streaming)。本表记录当日仍开放的项目以及本 fork 中的可验证对应实现。
 
@@ -10,7 +10,7 @@
 | [#109 流式 MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/issues/109) | 已覆盖 | 保留原始 answer delta，follow-up/失败路径由插件补投，正文移除内部指令。 |
 | [#106 clarify 签名](https://github.com/Cheerwhy/hermes-lark-streaming/issues/106) | 已覆盖 | `functools.wraps` + `*args/**kwargs`，适配 2/3 参和 batch clarify。 |
 | [#105 模块化 Gateway](https://github.com/Cheerwhy/hermes-lark-streaming/issues/105) | 已覆盖 | `ModularPatcher` 跨 `run_inbound/run_turn/run_turn_runner/run_busy`，预编译、原子发布和回滚。 |
-| [#98 CardKit 300313](https://github.com/Cheerwhy/hermes-lark-streaming/issues/98) | 已加强 | 元素流更新 200/400/800ms 有界重试；batch 缺失元素回滚计数与 created 快照，通过 FlushController 互斥队列立即重刷。本地日志另发现 300315 loading anchor 被服务端裁掉后引发 300317 序号冲突，现以可见 anchor、成功后提交 sequence 和一次有界重建处理。 |
+| [#98 CardKit 300313](https://github.com/Cheerwhy/hermes-lark-streaming/issues/98) | 已加强 | 元素流更新 200/400/800ms 有界重试；batch 缺失 segment 回滚计数与 created 快照。loading anchor、答案/推理流式文本、batch 中的推理面板内文本丢失时，有界重建整卡并重放当前 segments；新卡重置恢复额度，重复失败转文本兜底。sequence 仅在成功后提交，避免连锁 300317。回归测试覆盖这些路径。 |
 | [#82 其他消息类型](https://github.com/Cheerwhy/hermes-lark-streaming/issues/82) | 已覆盖核心场景 | 后台复盘合并进最终卡片；审批保留 Hermes 原生按钮/回调，插件负责暂停旧流并在工具结束后换卡继续。 |
 
 ## 最新上游变化
@@ -29,6 +29,7 @@
 | [#108 split gateway](https://github.com/Cheerwhy/hermes-lark-streaming/pull/108) | 重新实现为原子多文件 patch plan，并对 `v2026.9.11` / `v2026.9.14` / `main` 跑兼容矩阵。 |
 | [#110 流式 MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/pull/110) | 已吸收并补上 inline image / duplicate suppression。 |
 | [#112 cron MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/pull/112) | 已吸收 cron 透传和 image message 路由。 |
+| [#114 CardKit anchor/sequence](https://github.com/Cheerwhy/hermes-lark-streaming/pull/114) | 已吸收成功后提交 sequence 与 loading anchor 恢复，并继续补齐流式/嵌套文本丢失路径。 |
 
 ## 审计原则
 

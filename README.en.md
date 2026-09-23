@@ -15,7 +15,9 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 
 ## Cron delivery evidence
 
-The modern Hermes Cron hook waits for CardKit to return a real `message_id` and passes a structured receipt back to the scheduler. Successful cards clear `last_delivery_unverified`; legacy boolean-only receipts remain explicitly unverified. Streaming API sequences are committed only after success; a missing 300315 loading anchor gets one bounded rebuild so it cannot cascade into 300317 sequence conflicts.
+The modern Hermes Cron hook waits for CardKit to return a real `message_id` and passes a structured receipt back to the scheduler. Successful cards clear `last_delivery_unverified`; legacy boolean-only receipts remain explicitly unverified.
+
+Streaming API sequences are committed only after success. If the server loses the loading anchor, answer or reasoning stream element, or nested reasoning text element, the plugin rebuilds the current card at most once and replays local segments. A replacement card gets its own recovery budget; repeated failure enters the Hermes text fallback instead of cascading through 300313/300315/300317 errors.
 
 ## Features
 
@@ -28,7 +30,7 @@ The modern Hermes Cron hook waits for CardKit to return a real `message_id` and 
 - **Card style** — Configurable card header/footer toggle and body/footer text sizes
 - **Crash-safe delivery** — Stable UUIDs and a `delivered/not_sent/unknown` ledger prevent duplicate answers after ambiguous timeouts
 - **Native Hermes observation** — Uses 0.21.3/main stream/tool/approval hooks for metrics while preserving one CardKit delivery owner
-- **Element/sequence recovery** — Bounded 300313 visibility retries, one 300315 loading-anchor rebuild, and commit-on-success sequences prevent cascading 300317 conflicts
+- **Element/sequence recovery** — Bounded 300313 visibility retries; one rebuild and replay for a missing loading anchor or streamed/nested text; commit-on-success sequences prevent cascading 300317 conflicts
 - **Message guard** — Auto-terminates updates when message is deleted/recalled
 - **Image resolution** — Detects markdown image references, downloads and re-uploads as Feishu img_key
 - **Abort handling** — Gracefully handles `/stop` command and message interrupts with aborted state card and automatic new session
