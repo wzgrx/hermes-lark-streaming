@@ -8,14 +8,12 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import io
 import logging
 import os
 import shutil
 import subprocess
 import tempfile
 import textwrap
-import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -62,17 +60,20 @@ def _legacy_sample(relative: str, target: Path) -> Path:
     if target.exists():
         data = target.read_bytes()
     else:
+        if not HERMES_REPO.is_dir():
+            raise FileNotFoundError(
+                "pinned Hermes legacy fixture checkout missing; set HERMES_LEGACY_SOURCE"
+            )
         result = subprocess.run(
             ["git", "-C", str(HERMES_REPO), "show", f"{LEGACY_REV}:{relative}"],
             capture_output=True,
             check=False,
-        ) if HERMES_REPO.is_dir() else None
-        if result is not None and result.returncode == 0:
-            data = result.stdout
-        else:
-            url = f"https://raw.githubusercontent.com/NousResearch/hermes-agent/{LEGACY_REV}/{relative}"
-            with urllib.request.urlopen(url, timeout=15) as response:
-                data = response.read()
+        )
+        if result.returncode != 0:
+            raise FileNotFoundError(
+                f"pinned Hermes legacy fixture revision missing: {LEGACY_REV}:{relative}"
+            )
+        data = result.stdout
     if hashlib.sha256(data).hexdigest() != expected:
         raise ValueError(f"Hermes legacy fixture checksum mismatch: {relative}")
     if not target.exists():
@@ -111,33 +112,37 @@ def scheduler_copy(tmp_path: Path) -> Path:
 def test_legacy_sample_reuses_only_verified_cache(tmp_path: Path) -> None:
     target = tmp_path / "run.py"
     target.write_bytes(b"corrupt")
-    with patch("urllib.request.urlopen") as download, pytest.raises(ValueError, match="checksum mismatch"):
+    with pytest.raises(ValueError, match="checksum mismatch"):
         _legacy_sample("gateway/run.py", target)
-    download.assert_not_called()
     assert target.read_bytes() == b"corrupt"
 
 
-def test_legacy_sample_rejects_bad_download_without_cache(tmp_path: Path) -> None:
+def test_legacy_sample_requires_pinned_checkout_without_cache(tmp_path: Path) -> None:
     target = tmp_path / "run.py"
     with (
-        patch("urllib.request.urlopen", return_value=io.BytesIO(b"bad")),
         patch(__name__ + ".HERMES_REPO", tmp_path / "missing"),
-        pytest.raises(ValueError, match="checksum mismatch"),
+        pytest.raises(FileNotFoundError, match="HERMES_LEGACY_SOURCE"),
     ):
         _legacy_sample("gateway/run.py", target)
     assert not target.exists()
 
 
-def test_legacy_sample_publishes_verified_download(tmp_path: Path) -> None:
+def test_legacy_sample_publishes_verified_checkout(tmp_path: Path) -> None:
     target = tmp_path / "nested" / "run.py"
+    repo = tmp_path / "legacy-checkout"
+    repo.mkdir()
     payload = b"pinned fixture"
     with (
         patch.dict(LEGACY_SHA256, {"gateway/run.py": hashlib.sha256(payload).hexdigest()}),
-        patch("urllib.request.urlopen", return_value=io.BytesIO(payload)) as download,
-        patch(__name__ + ".HERMES_REPO", tmp_path / "missing"),
+        patch("subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=payload)) as show,
+        patch(__name__ + ".HERMES_REPO", repo),
     ):
         assert _legacy_sample("gateway/run.py", target) == target
-    download.assert_called_once()
+    show.assert_called_once_with(
+        ["git", "-C", str(repo), "show", f"{LEGACY_REV}:gateway/run.py"],
+        capture_output=True,
+        check=False,
+    )
     assert target.read_bytes() == payload
     assert list(target.parent.iterdir()) == [target]
 
