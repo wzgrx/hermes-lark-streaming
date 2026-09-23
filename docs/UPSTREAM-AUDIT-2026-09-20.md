@@ -17,7 +17,7 @@
 
 - [#113](https://github.com/Cheerwhy/hermes-lark-streaming/pull/113) 已于 2026-09-22 合并并发布上游 v0.13.0，要求 Hermes 0.21.1 split layout。
 - 本 fork 保留原子多文件补丁、doctor/metrics、投递台账、多 bot、CardKit 限额紧缩和供应链门禁，因此按行为吸收上游 anchor/签名变化，而非用上游简化版覆盖维护功能。
-- 当前发布门禁以 Hermes 0.21.3 固定版本和最新 main 为准。
+- 当前发布门禁覆盖 Hermes 0.21.3、0.21.4 固定版本和最新 main；本机运行 0.21.4。
 
 ## Open PRs
 
@@ -26,7 +26,7 @@
 | [#102 主文本回调](https://github.com/Cheerwhy/hermes-lark-streaming/pull/102) | AST 按 `_stream_consumer.on_delta` 语义选主回调，排除 TTS-only fallback，双回调 fixture 回归测试。 |
 | [#103 CLI env](https://github.com/Cheerwhy/hermes-lark-streaming/pull/103) | CLI 调用 Hermes 官方 dotenv 加载路径，`status` 在子进程也看到 profile 凭据。 |
 | [#107 clarify](https://github.com/Cheerwhy/hermes-lark-streaming/pull/107) | 签名透传、完整异常日志、modular hook 已覆盖。 |
-| [#108 split gateway](https://github.com/Cheerwhy/hermes-lark-streaming/pull/108) | 重新实现为原子多文件 patch plan，并对 `v2026.9.11` / `v2026.9.14` / `main` 跑兼容矩阵。 |
+| [#108 split gateway](https://github.com/Cheerwhy/hermes-lark-streaming/pull/108) | 重新实现为原子多文件 patch plan，并对 `v2026.9.11` / `v2026.9.14` / `v2026.9.21` / `main` 跑兼容矩阵。 |
 | [#110 流式 MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/pull/110) | 已吸收并补上 inline image / duplicate suppression。 |
 | [#112 cron MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/pull/112) | 已吸收 cron 透传和 image message 路由。 |
 | [#114 CardKit anchor/sequence](https://github.com/Cheerwhy/hermes-lark-streaming/pull/114) | 已吸收成功后提交 sequence 与 loading anchor 恢复，并继续补齐流式/嵌套文本丢失路径。 |
