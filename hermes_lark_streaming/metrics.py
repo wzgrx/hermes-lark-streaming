@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import threading
 import time
 from collections import defaultdict
@@ -77,9 +78,20 @@ class MetricsStore:
     def persist(self) -> Path:
         path = self.path
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(f"{path.suffix}.tmp")
-        tmp.write_text(json.dumps(self.snapshot(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        os.replace(tmp, path)
+        staged: Path | None = None
+        try:
+            # Gateway and optional sidecar processes can persist concurrently.
+            # A fixed .tmp path lets one writer rename the other's staging file.
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=path.parent,
+                prefix=f"{path.name}.", suffix=".tmp", delete=False,
+            ) as handle:
+                staged = Path(handle.name)
+                handle.write(json.dumps(self.snapshot(), ensure_ascii=False, indent=2) + "\n")
+            os.replace(staged, path)
+        finally:
+            if staged is not None:
+                staged.unlink(missing_ok=True)
         return path
 
 

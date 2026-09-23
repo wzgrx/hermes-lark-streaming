@@ -33,6 +33,15 @@
 
 ## 审计原则
 
+2026-09-24 补充 [#98](https://github.com/Cheerwhy/hermes-lark-streaming/issues/98)
+诊断链：本地测试会调用卡片完成/失败路径并写入默认
+`~/.hermes/state/hermes-lark-streaming-metrics.json`，污染真实网关的错误码
+统计；同时网关与可选 sidecar 原先共用固定 `.tmp` 文件名，两个进程同时
+持久化时其中一个可能在 `os.replace` 遇到 `FileNotFoundError`。现在测试
+为每例隔离指标路径，运行时使用每次写入独有的临时文件并在失败时清理。
+并发回归在旧实现上复现了该异常。这只提高 #98 的诊断可信度，尚需真实
+飞书流式负载确认其余 300313/300309 分布。
+
 1. 不以 commit SHA 相同作为“已修复”证据，以行为、fixture 和兼容测试为准。
 2. 可操作审批继续使用 Hermes 官方 adapter；插件不复制第二套按钮鉴权、过期和 resolver。
 3. 所有重试都有上限，所有注入都先 compile，不以静默跳过掩盖上游结构漂移。

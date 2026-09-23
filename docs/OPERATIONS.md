@@ -19,6 +19,11 @@ conflict), or `.other`. Compare these with the corresponding `attempt` and
 the last persisted gateway snapshot, so check `started_at` and `updated_at`
 before treating it as the current process. Error counts include individual
 retry attempts, not just failed cards.
+Gateway and optional sidecar writers stage snapshots in distinct temporary
+files before atomic replacement. If both write the same metrics path, the last
+completed snapshot wins; this file is a process snapshot, not an aggregate.
+The test suite uses a temporary metrics path and leaves the operator's live
+snapshot untouched.
 `api.element_not_found_recovered` counts only a successful stream or
 partial-only batch update after a `300313` visibility retry. Partial-only
 batch retries reuse the original sequence for at most two delays (200/400 ms);

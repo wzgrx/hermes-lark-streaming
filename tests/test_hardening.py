@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
+from hermes_lark_streaming import metrics as metrics_module
 from hermes_lark_streaming.card_limits import MAX_JSON_BYTES, compact_card, inspect_card
 from hermes_lark_streaming.e2e import dry_run
 from hermes_lark_streaming.history import compact_terminal_segments, compact_tool_steps
@@ -43,6 +46,47 @@ def test_metrics_snapshot_and_atomic_persist(tmp_path: Path) -> None:
     assert payload["counters"]["card.completed"] == 2
     assert payload["latency"]["api.update"]["avg_ms"] == 30
     assert not path.with_suffix(".json.tmp").exists()
+
+
+def test_metrics_persist_concurrent_writers_use_distinct_staging_files(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "state" / "metrics.json"
+    barrier = threading.Barrier(2)
+    original_replace = metrics_module.os.replace
+
+    def synchronized_replace(source, target):
+        barrier.wait(timeout=5)
+        return original_replace(source, target)
+
+    monkeypatch.setattr(metrics_module.os, "replace", synchronized_replace)
+    stores = [MetricsStore(path), MetricsStore(path)]
+    for index, store in enumerate(stores):
+        store.increment(f"writer.{index}")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda store: store.persist(), stores))
+
+    assert results == [path, path]
+    assert json.loads(path.read_text(encoding="utf-8"))["counters"] in (
+        {"writer.0": 1}, {"writer.1": 1},
+    )
+    assert not list(path.parent.glob("metrics.json.*.tmp"))
+
+
+def test_runtime_metrics_path_is_isolated_from_operator_home(tmp_path: Path) -> None:
+    assert metrics_module.metrics.path.is_relative_to(tmp_path)
+
+
+def test_metrics_persist_removes_staging_after_replace_failure(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "state" / "metrics.json"
+    store = MetricsStore(path)
+
+    def fail_replace(source, target):
+        raise OSError("synthetic replace failure")
+
+    monkeypatch.setattr(metrics_module.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="synthetic replace failure"):
+        store.persist()
+    assert not list(path.parent.glob("metrics.json.*.tmp"))
 
 
 def test_callback_proof_rejects_replay_and_tampering() -> None:
