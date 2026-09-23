@@ -15,12 +15,47 @@ import os
 import threading
 import time
 import uuid
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from .config import hermes_home
+
+# A Gateway and cron worker can touch the same ledger in separate processes. A
+# per-instance RLock alone does not protect the read/modify/replace sequence.
+_PROCESS_LOCK = threading.RLock()
+
+
+@contextlib.contextmanager
+def _file_lock(path: Path) -> Iterator[None]:
+    lock_path = path.with_name(f"{path.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        if os.name == "nt":
+            import importlib
+
+            msvcrt = importlib.import_module("msvcrt")
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"\0")
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
 
 
 class DeliveryStatus(StrEnum):
@@ -131,9 +166,14 @@ class DeliveryLedger:
             with contextlib.suppress(OSError):
                 tmp.unlink(missing_ok=True)
 
+    @contextlib.contextmanager
+    def _transaction(self) -> Iterator[None]:
+        with _PROCESS_LOCK, self._lock, _file_lock(self.path):
+            yield
+
     def get(self, logical_key: str) -> DeliveryEntry | None:
         key = self.fingerprint(logical_key)
-        with self._lock:
+        with self._transaction():
             return self._read().get(key)
 
     def begin(self, logical_key: str, operation: str, *, retry_not_sent: bool = True) -> DeliveryEntry:
@@ -144,7 +184,7 @@ class DeliveryLedger:
         """
         key = self.fingerprint(logical_key)
         now = time.time()
-        with self._lock:
+        with self._transaction():
             entries = self._read()
             previous = entries.get(key)
             if previous is not None and not (retry_not_sent and previous.status is DeliveryStatus.NOT_SENT):
@@ -173,12 +213,19 @@ class DeliveryLedger:
         error_code: int | None = None,
     ) -> DeliveryEntry:
         key = self.fingerprint(logical_key)
-        with self._lock:
+        with self._transaction():
             entries = self._read()
             previous = entries.get(key)
             if previous is None:
-                previous = self.begin(logical_key, "unknown")
-                entries = self._read()
+                now = time.time()
+                previous = DeliveryEntry(
+                    key=key,
+                    operation="unknown",
+                    request_uuid=uuid.uuid4().hex,
+                    status=DeliveryStatus.PENDING,
+                    created_at=now,
+                    updated_at=now,
+                )
             updated = DeliveryEntry(
                 key=previous.key,
                 operation=previous.operation,
@@ -213,7 +260,7 @@ class DeliveryLedger:
         return self.update(logical_key, status=status, error_code=error_code)
 
     def summary(self) -> dict[str, Any]:
-        with self._lock:
+        with self._transaction():
             entries = self._read()
         counts = {status.value: 0 for status in DeliveryStatus}
         for entry in entries.values():

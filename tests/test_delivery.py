@@ -1,14 +1,71 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import stat
 import time
 from pathlib import Path
+from threading import Thread
 
 import pytest
 
 from hermes_lark_streaming.delivery import DeliveryLedger, DeliveryStatus
 from hermes_lark_streaming.feishu import CARDKIT_GATEWAY_TIMEOUT, FeishuAPIError, classify_delivery_failure
+
+
+def _write_concurrent_entries(path: str, worker_id: int, start, results) -> None:
+    ledger = DeliveryLedger(Path(path))
+    original_write = ledger._write
+
+    def slow_write(entries) -> None:
+        time.sleep(0.005)
+        original_write(entries)
+
+    ledger._write = slow_write
+    start.wait(10)
+    for index in range(8):
+        ledger.begin(f"worker:{worker_id}:{index}", "card.reply")
+    results.put(worker_id)
+
+
+def test_separate_ledger_instances_preserve_threaded_updates(tmp_path: Path) -> None:
+    path = tmp_path / "delivery.json"
+    threads = [
+        Thread(target=lambda worker=worker: [
+            DeliveryLedger(path).begin(f"thread:{worker}:{index}", "card.reply")
+            for index in range(8)
+        ])
+        for worker in range(4)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+        assert not thread.is_alive()
+    assert DeliveryLedger(path).summary()["entries"] == 32
+
+
+def test_gateway_and_cron_processes_preserve_concurrent_updates(tmp_path: Path) -> None:
+    path = tmp_path / "delivery.json"
+    context = multiprocessing.get_context("spawn")
+    start = context.Event()
+    results = context.Queue()
+    workers = [
+        context.Process(target=_write_concurrent_entries, args=(str(path), worker, start, results))
+        for worker in range(4)
+    ]
+    for worker in workers:
+        worker.start()
+    start.set()
+    for worker in workers:
+        worker.join(timeout=20)
+        if worker.is_alive():
+            worker.terminate()
+            worker.join(timeout=5)
+        assert worker.exitcode == 0
+    assert sorted(results.get(timeout=5) for _ in workers) == list(range(4))
+    assert DeliveryLedger(path).summary()["entries"] == 32
+    assert stat.S_IMODE(path.with_name("delivery.json.lock").stat().st_mode) == 0o600
 
 
 def test_stable_uuid_survives_pending_unknown_and_restart(tmp_path: Path) -> None:
