@@ -84,6 +84,10 @@ The local ledger distinguishes four states:
 The ledger is stored at `~/.hermes/state/hermes-lark-streaming-delivery.json`, atomically replaced,
 mode `0600`, bounded to 1,024 rows and seven days. Logical keys are SHA-256 fingerprints; message
 bodies, credentials, user ids and chat ids are not stored. `doctor --json` reports counts only.
+Gateway and cron synchronize the full read/modify/replace cycle through the adjacent
+`hermes-lark-streaming-delivery.json.lock` file (also mode `0600`), preventing concurrent
+processes from dropping each other's delivery evidence. Keep this lock file in place while
+Hermes processes are running; the OS releases its lock when a process exits.
 
 If an attach outcome remains `unknown`, CardKit entity updates continue and the plugin emits one
 idempotent generic refresh notice after completion. It does not resend the answer as plaintext.
