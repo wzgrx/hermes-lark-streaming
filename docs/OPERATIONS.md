@@ -36,7 +36,11 @@ snapshot untouched.
 partial-only batch update after a `300313` visibility retry. Partial-only
 batch retries reuse the original sequence for at most two delays (200/400 ms);
 batches that add elements go straight to the controller's state-reconciliation
-path instead of replaying a potentially non-idempotent add.
+path instead of replaying a potentially non-idempotent add on `300313`.
+For server-transient retries of any batch, the SDK request carries a stable
+CardKit idempotency UUID derived from card ID, sequence, and canonical actions.
+This keeps retries of an already-applied `add_elements` batch in the same
+operation; a repaired batch with changed actions gets a different UUID.
 
 Repeated stream-element failures use a per-card 0.5–30 second exponential
 retry delay instead of calling CardKit on every flush. Dirty text remains in

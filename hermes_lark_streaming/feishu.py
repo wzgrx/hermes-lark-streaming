@@ -462,12 +462,28 @@ class FeishuClient:
         sequence: int = 0,
     ) -> None:
         """局部更新 CardKit 卡片（增删改组件）."""
-        body_builder = BatchUpdateCardRequestBody.builder().sequence(sequence).actions(self._dumps(actions))
+        # The SDK's batch API accepts an idempotency UUID.  A transient error
+        # can arrive after CardKit applied an add_elements action, so the
+        # generic retry in _checked_call must reuse the same operation UUID.
+        # Include the action payload because a rejected batch may be repaired
+        # and retried with a different action set at the same sequence.
+        canonical_actions = json.dumps(actions, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        request_uuid = uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"hermes-lark-streaming:cardkit-batch:{card_id}:{sequence}:{canonical_actions}",
+        ).hex
+        body_builder = (
+            BatchUpdateCardRequestBody.builder()
+            .uuid(request_uuid)
+            .sequence(sequence)
+            .actions(self._dumps(actions))
+        )
         request = BatchUpdateCardRequest.builder().card_id(card_id).request_body(body_builder.build()).build()
         # A partial update overwrites existing fields and is safe to repeat
         # with the same sequence while a freshly added element becomes visible.
-        # A batch containing add_elements is not replayed here: an ambiguous
-        # response could otherwise create duplicate elements.
+        # A batch containing add_elements is not replayed on 300313 here;
+        # the controller reconciles that error before constructing a new batch.
+        # Generic transient retries above use this batch's idempotency UUID.
         retry_delays = (
             _BATCH_ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC
             if actions and all(action.get("action") == "partial_update_element" for action in actions)

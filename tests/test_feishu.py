@@ -86,6 +86,28 @@ async def test_cardkit_batch_update_retries_internal_error() -> None:
     second_request = batch_update.await_args_list[1].args[0]
     assert second_request.card_id == first_request.card_id
     assert second_request.request_body.sequence == first_request.request_body.sequence
+    assert first_request.request_body.uuid
+    assert second_request.request_body.uuid == first_request.request_body.uuid
+
+
+@pytest.mark.asyncio
+async def test_cardkit_batch_update_uuid_is_stable_for_same_batch_and_changes_for_repair() -> None:
+    batch_update = AsyncMock(return_value=_Resp(ok=True))
+    client = _client_with(batch_update=batch_update)
+    add = {"action": "add_elements", "params": {"type": "insert_after", "element_id": "tools_7"}}
+    reordered_add = {"params": {"element_id": "tools_7", "type": "insert_after"}, "action": "add_elements"}
+    repaired_add = {"action": "add_elements", "params": {"type": "insert_after", "element_id": "tools_8"}}
+
+    await client.cardkit_batch_update("card", [add], sequence=36)
+    await client.cardkit_batch_update("card", [reordered_add], sequence=36)
+    await client.cardkit_batch_update("card", [repaired_add], sequence=36)
+
+    first, repeated, repaired = (
+        call.args[0].request_body.uuid for call in batch_update.await_args_list
+    )
+    assert len(first) == 32
+    assert repeated == first
+    assert repaired != first
 
 
 @pytest.mark.asyncio
