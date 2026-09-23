@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CardKit batch 更新为同一张卡、sequence 和操作内容生成稳定幂等 UUID；服务器瞬时错误
   导致 SDK 重试时复用该 UUID，避免已执行的 `add_elements` 被再次应用。修复后的
   不同操作内容即使复用未提交的 sequence，也会使用不同 UUID。
+- CardKit 流式文本、全量更新与关闭流式也携带按操作、卡片、sequence 和内容区分的
+  稳定 UUID；有界重试与服务器瞬时错误重试保持同一次更新的幂等身份，避免成功回执
+  丢失后重复执行引发后续 sequence 冲突。
 - Gateway 与可选 sidecar 分别保存指标快照，避免 sidecar 最后写入时覆盖
   CardKit 错误码统计；CLI 可用 `metrics --sidecar` 单独查看 sidecar。旧版无
   `process_role` 的快照不再被误认作当前 Gateway 指标。

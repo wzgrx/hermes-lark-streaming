@@ -154,6 +154,15 @@ class FeishuClient:
         return json.dumps(obj, ensure_ascii=False)
 
     @staticmethod
+    def _cardkit_request_uuid(operation: str, card_id: str, sequence: int, payload: Any) -> str:
+        """Keep one CardKit mutation stable across retries, including a process restart."""
+        canonical_payload = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"hermes-lark-streaming:cardkit:{operation}:{card_id}:{sequence}:{canonical_payload}",
+        ).hex
+
+    @staticmethod
     def _card_dumps(card: dict[str, Any]) -> str:
         prepared = compact_card(card)
         inspection = inspect_card(prepared)
@@ -402,7 +411,10 @@ class FeishuClient:
         sequence: int = 0,
     ) -> None:
         """流式更新卡片内指定 element 的内容（打字机效果）."""
-        body_builder = ContentCardElementRequestBody.builder().content(content)
+        request_uuid = self._cardkit_request_uuid(
+            "stream-element", card_id, sequence, {"element_id": element_id, "content": content},
+        )
+        body_builder = ContentCardElementRequestBody.builder().content(content).uuid(request_uuid)
         body_builder = body_builder.sequence(sequence)
         request = (
             ContentCardElementRequest.builder()
@@ -444,9 +456,11 @@ class FeishuClient:
         sequence: int = 0,
     ) -> None:
         """全量更新 CardKit 卡片."""
+        card_data = self._card_dumps(card)
+        request_uuid = self._cardkit_request_uuid("update", card_id, sequence, card_data)
         body_builder = UpdateCardRequestBody.builder().card(
-            Card.builder().type("card_json").data(self._card_dumps(card)).build()
-        )
+            Card.builder().type("card_json").data(card_data).build()
+        ).uuid(request_uuid)
         body_builder = body_builder.sequence(sequence)
         request = UpdateCardRequest.builder().card_id(card_id).request_body(body_builder.build()).build()
         await self._checked_call(
@@ -467,11 +481,7 @@ class FeishuClient:
         # generic retry in _checked_call must reuse the same operation UUID.
         # Include the action payload because a rejected batch may be repaired
         # and retried with a different action set at the same sequence.
-        canonical_actions = json.dumps(actions, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        request_uuid = uuid.uuid5(
-            uuid.NAMESPACE_URL,
-            f"hermes-lark-streaming:cardkit-batch:{card_id}:{sequence}:{canonical_actions}",
-        ).hex
+        request_uuid = self._cardkit_request_uuid("batch-update", card_id, sequence, actions)
         body_builder = (
             BatchUpdateCardRequestBody.builder()
             .uuid(request_uuid)
@@ -510,7 +520,9 @@ class FeishuClient:
 
     async def cardkit_close_streaming(self, card_id: str, sequence: int = 0) -> None:
         """关闭 CardKit 卡片的流式模式."""
-        body_builder = SettingsCardRequestBody.builder().settings(self._dumps({"streaming_mode": False}))
+        settings = {"streaming_mode": False}
+        request_uuid = self._cardkit_request_uuid("close-streaming", card_id, sequence, settings)
+        body_builder = SettingsCardRequestBody.builder().settings(self._dumps(settings)).uuid(request_uuid)
         body_builder = body_builder.sequence(sequence)
         request = SettingsCardRequest.builder().card_id(card_id).request_body(body_builder.build()).build()
         await self._checked_call(

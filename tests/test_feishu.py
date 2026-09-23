@@ -111,6 +111,38 @@ async def test_cardkit_batch_update_uuid_is_stable_for_same_batch_and_changes_fo
 
 
 @pytest.mark.asyncio
+async def test_cardkit_full_update_retries_with_same_idempotency_uuid() -> None:
+    update = AsyncMock(side_effect=[
+        _Resp(ok=False, code=1663, msg="internal error"),
+        _Resp(ok=True),
+    ])
+    client = _client_with(card_update=update)
+
+    with patch("hermes_lark_streaming.feishu.asyncio.sleep", new=AsyncMock()):
+        await client.cardkit_update("card", {"schema": "2.0"}, sequence=18)
+
+    first, retried = (call.args[0].request_body for call in update.await_args_list)
+    assert first.sequence == retried.sequence == 18
+    assert first.uuid and first.uuid == retried.uuid
+
+
+@pytest.mark.asyncio
+async def test_cardkit_close_retries_with_same_idempotency_uuid() -> None:
+    settings = AsyncMock(side_effect=[
+        _Resp(ok=False, code=2200, msg="gateway timeout"),
+        _Resp(ok=True),
+    ])
+    client = _client_with(settings=settings)
+
+    with patch("hermes_lark_streaming.feishu.asyncio.sleep", new=AsyncMock()):
+        await client.cardkit_close_streaming("card", sequence=19)
+
+    first, retried = (call.args[0].request_body for call in settings.await_args_list)
+    assert first.sequence == retried.sequence == 19
+    assert first.uuid and first.uuid == retried.uuid
+
+
+@pytest.mark.asyncio
 async def test_partial_only_batch_retries_missing_element_with_same_sequence() -> None:
     batch_update = AsyncMock(side_effect=[
         _Resp(ok=False, code=300313, msg="not find elementID : tools_6"),
@@ -233,6 +265,8 @@ async def test_stream_element_retries_300313_with_same_sequence() -> None:
     assert sleep.await_count == 2
     requests = [call.args[0] for call in content.call_args_list]
     assert {request.request_body.sequence for request in requests} == {17}
+    assert len({request.request_body.uuid for request in requests}) == 1
+    assert requests[0].request_body.uuid
 
 
 @pytest.mark.asyncio

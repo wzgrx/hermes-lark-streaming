@@ -41,6 +41,10 @@ For server-transient retries of any batch, the SDK request carries a stable
 CardKit idempotency UUID derived from card ID, sequence, and canonical actions.
 This keeps retries of an already-applied `add_elements` batch in the same
 operation; a repaired batch with changed actions gets a different UUID.
+Streaming text, full-card update, and close-streaming requests likewise carry
+operation-specific UUIDs, keeping their transient retries tied to the same
+CardKit mutation. Card creation has no UUID field in the supported SDK, so
+its ambiguous server outcome remains a distinct lifecycle case.
 
 Repeated stream-element failures use a per-card 0.5–30 second exponential
 retry delay instead of calling CardKit on every flush. Dirty text remains in
