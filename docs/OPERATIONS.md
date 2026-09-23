@@ -19,6 +19,9 @@ conflict), or `.other`. Compare these with the corresponding `attempt` and
 the last persisted gateway snapshot, so check `started_at` and `updated_at`
 before treating it as the current process. Error counts include individual
 retry attempts, not just failed cards.
+If no readable persisted snapshot exists, the command reports
+`metrics_unavailable` and exits nonzero; it does not present an empty CLI-process
+snapshot as if it came from the Gateway.
 Gateway and optional sidecar writers stage snapshots in distinct temporary
 files before atomic replacement. If both write the same metrics path, the last
 completed snapshot wins; this file is a process snapshot, not an aggregate.

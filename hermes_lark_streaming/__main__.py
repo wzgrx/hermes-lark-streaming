@@ -273,7 +273,13 @@ def _cmd_metrics() -> int:
 
     from .metrics import metrics
 
-    snapshot = metrics.load_persisted() or metrics.snapshot()
+    snapshot = metrics.load_persisted()
+    if snapshot is None:
+        print(json.dumps({
+            "status": "metrics_unavailable",
+            "detail": "No readable persisted gateway metrics snapshot",
+        }, ensure_ascii=False))
+        return 1
     print(json.dumps(snapshot, ensure_ascii=False, indent=2))
     return 0
 

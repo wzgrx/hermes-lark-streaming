@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from hermes_lark_streaming import metrics as metrics_module
+from hermes_lark_streaming.__main__ import _cmd_metrics
 from hermes_lark_streaming.card_limits import MAX_JSON_BYTES, compact_card, inspect_card
 from hermes_lark_streaming.e2e import dry_run
 from hermes_lark_streaming.history import compact_terminal_segments, compact_tool_steps
@@ -87,6 +88,22 @@ def test_metrics_persist_removes_staging_after_replace_failure(tmp_path: Path, m
     with pytest.raises(OSError, match="synthetic replace failure"):
         store.persist()
     assert not list(path.parent.glob("metrics.json.*.tmp"))
+
+
+def test_metrics_cli_does_not_present_its_own_empty_process_as_gateway(capsys) -> None:
+    assert _cmd_metrics() == 1
+    output = json.loads(capsys.readouterr().out)
+    assert output == {"status": "metrics_unavailable", "detail": "No readable persisted gateway metrics snapshot"}
+
+
+def test_metrics_cli_reads_persisted_snapshot(capsys) -> None:
+    metrics_module.metrics.increment("card.cli_test")
+    metrics_module.metrics.persist()
+
+    assert _cmd_metrics() == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["counters"]["card.cli_test"] >= 1
+    assert output["schema"] == 1
 
 
 def test_callback_proof_rejects_replay_and_tampering() -> None:
