@@ -121,7 +121,11 @@ operator notice; the log retains the full diagnostic. A ledger error after a suc
 final card update does not retry that update.
 
 If an attach outcome remains `unknown`, CardKit entity updates continue and the plugin emits one
-idempotent generic refresh notice after completion. It does not resend the answer as plaintext.
+idempotent generic refresh notice immediately after the ambiguous attach. Completion rechecks
+the durable notice receipt without sending a duplicate. This avoids making a user wait for a
+long-running agent turn before learning that the card might not be visible. It does not resend
+the answer as plaintext. An uncertain notice send is also retained in the ledger rather than
+replayed after Lark's UUID deduplication window.
 
 ## Cron CardKit outcome ownership
 

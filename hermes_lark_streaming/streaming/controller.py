@@ -315,6 +315,20 @@ class StreamingController:
             else:
                 session.card_id = card_id
                 session.card_msg_id = None
+                if session.delivery_status is DeliveryStatus.UNKNOWN:
+                    # A long-running agent may not reach card completion for many minutes.
+                    # Tell the user about the uncertain attach now, not only at completion.
+                    # The notice has its own durable UUID, so the completion path remains
+                    # idempotent even if this send also loses its response.
+                    try:
+                        await self._send_uncertain_delivery_notice(session)
+                    except DeliveryLedgerError:
+                        _logger.error(
+                            "CardKit attach is uncertain and notice ledger is unavailable: msg=%s",
+                            session.message_id[:12],
+                            exc_info=True,
+                        )
+                        await self._send_ledger_unavailable_notice(session)
             session.element_count = 1
             session.flush.set_throttle(CARDKIT_MS)
 

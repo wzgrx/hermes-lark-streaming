@@ -2788,10 +2788,13 @@ class TestCrashSafeDelivery:
         ctrl._client.reply_card_by_id.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_unknown_initial_attach_does_not_send_duplicate_card(self) -> None:
+    async def test_unknown_initial_attach_warns_immediately_without_duplicate_card(
+        self, isolate_delivery_ledger
+    ) -> None:
         ctrl = _setup_ctrl()
         ctrl._client.cardkit_create = AsyncMock(return_value="card-unknown")
         ctrl._client.reply_card_by_id = AsyncMock(side_effect=TimeoutError("response lost"))
+        ctrl._client.send_text_to_chat = AsyncMock(return_value="notice-message")
         session = _make_session("msg-no-duplicate")
 
         await ctrl._do_create_card(session)
@@ -2801,6 +2804,30 @@ class TestCrashSafeDelivery:
         assert session.card_msg_id is None
         assert session.delivery_status is DeliveryStatus.UNKNOWN
         ctrl._client.send_card_to_chat.assert_not_awaited()
+        ctrl._client.send_text_to_chat.assert_awaited_once()
+        notice = isolate_delivery_ledger.get("stream:msg-no-duplicate:uncertain-notice")
+        assert notice is not None and notice.status is DeliveryStatus.DELIVERED
+
+        # Finishing a long-running turn must not send a second notice.
+        await ctrl._send_uncertain_delivery_notice(session)
+        ctrl._client.send_text_to_chat.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_unknown_initial_attach_survives_notice_timeout(self, isolate_delivery_ledger) -> None:
+        ctrl = _setup_ctrl()
+        ctrl._client.cardkit_create = AsyncMock(return_value="card-unknown")
+        ctrl._client.reply_card_by_id = AsyncMock(side_effect=TimeoutError("attach response lost"))
+        ctrl._client.send_text_to_chat = AsyncMock(side_effect=TimeoutError("notice response lost"))
+        session = _make_session("msg-notice-timeout")
+
+        await ctrl._do_create_card(session)
+
+        assert session.state is SessionState.STREAMING
+        assert session.delivery_status is DeliveryStatus.UNKNOWN
+        assert session.delivery_notice_sent is False
+        assert ctrl._client.send_text_to_chat.await_count == 1
+        notice = isolate_delivery_ledger.get("stream:msg-notice-timeout:uncertain-notice")
+        assert notice is not None and notice.status is DeliveryStatus.UNKNOWN
 
     @pytest.mark.asyncio
     async def test_unknown_split_attach_keeps_old_visible_card(self, isolate_delivery_ledger) -> None:
