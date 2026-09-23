@@ -57,6 +57,7 @@ class CardSession:
         "deferred_background_review_closed",
         "deferred_background_review_lock",
         "deferred_background_reviews",
+        "delivery_evidence_unavailable",
         "delivery_generation",
         "delivery_key",
         "delivery_notice_sent",
@@ -106,6 +107,7 @@ class CardSession:
         self.deferred_background_review_lock = Lock()
         self.delivery_generation = 0
         self.delivery_key = ""
+        self.delivery_evidence_unavailable = False
         self.delivery_status = DeliveryStatus.PENDING
         self.delivery_notice_sent = False
 

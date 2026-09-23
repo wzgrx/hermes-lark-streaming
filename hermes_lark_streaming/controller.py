@@ -517,6 +517,11 @@ class StreamCardController(StreamingController):
             self._cleanup_session(session)
             return False
 
+        if session.delivery_evidence_unavailable:
+            await self._send_ledger_unavailable_notice(session)
+            self._cleanup_session(session)
+            return True  # Own this outcome so Hermes does not replay the uncertain answer.
+
         if session.state == SessionState.FAILED:
             if session.has_card:
                 _logger.info("on_completed_wait: msg=%s state=FAILED but card exists", message_id[:12])

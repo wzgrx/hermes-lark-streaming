@@ -131,7 +131,7 @@ class DeliveryLedger:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return {}
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise DeliveryLedgerError("delivery ledger unreadable; existing evidence preserved") from exc
         if not isinstance(raw, dict) or raw.get("schema") != self.SCHEMA:
             raise DeliveryLedgerError("delivery ledger schema invalid; existing evidence preserved")
@@ -175,8 +175,11 @@ class DeliveryLedger:
 
     @contextlib.contextmanager
     def _transaction(self) -> Iterator[None]:
-        with _PROCESS_LOCK, self._lock, _file_lock(self.path):
-            yield
+        try:
+            with _PROCESS_LOCK, self._lock, _file_lock(self.path):
+                yield
+        except OSError as exc:
+            raise DeliveryLedgerError("delivery ledger I/O failed; existing evidence preserved") from exc
 
     def get(self, logical_key: str) -> DeliveryEntry | None:
         key = self.fingerprint(logical_key)

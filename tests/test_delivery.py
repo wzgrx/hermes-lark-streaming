@@ -98,7 +98,21 @@ def test_delivered_entry_resumes_without_losing_entity_ids(tmp_path: Path) -> No
     assert (resumed.card_id, resumed.message_id) == ("card-1", "om-1")
 
 
-def test_corrupt_ledger_is_preserved_instead_of_overwritten(tmp_path: Path) -> None:
+def test_ledger_write_error_preserves_prior_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "delivery.json"
+    ledger = DeliveryLedger(path)
+    ledger.begin("existing", "card.reply")
+    original = path.read_bytes()
+
+    def fail_write(_entries) -> None:
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(ledger, "_write", fail_write)
+    with pytest.raises(DeliveryLedgerError, match="evidence preserved"):
+        ledger.begin("new", "card.reply")
+    assert path.read_bytes() == original
+
+
     path = tmp_path / "delivery.json"
     raw = '{"entries":'
     path.write_text(raw)

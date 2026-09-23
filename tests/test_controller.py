@@ -15,7 +15,7 @@ import pytest
 
 import hermes_lark_streaming.controller as controller_module
 from hermes_lark_streaming.controller import StreamCardController, get_controller
-from hermes_lark_streaming.delivery import DeliveryStatus
+from hermes_lark_streaming.delivery import DeliveryLedgerError, DeliveryStatus
 from hermes_lark_streaming.feishu import FeishuAPIError, FeishuClient
 from hermes_lark_streaming.streaming.segment_helper import estimate_segment_elements
 from hermes_lark_streaming.streaming.segments import Segment, SegmentState
@@ -2396,6 +2396,28 @@ class TestStreamedMediaDelivery:
 
 class TestCrashSafeDelivery:
     @pytest.mark.asyncio
+    async def test_unreadable_ledger_holds_answer_and_sends_generic_notice(self) -> None:
+        ctrl = _setup_ctrl()
+        session = CardSession("msg-ledger", "chat", asyncio.get_running_loop())
+        ctrl._sessions[session.message_id] = session
+        with patch.object(ctrl, "_client_for_chat", new_callable=AsyncMock, return_value=ctrl._client), patch(
+            "hermes_lark_streaming.streaming.controller.delivery_ledger.begin",
+            side_effect=DeliveryLedgerError("ledger corrupt"),
+        ):
+            await ctrl._do_create_card(session)
+
+        assert session.state is SessionState.FAILED
+        assert session.delivery_evidence_unavailable is True
+        ctrl._client.cardkit_create.assert_not_awaited()
+        assert await ctrl.on_completed_wait(message_id=session.message_id, answer="private answer") is True
+        ctrl._client.send_text_to_chat.assert_awaited_once()
+        args = ctrl._client.send_text_to_chat.await_args
+        assert args.args[0] == "chat"
+        assert "private answer" not in args.args[1]
+        assert len(args.kwargs["request_uuid"]) == 32
+        assert ctrl.consume_text_fallback(session.message_id) is False
+
+    @pytest.mark.asyncio
     async def test_unknown_attach_reuses_card_and_request_uuid(self, isolate_delivery_ledger) -> None:
         ctrl = _setup_ctrl()
         ctrl._client.cardkit_create = AsyncMock(return_value="card-unknown")
@@ -2460,6 +2482,28 @@ class TestCrashSafeDelivery:
         assert session.card_msg_id is None
         assert session.delivery_status is DeliveryStatus.UNKNOWN
         ctrl._client.send_card_to_chat.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_ledger_error_after_final_update_does_not_retry_or_replay_answer(self) -> None:
+        ctrl = _setup_ctrl()
+        session = _make_session("msg-final-ledger")
+        session.state = SessionState.STREAMING
+        session.card_id = "card-final-ledger"
+        session.card_msg_id = "reply-final-ledger"
+        session.delivery_status = DeliveryStatus.UNKNOWN
+        ctrl._sessions[session.message_id] = session
+
+        with patch.object(
+            ctrl,
+            "_send_uncertain_delivery_notice",
+            new_callable=AsyncMock,
+            side_effect=DeliveryLedgerError("ledger unavailable"),
+        ), patch.object(ctrl, "_send_ledger_unavailable_notice", new_callable=AsyncMock) as notice:
+            assert await ctrl._do_complete_card(session) is True
+
+        ctrl._client.cardkit_update.assert_awaited_once()
+        notice.assert_awaited_once_with(session)
+        assert session.state is SessionState.COMPLETED
 
     @pytest.mark.asyncio
     async def test_uncertain_delivery_notice_is_idempotent(self, isolate_delivery_ledger) -> None:

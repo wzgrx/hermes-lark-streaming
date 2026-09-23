@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
@@ -18,7 +19,7 @@ from ..cardkit.markdown import (
     _downgrade_tables,
     optimize_markdown_style,
 )
-from ..delivery import DeliveryStatus, delivery_ledger
+from ..delivery import DeliveryLedgerError, DeliveryStatus, delivery_ledger
 from ..feishu import (
     CARDKIT_CONTENT_FAILED,
     CARDKIT_ELEMENT_LIMIT,
@@ -218,6 +219,26 @@ class StreamingController:
         session.delivery_notice_sent = True
         metrics.increment("delivery.unknown_notice_sent")
 
+    async def _send_ledger_unavailable_notice(self, session: CardSession) -> None:
+        """Report an uncertain delivery without replaying the answer."""
+        if session.delivery_notice_sent:
+            return
+        request_uuid = uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"hermes-lark-streaming:ledger-unavailable:{session.chat_id}:{session.message_id}",
+        ).hex
+        try:
+            await self._session_client(session).send_text_to_chat(
+                session.chat_id,
+                "⚠️ 本轮卡片投递记录暂不可读取。回复已暂停以避免重复发送。请检查本地投递账本后重试。",
+                reply_to_message_id=session.anchor_id or session.message_id,
+                request_uuid=request_uuid,
+            )
+            session.delivery_notice_sent = True
+            metrics.increment("delivery.ledger_unavailable_notice")
+        except Exception:
+            _logger.exception("delivery ledger unavailable notice failed: msg=%s", session.message_id[:12])
+
     async def _do_create_card(self, session: CardSession) -> None:
         """Create a loading card with crash-safe, tri-state delivery ownership."""
         if session.state != SessionState.IDLE:
@@ -294,6 +315,14 @@ class StreamingController:
                 (session.card_id or "")[:12],
                 session.delivery_status.value,
             )
+        except DeliveryLedgerError:
+            _logger.error(
+                "CardKit delivery ledger unavailable; holding answer: msg=%s",
+                session.message_id[:12],
+                exc_info=True,
+            )
+            session.delivery_evidence_unavailable = True
+            session.mark_failed()
         except FeishuAPIError:
             _logger.info("CardKit create failed, yielding to gateway", exc_info=True)
             if hasattr(self, "_mark_text_fallback_needed"):
@@ -999,7 +1028,15 @@ class StreamingController:
                 session.state = SessionState.COMPLETED
                 metrics.increment("card.completed")
                 if session.delivery_status is DeliveryStatus.UNKNOWN:
-                    await self._send_uncertain_delivery_notice(session)
+                    try:
+                        await self._send_uncertain_delivery_notice(session)
+                    except DeliveryLedgerError:
+                        _logger.error(
+                            "CardKit final update succeeded but delivery ledger is unavailable: msg=%s",
+                            session.message_id[:12],
+                            exc_info=True,
+                        )
+                        await self._send_ledger_unavailable_notice(session)
                 metrics.persist()
                 return True
             except FeishuAPIError as e:

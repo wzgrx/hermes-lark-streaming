@@ -91,6 +91,10 @@ Hermes processes are running; the OS releases its lock when a process exits.
 Malformed JSON, an unknown schema, or an unreadable entry now stops ledger mutation and
 preserves the original file for inspection. Back up the file before any manual repair;
 starting a fresh empty ledger may lose the evidence that prevents duplicate delivery.
+When a live turn encounters this condition, the plugin holds its answer instead of
+letting Hermes replay it as a second plaintext send. It attempts a short, stable-UUID
+operator notice; the log retains the full diagnostic. A ledger error after a successful
+final card update does not retry that update.
 
 If an attach outcome remains `unknown`, CardKit entity updates continue and the plugin emits one
 idempotent generic refresh notice after completion. It does not resend the answer as plaintext.
