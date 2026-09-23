@@ -540,8 +540,72 @@ class StreamingController:
                     )
                     session.sequence = next_sequence
                     seg.dirty = False
+            except FeishuAPIError as e:
+                missing_el_id = extract_missing_element_id(e)
+                streamed_el_id = seg.text_el_id if seg.type == SegmentType.REASONING else seg.el_id
+                if missing_el_id in (streamed_el_id, _LOADING_ELEMENT_ID):
+                    await self._reseed_card_after_missing_element(
+                        session, segments, missing_el_id, operation="stream_element",
+                    )
+                    return
+                _logger.debug("CardKit stream element failed: %s el=%s", e, seg.el_id, exc_info=True)
             except Exception as e:
                 _logger.debug("CardKit stream element failed: %s el=%s", e, seg.el_id, exc_info=True)
+
+    async def _reseed_card_after_missing_element(
+        self,
+        session: CardSession,
+        segments: list[Segment],
+        missing_el_id: str,
+        *,
+        operation: str,
+    ) -> None:
+        """Rebuild a server-pruned streaming card once, then replay local segments."""
+        assert session.card_id is not None
+        if session.anchor_recovery_attempts >= 1:
+            _logger.error(
+                "CardKit element still missing after bounded recovery: card=%s element=%s operation=%s",
+                session.card_id[:12], missing_el_id, operation,
+            )
+            session.mark_failed()
+            if hasattr(self, "_mark_text_fallback_needed"):
+                self._mark_text_fallback_needed(session)
+            return
+
+        session.anchor_recovery_attempts += 1
+        try:
+            recovery_sequence = session.sequence + 1
+            recovery_card = build_streaming_card_v2(
+                show_tool_use=False,
+                show_reasoning=False,
+                show_streaming_element=False,
+                header_enabled=self._cfg.header_enabled,
+                text_size=self._cfg.body_text_size,
+                width_mode=self._cfg.width_mode,
+            )
+            await self._session_client(session).cardkit_update(
+                session.card_id, recovery_card, sequence=recovery_sequence,
+            )
+            session.sequence = recovery_sequence
+            session.element_count = 1
+            for seg in segments[session.split_index :]:
+                seg.created = False
+                seg.dirty = True
+                seg.element_estimate = 0
+                seg.reasoning_finalized = False
+            session.flush.request_reflush()
+            _logger.info(
+                "CardKit restored missing streaming element: card=%s element=%s operation=%s seq=%d",
+                session.card_id[:12], missing_el_id, operation, recovery_sequence,
+            )
+        except Exception:
+            _logger.exception(
+                "CardKit element recovery failed: card=%s element=%s operation=%s",
+                session.card_id[:12], missing_el_id, operation,
+            )
+            session.mark_failed()
+            if hasattr(self, "_mark_text_fallback_needed"):
+                self._mark_text_fallback_needed(session)
 
     async def _do_batch_update(
         self,
@@ -629,52 +693,9 @@ class StreamingController:
             # 缺失元素（300313）时回滚 stale segment：本地 created=True 但卡片上不存在，
             # 下一轮 flush 会用 add_elements 重建该元素，避免反复 partial_update 死循环。
             if missing_el_id == _LOADING_ELEMENT_ID:
-                if session.anchor_recovery_attempts < 1:
-                    session.anchor_recovery_attempts += 1
-                    try:
-                        recovery_sequence = session.sequence + 1
-                        recovery_card = build_streaming_card_v2(
-                            show_tool_use=False,
-                            show_reasoning=False,
-                            show_streaming_element=False,
-                            header_enabled=self._cfg.header_enabled,
-                            text_size=self._cfg.body_text_size,
-                            width_mode=self._cfg.width_mode,
-                        )
-                        await self._session_client(session).cardkit_update(
-                            session.card_id,
-                            recovery_card,
-                            sequence=recovery_sequence,
-                        )
-                        session.sequence = recovery_sequence
-                        session.element_count = 1
-                        for seg in segments[session.split_index :]:
-                            seg.created = False
-                            seg.dirty = True
-                            seg.element_estimate = 0
-                            seg.reasoning_finalized = False
-                        session.flush.request_reflush()
-                        _logger.info(
-                            "CardKit restored missing loading anchor: card=%s seq=%d",
-                            session.card_id[:12],
-                            recovery_sequence,
-                        )
-                    except Exception:
-                        _logger.exception(
-                            "CardKit loading anchor recovery failed: card=%s",
-                            session.card_id[:12],
-                        )
-                        session.mark_failed()
-                        if hasattr(self, "_mark_text_fallback_needed"):
-                            self._mark_text_fallback_needed(session)
-                else:
-                    _logger.error(
-                        "CardKit loading anchor missing after bounded recovery: card=%s",
-                        session.card_id[:12],
-                    )
-                    session.mark_failed()
-                    if hasattr(self, "_mark_text_fallback_needed"):
-                        self._mark_text_fallback_needed(session)
+                await self._reseed_card_after_missing_element(
+                    session, segments, missing_el_id, operation="batch_update",
+                )
             elif missing_el_id:
                 for seg in segments[session.split_index :]:
                     if seg.el_id == missing_el_id and seg.created:

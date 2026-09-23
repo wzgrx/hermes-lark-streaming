@@ -130,6 +130,10 @@ class CardSession:
         return bool(self.card_id or self.card_msg_id)
 
     def set_card(self, *, card_id: str, card_msg_id: str) -> None:
+        # Recovery is bounded per CardKit card, not per Hermes turn. A split or
+        # clarify replacement has a fresh server-side element tree.
+        if card_id != self.card_id:
+            self.anchor_recovery_attempts = 0
         self.card_id = card_id
         self.card_msg_id = card_msg_id
 

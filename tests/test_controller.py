@@ -1520,6 +1520,87 @@ class TestDoFlush:
         assert client.cardkit_stream_element.await_args.kwargs["sequence"] == 4
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("segment_type", ["answer", "reasoning"])
+    async def test_missing_stream_element_reseeds_and_replays(self, segment_type: str) -> None:
+        """A pruned text element must not leave a permanently stale streamed card."""
+        ctrl = _setup_ctrl()
+        client = ctrl._client
+        session = _make_session(f"msg_missing_stream_{segment_type}")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_missing_stream"
+        session.card_msg_id = "msg_missing_stream_card"
+        if segment_type == "reasoning":
+            session.segment_state.on_reasoning_delta("reasoning")
+        else:
+            session.segment_state.on_answer_delta("answer")
+        seg = session.segment_state.segments[0]
+        seg.created = True
+        seg.element_estimate = estimate_segment_elements(seg, session.tool_use.build_display_steps())
+        session.element_count = 1 + seg.element_estimate
+        ctrl._sessions[session.message_id] = session
+
+        missing_id = seg.text_el_id if segment_type == "reasoning" else seg.el_id
+        client.cardkit_stream_element = AsyncMock(
+            side_effect=[
+                FeishuAPIError(
+                    f"cardkit_stream_element: code=300313, msg=not find elementID : {missing_id};",
+                    300313,
+                ),
+                None,
+            ]
+        )
+
+        await ctrl._do_flush(session)
+        assert session.anchor_recovery_attempts == 1
+        assert session.sequence == 2
+        assert session.element_count == 1
+        assert seg.created is False
+        assert seg.dirty is True
+        assert session.flush._needs_reflush is True
+        client.cardkit_update.assert_awaited_once()
+
+        await ctrl._do_flush(session)
+        assert seg.created is True
+        assert seg.dirty is False
+        assert session.sequence == 4
+        assert [call.kwargs["sequence"] for call in client.cardkit_stream_element.await_args_list] == [2, 4]
+
+    @pytest.mark.asyncio
+    async def test_repeated_missing_stream_element_uses_bounded_fallback(self) -> None:
+        ctrl = _setup_ctrl()
+        client = ctrl._client
+        session = _make_session("msg_missing_stream_twice")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_missing_stream_twice"
+        session.card_msg_id = "msg_missing_stream_twice_card"
+        session.segment_state.on_answer_delta("answer")
+        seg = session.segment_state.segments[0]
+        seg.created = True
+        ctrl._sessions[session.message_id] = session
+        client.cardkit_stream_element = AsyncMock(
+            side_effect=FeishuAPIError(
+                f"cardkit_stream_element: code=300313, msg=not find elementID : {seg.el_id};",
+                300313,
+            )
+        )
+
+        await ctrl._do_flush(session)
+        await ctrl._do_flush(session)
+
+        assert session.anchor_recovery_attempts == 1
+        client.cardkit_update.assert_awaited_once()
+        assert session.state == SessionState.FAILED
+
+    def test_recovery_budget_resets_for_replacement_card(self) -> None:
+        session = _make_session("msg_replacement")
+        session.set_card(card_id="card_one", card_msg_id="msg_one")
+        session.anchor_recovery_attempts = 1
+        session.set_card(card_id="card_one", card_msg_id="msg_one")
+        assert session.anchor_recovery_attempts == 1
+        session.set_card(card_id="card_two", card_msg_id="msg_two")
+        assert session.anchor_recovery_attempts == 0
+
+    @pytest.mark.asyncio
     async def test_stream_failure_does_not_advance_sequence(self) -> None:
         ctrl = _setup_ctrl()
         session = _make_session("msg_stream_seq")

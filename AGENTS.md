@@ -24,7 +24,7 @@ $HERMES_PYTHON -m pip install -e ".[dev]"  # test dependencies
 $HERMES_PYTHON -m ruff check hermes_lark_streaming tests
 $HERMES_PYTHON -m mypy hermes_lark_streaming/
 
-# Run tests (local latest Hermes source; CI checks current Hermes main)
+# Run tests (local Hermes source; CI checks current Hermes main and pinned legacy fixtures)
 $HERMES_PYTHON -m pytest tests/ -q
 ```
 
