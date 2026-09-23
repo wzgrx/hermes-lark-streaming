@@ -499,6 +499,14 @@ class StreamingController:
             return
 
         # ── 步骤 2: stream_element 刷脏文本 ──
+        # A permanent or prolonged API error otherwise retries every flush
+        # (often a few hundred milliseconds apart) for the whole agent turn.
+        # Keep dirty text for a later flush/final full-card update, but stop
+        # the request storm while the provider is rejecting this stream.
+        if time.monotonic() < session.stream_retry_after:
+            metrics.increment("cardkit.stream.backoff_skipped")
+            return
+        streamed_any = False
         for seg in segments[session.split_index :]:
             if not seg.created or not seg.dirty:
                 continue
@@ -519,6 +527,7 @@ class StreamingController:
                         sequence=next_sequence,
                     )
                     session.sequence = next_sequence
+                    streamed_any = True
                     seg.dirty = False
                 elif seg.type == SegmentType.ANSWER:
                     content = strip_media_directives(seg.text)
@@ -539,6 +548,7 @@ class StreamingController:
                         sequence=next_sequence,
                     )
                     session.sequence = next_sequence
+                    streamed_any = True
                     seg.dirty = False
             except FeishuAPIError as e:
                 missing_el_id = extract_missing_element_id(e)
@@ -548,9 +558,27 @@ class StreamingController:
                         session, segments, missing_el_id, operation="stream_element",
                     )
                     return
-                _logger.debug("CardKit stream element failed: %s el=%s", e, seg.el_id, exc_info=True)
+                self._defer_stream_retry(session, code=e.code)
+                return
             except Exception as e:
-                _logger.debug("CardKit stream element failed: %s el=%s", e, seg.el_id, exc_info=True)
+                self._defer_stream_retry(session, code=0)
+                _logger.debug("CardKit stream element exception: %s el=%s", e, seg.el_id, exc_info=True)
+                return
+        if streamed_any:
+            session.stream_failure_streak = 0
+            session.stream_retry_after = 0.0
+
+    @staticmethod
+    def _defer_stream_retry(session: CardSession, *, code: int) -> None:
+        session.stream_failure_streak = min(16, session.stream_failure_streak + 1)
+        delay = min(30.0, 0.5 * (2 ** min(session.stream_failure_streak - 1, 6)))
+        session.stream_retry_after = time.monotonic() + delay
+        metrics.increment("cardkit.stream.retry_deferred")
+        if session.stream_failure_streak in (1, 4, 8):
+            _logger.warning(
+                "CardKit stream retry deferred: code=%s streak=%d delay=%.1fs",
+                code, session.stream_failure_streak, delay,
+            )
 
     async def _reseed_card_after_missing_element(
         self,
@@ -587,6 +615,8 @@ class StreamingController:
                 session.card_id, recovery_card, sequence=recovery_sequence,
             )
             session.sequence = recovery_sequence
+            session.stream_failure_streak = 0
+            session.stream_retry_after = 0.0
             session.element_count = 1
             for seg in segments[session.split_index :]:
                 seg.created = False

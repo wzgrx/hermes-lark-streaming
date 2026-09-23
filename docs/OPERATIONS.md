@@ -20,6 +20,13 @@ the last persisted gateway snapshot, so check `started_at` and `updated_at`
 before treating it as the current process. Error counts include individual
 retry attempts, not just failed cards.
 
+Repeated stream-element failures use a per-card 0.5–30 second exponential
+retry delay instead of calling CardKit on every flush. Dirty text remains in
+the local segment model; a later successful flush resets the delay, a new card
+starts fresh, and terminal close/full-card update is independent of this
+streaming delay. The `cardkit.stream.retry_deferred` and
+`cardkit.stream.backoff_skipped` counters show this protection in action.
+
 `smoke` is offline by default. A real CardKit create → stream → close → update check is explicit:
 
 ```bash

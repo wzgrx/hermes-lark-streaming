@@ -1655,6 +1655,47 @@ class TestDoFlush:
         assert session.sequence == 9
         assert answer.dirty is True
         assert ctrl._client.cardkit_stream_element.await_args.kwargs["sequence"] == 10
+        assert session.stream_failure_streak == 1
+        assert session.stream_retry_after > time.monotonic()
+
+        await ctrl._do_flush(session)
+        assert ctrl._client.cardkit_stream_element.await_count == 1
+        assert answer.dirty is True
+
+        ctrl._client.cardkit_stream_element = AsyncMock()
+        session.stream_retry_after = 0.0
+        await ctrl._do_flush(session)
+        assert session.sequence == 10
+        assert session.stream_failure_streak == 0
+        assert session.stream_retry_after == 0.0
+        assert answer.dirty is False
+
+    @pytest.mark.asyncio
+    async def test_successful_peer_segment_does_not_clear_failed_stream_backoff(self) -> None:
+        ctrl = _setup_ctrl()
+        session = _make_session("msg_stream_mixed")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_stream_mixed"
+        session.segment_state.on_reasoning_delta("thought")
+        session.segment_state.on_answer_delta("reply")
+        reasoning, answer = session.segment_state.segments
+        reasoning.created = True
+        answer.created = True
+        ctrl._sessions[session.message_id] = session
+        ctrl._client.cardkit_stream_element = AsyncMock(
+            side_effect=[None, RuntimeError("answer failure"), None, RuntimeError("answer failure")]
+        )
+
+        await ctrl._do_flush(session)
+        assert session.stream_failure_streak == 1
+        assert answer.dirty is True
+
+        reasoning.dirty = True
+        session.stream_retry_after = 0.0
+        await ctrl._do_flush(session)
+        assert session.stream_failure_streak == 2
+        assert answer.dirty is True
+        assert ctrl._client.cardkit_stream_element.await_count == 4
 
     @pytest.mark.asyncio
     async def test_reasoning_finalized_snapshot(self) -> None:

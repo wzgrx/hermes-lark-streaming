@@ -75,6 +75,8 @@ class CardSession:
         "split_disabled",
         "split_index",
         "state",
+        "stream_failure_streak",
+        "stream_retry_after",
         "tool_use",
     )
 
@@ -94,6 +96,8 @@ class CardSession:
         self.session_key: str | None = None
         self.create_task: asyncio.Future[Any] | ConcurrentFuture | None = None
         self.state = SessionState.IDLE
+        self.stream_failure_streak = 0
+        self.stream_retry_after = 0.0
         self.card_msg_id: str | None = None
         self.card_id: str | None = None
         self.tool_use = ToolUseTracker()
@@ -134,6 +138,8 @@ class CardSession:
         # clarify replacement has a fresh server-side element tree.
         if card_id != self.card_id:
             self.anchor_recovery_attempts = 0
+            self.stream_failure_streak = 0
+            self.stream_retry_after = 0.0
         self.card_id = card_id
         self.card_msg_id = card_msg_id
 
