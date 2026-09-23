@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 修复
 
+- 活跃卡片现在以限频、原子方式持久化 Gateway 指标，不必等长任务结束才看到
+  `300309`/`300313` 等错误码；同进程快照串行写入，终态快照不受限频影响，
+  指标文件写入失败只影响观测而不中断卡片投递。
 - 新增显式 `smoke --execute --entity-only` 飞书 CardKit 实体探针：不发送聊天消息，
   验证 `300313` 后补建缺失元素再复用相同流式请求 UUID；结果仅输出状态与错误码，
   关闭失败也报告探针失败。默认 `smoke` 仍为离线检查。

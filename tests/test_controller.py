@@ -1459,7 +1459,9 @@ class TestDoFlush:
         session.tool_use.record_start("read", "file1")
         session.segment_state.on_tool_event(len(session.tool_use.build_display_steps()))
 
-        await ctrl._do_flush(session)
+        with patch("hermes_lark_streaming.streaming.controller.metrics.persist_throttled") as persist_live:
+            await ctrl._do_flush(session)
+        persist_live.assert_any_call(min_interval_sec=2.0)
 
         # 回滚：stale segment 被标记为未创建 + 脏，等下一轮重建
         assert tool_seg.created is False
@@ -1479,6 +1481,24 @@ class TestDoFlush:
         assert client.cardkit_batch_update.await_count == 2
         assert [call.kwargs["sequence"] for call in client.cardkit_batch_update.await_args_list] == [2, 2]
         assert session.sequence == 2
+
+    @pytest.mark.asyncio
+    async def test_active_card_persists_throttled_metrics_before_completion(self) -> None:
+        ctrl = _setup_ctrl()
+        session = _make_session("msg_live_metrics")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_live_metrics"
+        session.card_msg_id = "msg_live_metrics_card"
+        session.tool_use.record_start("read", "file0")
+        session.segment_state.on_tool_event(1)
+        ctrl._sessions[session.message_id] = session
+
+        with patch("hermes_lark_streaming.streaming.controller.metrics.persist_throttled") as persist_live:
+            await ctrl._do_flush(session)
+
+        ctrl._client.cardkit_batch_update.assert_awaited_once()
+        persist_live.assert_called_with(min_interval_sec=10.0)
+        assert session.state == SessionState.STREAMING
 
     @pytest.mark.asyncio
     async def test_transient_missing_tool_element_keeps_created_segment(self) -> None:

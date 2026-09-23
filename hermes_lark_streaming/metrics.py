@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -10,6 +11,8 @@ import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
+
+_logger = logging.getLogger("hermes_lark_streaming")
 
 
 class MetricsStore:
@@ -23,6 +26,9 @@ class MetricsStore:
         self._path = path
         self._role = "gateway"
         self._lock = threading.Lock()
+        self._persist_lock = threading.Lock()
+        self._last_persist_at = float("-inf")
+        self._last_persist_path: Path | None = None
         self._started_at = time.time()
         self._counters: dict[str, int] = defaultdict(int)
         self._latency: dict[str, dict[str, float]] = defaultdict(
@@ -37,7 +43,8 @@ class MetricsStore:
         """Select this process's snapshot before it begins handling events."""
         if role not in {"gateway", "sidecar"}:
             raise ValueError("unknown metrics process role")
-        self._role = role
+        with self._persist_lock:
+            self._role = role
 
     def path_for_role(self, role: str) -> Path:
         if role not in {"gateway", "sidecar"}:
@@ -96,7 +103,7 @@ class MetricsStore:
         # verified gateway measurement after the role split.
         return payload if isinstance(payload, dict) and payload.get("process_role") == selected_role else None
 
-    def persist(self) -> Path:
+    def _persist_unlocked(self) -> Path:
         path = self.path
         path.parent.mkdir(parents=True, exist_ok=True)
         staged: Path | None = None
@@ -114,6 +121,34 @@ class MetricsStore:
             if staged is not None:
                 staged.unlink(missing_ok=True)
         return path
+
+    def persist(self) -> Path:
+        """Publish a terminal snapshot even when a live throttle is active."""
+        with self._persist_lock:
+            path = self._persist_unlocked()
+            self._last_persist_at = time.monotonic()
+            self._last_persist_path = path
+            return path
+
+    def persist_throttled(self, *, min_interval_sec: float = 10.0) -> bool:
+        """Best-effort live snapshot without slowing a card behind another writer."""
+        if not self._persist_lock.acquire(blocking=False):
+            return False
+        try:
+            path = self.path
+            now = time.monotonic()
+            if path == self._last_persist_path and now - self._last_persist_at < max(0.0, min_interval_sec):
+                return False
+            try:
+                self._persist_unlocked()
+            except Exception:
+                _logger.warning("CardKit live metrics snapshot failed", exc_info=True)
+                return False
+            self._last_persist_at = time.monotonic()
+            self._last_persist_path = path
+            return True
+        finally:
+            self._persist_lock.release()
 
 
 metrics = MetricsStore()

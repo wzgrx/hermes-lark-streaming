@@ -51,6 +51,44 @@ def test_metrics_snapshot_and_atomic_persist(tmp_path: Path) -> None:
     assert not path.with_suffix(".json.tmp").exists()
 
 
+def test_metrics_throttled_snapshot_keeps_live_errors_visible(tmp_path: Path) -> None:
+    store = MetricsStore(tmp_path / "state" / "metrics.json")
+    store.increment("api.cardkit_stream_element.error_code.300309")
+
+    assert store.persist_throttled(min_interval_sec=60) is True
+    assert store.load_persisted()["counters"]["api.cardkit_stream_element.error_code.300309"] == 1
+    store.increment("api.cardkit_stream_element.error_code.300309")
+    assert store.persist_throttled(min_interval_sec=60) is False
+    assert store.load_persisted()["counters"]["api.cardkit_stream_element.error_code.300309"] == 1
+
+    # A terminal snapshot is never suppressed by the live throttle.
+    store.persist()
+    assert store.load_persisted()["counters"]["api.cardkit_stream_element.error_code.300309"] == 2
+
+
+def test_metrics_throttle_restarts_when_process_role_changes(tmp_path: Path) -> None:
+    store = MetricsStore(tmp_path / "state" / "metrics.json")
+    assert store.persist_throttled(min_interval_sec=60) is True
+    store.set_role("sidecar")
+    assert store.persist_throttled(min_interval_sec=60) is True
+    assert store.load_persisted(role="sidecar")["process_role"] == "sidecar"
+
+
+def test_metrics_throttled_write_failure_is_retryable(tmp_path: Path, monkeypatch) -> None:
+    store = MetricsStore(tmp_path / "state" / "metrics.json")
+    store.increment("api.cardkit_batch_update.error_code.300313")
+
+    def fail_replace(_source, _target) -> None:
+        raise OSError("disk full")
+
+    with monkeypatch.context() as failure:
+        failure.setattr(metrics_module.os, "replace", fail_replace)
+        assert store.persist_throttled(min_interval_sec=60) is False
+    assert not list(store.path.parent.glob("metrics.json.*.tmp"))
+    assert store.persist_throttled(min_interval_sec=60) is True
+    assert store.load_persisted()["counters"]["api.cardkit_batch_update.error_code.300313"] == 1
+
+
 def test_metrics_persist_concurrent_writers_use_distinct_staging_files(tmp_path: Path, monkeypatch) -> None:
     path = tmp_path / "state" / "metrics.json"
     barrier = threading.Barrier(2)

@@ -21,6 +21,11 @@ the last persisted gateway snapshot, so check `started_at` and `updated_at`
 before treating it as the current process. `process_role` must be `gateway`;
 the `--sidecar` selector reads a separate sidecar snapshot. Error counts include individual
 retry attempts, not just failed cards.
+Active Gateway cards now publish a best-effort snapshot at creation and at most
+once per 10 seconds during successful flushes (or every 2 seconds on errors).
+Terminal snapshots always publish. An idle Gateway with no card event since
+startup may still report `metrics_unavailable`; do not substitute the CLI
+process's counters for Gateway counters.
 If no readable persisted snapshot exists, the command reports
 `metrics_unavailable` and exits nonzero; it does not present an empty CLI-process
 snapshot as if it came from the Gateway.

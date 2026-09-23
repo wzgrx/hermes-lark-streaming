@@ -365,6 +365,8 @@ class StreamingController:
         except Exception:
             _logger.exception("_do_create_card failed")
             session.mark_failed()
+        finally:
+            metrics.persist_throttled()
 
     async def _do_flush(self, session: CardSession) -> None:
         """幂等 flush：按 segment 顺序处理结构性变更，超阈值时拆卡."""
@@ -571,6 +573,7 @@ class StreamingController:
                     await self._reseed_card_after_missing_element(
                         session, segments, missing_el_id, operation="stream_element",
                     )
+                    metrics.persist_throttled(min_interval_sec=2.0)
                     return
                 self._defer_stream_retry(session, code=e.code)
                 return
@@ -581,6 +584,7 @@ class StreamingController:
         if streamed_any:
             session.stream_failure_streak = 0
             session.stream_retry_after = 0.0
+            metrics.persist_throttled()
 
     @staticmethod
     def _defer_stream_retry(session: CardSession, *, code: int) -> None:
@@ -588,6 +592,7 @@ class StreamingController:
         delay = min(30.0, 0.5 * (2 ** min(session.stream_failure_streak - 1, 6)))
         session.stream_retry_after = time.monotonic() + delay
         metrics.increment("cardkit.stream.retry_deferred")
+        metrics.persist_throttled(min_interval_sec=2.0)
         if session.stream_failure_streak in (1, 4, 8):
             _logger.warning(
                 "CardKit stream retry deferred: code=%s streak=%d delay=%.1fs",
@@ -682,6 +687,7 @@ class StreamingController:
             seg.el_id: pre_flush_tool_steps[seg.tool_offset : tool_segment_end(seg, pre_flush_tool_steps)]
             for seg in updated_tool_segs
         }
+        metrics_interval = 10.0
         try:
             await self._session_client(session).cardkit_batch_update(
                 session.card_id,
@@ -716,6 +722,7 @@ class StreamingController:
                 if seg.created and offset_ok and tool_slice_ok:
                     seg.dirty = False
         except FeishuAPIError as e:
+            metrics_interval = 2.0
             session.flush.record_failure(rate_limited=e.code == CARDKIT_RATE_LIMITED)
             missing_el_id = extract_missing_element_id(e)
             action_summary = summarize_actions(actions)
@@ -770,6 +777,11 @@ class StreamingController:
                         break
             self._handle_flush_error(e)
             return False
+        except Exception:
+            metrics_interval = 2.0
+            raise
+        finally:
+            metrics.persist_throttled(min_interval_sec=metrics_interval)
         return True
 
     async def _maybe_rollover_tool_segment(
