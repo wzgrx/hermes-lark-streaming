@@ -58,6 +58,10 @@ def _file_lock(path: Path) -> Iterator[None]:
         os.close(fd)
 
 
+class DeliveryLedgerError(RuntimeError):
+    """Ledger contents must be preserved when they cannot be read safely."""
+
+
 class DeliveryStatus(StrEnum):
     PENDING = "pending"
     DELIVERED = "delivered"
@@ -125,18 +129,21 @@ class DeliveryLedger:
     def _read(self) -> dict[str, DeliveryEntry]:
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except FileNotFoundError:
             return {}
-        rows = raw.get("entries", {}) if isinstance(raw, dict) else {}
+        except (OSError, json.JSONDecodeError) as exc:
+            raise DeliveryLedgerError("delivery ledger unreadable; existing evidence preserved") from exc
+        if not isinstance(raw, dict) or raw.get("schema") != self.SCHEMA:
+            raise DeliveryLedgerError("delivery ledger schema invalid; existing evidence preserved")
+        rows = raw.get("entries")
         if not isinstance(rows, dict):
-            return {}
+            raise DeliveryLedgerError("delivery ledger entries invalid; existing evidence preserved")
         parsed: dict[str, DeliveryEntry] = {}
         for key, payload in rows.items():
-            if not isinstance(payload, dict):
-                continue
-            entry = DeliveryEntry.from_dict(payload)
-            if entry is not None and entry.key == key:
-                parsed[key] = entry
+            entry = DeliveryEntry.from_dict(payload) if isinstance(payload, dict) else None
+            if entry is None or entry.key != key:
+                raise DeliveryLedgerError("delivery ledger entry invalid; existing evidence preserved")
+            parsed[key] = entry
         return parsed
 
     def _write(self, entries: dict[str, DeliveryEntry]) -> None:

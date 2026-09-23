@@ -88,6 +88,9 @@ Gateway and cron synchronize the full read/modify/replace cycle through the adja
 `hermes-lark-streaming-delivery.json.lock` file (also mode `0600`), preventing concurrent
 processes from dropping each other's delivery evidence. Keep this lock file in place while
 Hermes processes are running; the OS releases its lock when a process exits.
+Malformed JSON, an unknown schema, or an unreadable entry now stops ledger mutation and
+preserves the original file for inspection. Back up the file before any manual repair;
+starting a fresh empty ledger may lose the evidence that prevents duplicate delivery.
 
 If an attach outcome remains `unknown`, CardKit entity updates continue and the plugin emits one
 idempotent generic refresh notice after completion. It does not resend the answer as plaintext.

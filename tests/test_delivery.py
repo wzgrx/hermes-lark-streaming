@@ -9,7 +9,7 @@ from threading import Thread
 
 import pytest
 
-from hermes_lark_streaming.delivery import DeliveryLedger, DeliveryStatus
+from hermes_lark_streaming.delivery import DeliveryLedger, DeliveryLedgerError, DeliveryStatus
 from hermes_lark_streaming.feishu import CARDKIT_GATEWAY_TIMEOUT, FeishuAPIError, classify_delivery_failure
 
 
@@ -96,6 +96,25 @@ def test_delivered_entry_resumes_without_losing_entity_ids(tmp_path: Path) -> No
     assert resumed.request_uuid == first.request_uuid
     assert resumed.status is DeliveryStatus.DELIVERED
     assert (resumed.card_id, resumed.message_id) == ("card-1", "om-1")
+
+
+def test_corrupt_ledger_is_preserved_instead_of_overwritten(tmp_path: Path) -> None:
+    path = tmp_path / "delivery.json"
+    raw = '{"entries":'
+    path.write_text(raw)
+    ledger = DeliveryLedger(path)
+    with pytest.raises(DeliveryLedgerError, match="evidence preserved"):
+        ledger.begin("new-message", "card.reply")
+    assert path.read_text() == raw
+
+
+@pytest.mark.parametrize("payload", ["[]", '{"schema": 1, "entries": []}', '{"schema": 2, "entries": {}}'])
+def test_invalid_ledger_schema_is_preserved(tmp_path: Path, payload: str) -> None:
+    path = tmp_path / "delivery.json"
+    path.write_text(payload)
+    with pytest.raises(DeliveryLedgerError, match="evidence preserved"):
+        DeliveryLedger(path).begin("new-message", "card.reply")
+    assert path.read_text() == payload
 
 
 def test_ledger_hashes_logical_key_and_is_owner_only(tmp_path: Path) -> None:
