@@ -82,8 +82,16 @@ The local ledger distinguishes four states:
 - `unknown`: a timeout/transport failure may have committed remotely, so the answer is not duplicated.
 
 The ledger is stored at `~/.hermes/state/hermes-lark-streaming-delivery.json`, atomically replaced,
-mode `0600`, bounded to 1,024 rows and seven days. Logical keys are SHA-256 fingerprints; message
-bodies, credentials, user ids and chat ids are not stored. `doctor --json` reports counts only.
+mode `0600`, bounded to 1,024 rows. Terminal results expire after seven days; unresolved
+`pending`/`unknown` records retain their request UUID beyond that window and take capacity
+priority over terminal rows. At the unresolved-record limit, new sends stop before network I/O
+until an operator resolves old outcomes, rather than discarding duplicate-prevention evidence.
+Lark's message UUID deduplication window is one hour; retries stop after 55 minutes to leave
+room for scheduling and network latency. An older recovered `pending` attempt is marked `unknown`,
+and aged uncertain card/notice attempts are held for receipt inspection
+instead of re-sent with an expired UUID. A verified `not_sent` retry starts a fresh attempt window.
+Logical keys are SHA-256 fingerprints; message bodies, credentials, user ids and chat ids are not
+stored. `doctor --json` reports counts only.
 Gateway and cron synchronize the full read/modify/replace cycle through the adjacent
 `hermes-lark-streaming-delivery.json.lock` file (also mode `0600`), preventing concurrent
 processes from dropping each other's delivery evidence. Keep this lock file in place while

@@ -2585,6 +2585,30 @@ class TestCrashSafeDelivery:
         assert entry is not None and entry.status is DeliveryStatus.UNKNOWN
 
     @pytest.mark.asyncio
+    async def test_unknown_attach_after_uuid_window_is_held(
+        self, isolate_delivery_ledger, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctrl = _setup_ctrl()
+        ctrl._client.cardkit_create = AsyncMock(return_value="card-unknown-old")
+        ctrl._client.reply_card_by_id = AsyncMock(side_effect=TimeoutError("response lost"))
+        session = _make_session("msg-unknown-old")
+        card = {"schema": "2.0", "body": {"elements": []}}
+        now = time.time()
+
+        first = await ctrl._create_and_attach_card(
+            session, card, generation="0", reply_to_message_id="anchor"
+        )
+        monkeypatch.setattr(time, "time", lambda: now + 3301)
+        second = await ctrl._create_and_attach_card(
+            session, card, generation="0", reply_to_message_id="anchor"
+        )
+
+        assert first == second == ("card-unknown-old", "")
+        assert session.delivery_status is DeliveryStatus.UNKNOWN
+        ctrl._client.cardkit_create.assert_awaited_once()
+        ctrl._client.reply_card_by_id.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_delivered_attach_is_recovered_without_sdk_call(self, isolate_delivery_ledger) -> None:
         logical_key = "stream:msg-recovered:generation:0:route:reply"
         isolate_delivery_ledger.begin(logical_key, "card.reply")
@@ -2618,6 +2642,29 @@ class TestCrashSafeDelivery:
         assert session.card_msg_id is None
         assert session.delivery_status is DeliveryStatus.UNKNOWN
         ctrl._client.send_card_to_chat.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_unknown_split_attach_keeps_old_visible_card(self, isolate_delivery_ledger) -> None:
+        ctrl = _setup_ctrl()
+        ctrl._client.cardkit_create = AsyncMock(return_value="new-unconfirmed-card")
+        ctrl._client.reply_card_by_id = AsyncMock(side_effect=TimeoutError("response lost"))
+        session = _make_session("msg-split-unknown")
+        session.state = SessionState.STREAMING
+        session.card_id = "old-visible-card"
+        session.card_msg_id = "old-visible-message"
+        session.delivery_key = "old-delivery"
+        session.delivery_status = DeliveryStatus.DELIVERED
+        session.segment_state.on_answer_delta("continuing answer")
+        ctrl._sessions[session.message_id] = session
+
+        assert await ctrl._do_split_card(session, 1, [], set(), {}, []) is True
+        assert session.split_disabled is True
+        assert session.card_id == "old-visible-card"
+        assert session.card_msg_id == "old-visible-message"
+        assert session.delivery_key == "old-delivery"
+        assert session.delivery_status is DeliveryStatus.DELIVERED
+        ctrl._client.cardkit_close_streaming.assert_not_awaited()
+        ctrl._client.cardkit_update.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_ledger_error_after_final_update_does_not_retry_or_replay_answer(self) -> None:
@@ -2654,3 +2701,20 @@ class TestCrashSafeDelivery:
         ctrl._client.send_text_to_chat.assert_awaited_once()
         entry = isolate_delivery_ledger.get("stream:msg-notice:uncertain-notice")
         assert entry is not None and entry.status is DeliveryStatus.DELIVERED
+
+    @pytest.mark.asyncio
+    async def test_expired_unknown_notice_is_not_sent_again(
+        self, isolate_delivery_ledger, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctrl = _setup_ctrl()
+        ctrl._client.send_text_to_chat = AsyncMock(side_effect=TimeoutError("response lost"))
+        session = _make_session("msg-notice-old")
+        session.delivery_status = DeliveryStatus.UNKNOWN
+        now = time.time()
+        await ctrl._send_uncertain_delivery_notice(session)
+        monkeypatch.setattr(time, "time", lambda: now + 3301)
+
+        await ctrl._send_uncertain_delivery_notice(session)
+        ctrl._client.send_text_to_chat.assert_awaited_once()
+        entry = isolate_delivery_ledger.get("stream:msg-notice-old:uncertain-notice")
+        assert entry is not None and entry.status is DeliveryStatus.UNKNOWN

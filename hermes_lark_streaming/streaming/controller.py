@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
@@ -19,7 +20,7 @@ from ..cardkit.markdown import (
     _downgrade_tables,
     optimize_markdown_style,
 )
-from ..delivery import DeliveryLedgerError, DeliveryStatus, delivery_ledger
+from ..delivery import IDEMPOTENCY_RETRY_WINDOW_SEC, DeliveryLedgerError, DeliveryStatus, delivery_ledger
 from ..feishu import (
     CARDKIT_CONTENT_FAILED,
     CARDKIT_ELEMENT_LIMIT,
@@ -150,6 +151,15 @@ class StreamingController:
         if entry.status is DeliveryStatus.DELIVERED and entry.card_id and entry.message_id:
             metrics.increment("delivery.recovered_delivered")
             return entry.card_id, entry.message_id
+        if (
+            entry.status is DeliveryStatus.UNKNOWN
+            and time.time() - entry.created_at >= IDEMPOTENCY_RETRY_WINDOW_SEC
+        ):
+            # Reusing the UUID after Lark's one-hour deduplication window can
+            # create a second card. Keep the uncertain receipt for inspection.
+            session.delivery_status = DeliveryStatus.UNKNOWN
+            metrics.increment("delivery.expired_unknown_held")
+            return entry.card_id or existing_card_id, ""
 
         client = self._session_client(session)
         card_id = entry.card_id or existing_card_id
@@ -200,6 +210,12 @@ class StreamingController:
         entry = delivery_ledger.begin(logical_key, "notice.unknown")
         if entry.status is DeliveryStatus.DELIVERED:
             session.delivery_notice_sent = True
+            return
+        if (
+            entry.status is DeliveryStatus.UNKNOWN
+            and time.time() - entry.created_at >= IDEMPOTENCY_RETRY_WINDOW_SEC
+        ):
+            metrics.increment("delivery.expired_notice_held")
             return
         notice = (
             "⚠️ 卡片投递确认在网络响应阶段中断; 卡片可能已经送达。"
@@ -789,6 +805,8 @@ class StreamingController:
         """Create and attach the next split card with restart-stable idempotency."""
         _ = self._session_client(session)
         generation = session.delivery_generation + 1
+        prior_delivery_key = session.delivery_key
+        prior_delivery_status = session.delivery_status
         try:
             card = build_streaming_card_v2(
                 show_tool_use=False,
@@ -804,8 +822,21 @@ class StreamingController:
                 generation=str(generation),
                 reply_to_message_id=session.anchor_id or session.message_id,
             )
+            if not new_msg_id:
+                # An uncertain attach is not a usable replacement. Keep the
+                # previously delivered card open instead of sealing it and
+                # switching the session to an invisible CardKit entity.
+                session.delivery_key = prior_delivery_key
+                session.delivery_status = prior_delivery_status
+                _logger.warning(
+                    "CardKit replacement attach unconfirmed; retaining old card: msg=%s",
+                    session.message_id[:12],
+                )
+                return None
             session.delivery_generation = generation
         except Exception:
+            session.delivery_key = prior_delivery_key
+            session.delivery_status = prior_delivery_status
             _logger.warning(
                 "CardKit create streaming card failed for msg=%s",
                 session.message_id[:12],

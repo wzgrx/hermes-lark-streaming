@@ -79,6 +79,47 @@ def test_claim_send_preserves_pending_uuid_and_rotates_only_after_rejection(tmp_
     assert delivered.message_id == "om-card"
 
 
+def test_old_pending_attempt_is_held_after_uuid_window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ledger = DeliveryLedger(tmp_path / "delivery.json")
+    now = time.time()
+    monkeypatch.setattr(time, "time", lambda: now - 3301)
+    prepared = ledger.begin("stream:old", "card.reply")
+    monkeypatch.setattr(time, "time", lambda: now)
+
+    held = ledger.begin("stream:old", "card.reply")
+    assert held.status is DeliveryStatus.UNKNOWN
+    assert held.request_uuid == prepared.request_uuid
+    assert held.created_at == prepared.created_at
+    assert DeliveryLedger(ledger.path).get("stream:old") == held
+
+
+def test_old_pending_cron_claim_is_not_sent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ledger = DeliveryLedger(tmp_path / "delivery.json")
+    now = time.time()
+    monkeypatch.setattr(time, "time", lambda: now - 3301)
+    prepared = ledger.begin("cron:old", "cron.card")
+    monkeypatch.setattr(time, "time", lambda: now)
+
+    held, should_send = ledger.claim_send("cron:old", "cron.card")
+    assert should_send is False
+    assert held.status is DeliveryStatus.UNKNOWN
+    assert held.request_uuid == prepared.request_uuid
+
+
+def test_rejected_retry_gets_new_uuid_window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ledger = DeliveryLedger(tmp_path / "delivery.json")
+    now = time.time()
+    monkeypatch.setattr(time, "time", lambda: now - 7200)
+    old = ledger.begin("stream:rejected", "card.reply")
+    ledger.failed("stream:rejected", DeliveryStatus.NOT_SENT)
+    monkeypatch.setattr(time, "time", lambda: now)
+
+    retry = ledger.begin("stream:rejected", "card.reply")
+    assert retry.status is DeliveryStatus.PENDING
+    assert retry.request_uuid != old.request_uuid
+    assert retry.created_at == now
+
+
 def test_separate_ledger_instances_preserve_threaded_updates(tmp_path: Path) -> None:
     path = tmp_path / "delivery.json"
     threads = [
@@ -199,12 +240,50 @@ def test_ledger_prunes_old_rows_and_bounds_entries(tmp_path: Path, monkeypatch: 
     now = time.time()
     monkeypatch.setattr(time, "time", lambda: now - 7200)
     ledger.begin("expired", "card.reply")
+    ledger.delivered("expired", card_id="card-old", message_id="om-old")
     monkeypatch.setattr(time, "time", lambda: now)
     for index in range(40):
-        ledger.begin(f"fresh:{index}", "card.reply")
+        key = f"fresh:{index}"
+        ledger.begin(key, "card.reply")
+        ledger.delivered(key, card_id=f"card-{index}", message_id=f"om-{index}")
     payload = json.loads(ledger.path.read_text(encoding="utf-8"))
     assert len(payload["entries"]) == 32
     assert ledger.fingerprint("expired") not in payload["entries"]
+
+
+def test_unresolved_delivery_evidence_survives_age_and_capacity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ledger = DeliveryLedger(tmp_path / "delivery.json", max_entries=32, retention_sec=3600)
+    now = time.time()
+    monkeypatch.setattr(time, "time", lambda: now - 7200)
+    pending = ledger.begin("old-pending", "card.reply")
+    unknown = ledger.begin("old-unknown", "cron.card")
+    ledger.failed("old-unknown", DeliveryStatus.UNKNOWN)
+    monkeypatch.setattr(time, "time", lambda: now)
+    for index in range(40):
+        key = f"fresh:{index}"
+        ledger.begin(key, "card.reply")
+        ledger.delivered(key, card_id=f"card-{index}", message_id=f"om-{index}")
+
+    restarted = DeliveryLedger(ledger.path, max_entries=32, retention_sec=3600)
+    assert restarted.summary()["entries"] == 32
+    assert restarted.get("old-pending").request_uuid == pending.request_uuid
+    assert restarted.get("old-unknown").request_uuid == unknown.request_uuid
+    assert restarted.get("old-unknown").status is DeliveryStatus.UNKNOWN
+
+
+def test_unresolved_capacity_holds_new_send_without_erasing_evidence(tmp_path: Path) -> None:
+    ledger = DeliveryLedger(tmp_path / "delivery.json", max_entries=32)
+    for index in range(32):
+        ledger.begin(f"pending:{index}", "card.reply")
+    original = ledger.path.read_bytes()
+
+    with pytest.raises(DeliveryLedgerError, match="capacity reached"):
+        ledger.begin("overflow", "card.reply")
+
+    assert ledger.path.read_bytes() == original
+    assert ledger.summary()["counts"]["pending"] == 32
 
 
 @pytest.mark.parametrize(

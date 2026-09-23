@@ -16,7 +16,7 @@ import threading
 import time
 import uuid
 from collections.abc import Iterator
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -26,6 +26,9 @@ from .config import hermes_home
 # A Gateway and cron worker can touch the same ledger in separate processes. A
 # per-instance RLock alone does not protect the read/modify/replace sequence.
 _PROCESS_LOCK = threading.RLock()
+# Lark IM request UUID deduplication lasts one hour. Stop retrying five minutes
+# early so scheduling and network latency cannot cross the server-side boundary.
+IDEMPOTENCY_RETRY_WINDOW_SEC = 55 * 60
 
 
 @contextlib.contextmanager
@@ -148,9 +151,25 @@ class DeliveryLedger:
 
     def _write(self, entries: dict[str, DeliveryEntry]) -> None:
         now = time.time()
-        kept = [entry for entry in entries.values() if now - entry.updated_at <= self.retention_sec]
+        # Pending and unknown sends may already have reached Feishu. Expiring or
+        # evicting their UUID would let a later retry create a second visible
+        # delivery. Keep them until an explicit terminal result is recorded.
+        unresolved = [
+            entry for entry in entries.values()
+            if entry.status in {DeliveryStatus.PENDING, DeliveryStatus.UNKNOWN}
+        ]
+        if len(unresolved) > self.max_entries:
+            raise DeliveryLedgerError(
+                "delivery ledger unresolved capacity reached; existing evidence preserved"
+            )
+        resolved = [
+            entry for entry in entries.values()
+            if entry.status not in {DeliveryStatus.PENDING, DeliveryStatus.UNKNOWN}
+            and now - entry.updated_at <= self.retention_sec
+        ]
+        resolved.sort(key=lambda entry: entry.updated_at, reverse=True)
+        kept = unresolved + resolved[: self.max_entries - len(unresolved)]
         kept.sort(key=lambda entry: entry.updated_at, reverse=True)
-        kept = kept[: self.max_entries]
         payload = {
             "schema": self.SCHEMA,
             "updated_at": now,
@@ -198,6 +217,13 @@ class DeliveryLedger:
             entries = self._read()
             previous = entries.get(key)
             if previous is not None and not (retry_not_sent and previous.status is DeliveryStatus.NOT_SENT):
+                if (
+                    previous.status is DeliveryStatus.PENDING
+                    and now - previous.created_at >= IDEMPOTENCY_RETRY_WINDOW_SEC
+                ):
+                    previous = replace(previous, status=DeliveryStatus.UNKNOWN, updated_at=now)
+                    entries[key] = previous
+                    self._write(entries)
                 return previous
             attempt = previous.attempt + 1 if previous is not None else 1
             entry = DeliveryEntry(
@@ -205,7 +231,7 @@ class DeliveryLedger:
                 operation=operation,
                 request_uuid=uuid.uuid4().hex,
                 status=DeliveryStatus.PENDING,
-                created_at=previous.created_at if previous is not None else now,
+                created_at=now,
                 updated_at=now,
                 attempt=attempt,
             )
@@ -231,17 +257,24 @@ class DeliveryLedger:
             }:
                 return previous, False
             if previous is not None and previous.status is DeliveryStatus.PENDING:
+                if now - previous.created_at >= IDEMPOTENCY_RETRY_WINDOW_SEC:
+                    held = replace(previous, status=DeliveryStatus.UNKNOWN, updated_at=now)
+                    entries[key] = held
+                    self._write(entries)
+                    return held, False
                 request_uuid = previous.request_uuid
                 attempt = previous.attempt
+                created_at = previous.created_at
             else:
                 request_uuid = uuid.uuid4().hex
                 attempt = previous.attempt + 1 if previous is not None else 1
+                created_at = now
             entry = DeliveryEntry(
                 key=key,
                 operation=operation,
                 request_uuid=request_uuid,
                 status=DeliveryStatus.UNKNOWN,
-                created_at=previous.created_at if previous is not None else now,
+                created_at=created_at,
                 updated_at=now,
                 attempt=attempt,
             )
