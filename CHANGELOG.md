@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 修复
 
+- 新增显式 `smoke --execute --entity-only` 飞书 CardKit 实体探针：不发送聊天消息，
+  验证 `300313` 后补建缺失元素再复用相同流式请求 UUID；结果仅输出状态与错误码，
+  关闭失败也报告探针失败。默认 `smoke` 仍为离线检查。
 - CardKit batch 更新为同一张卡、sequence 和操作内容生成稳定幂等 UUID；服务器瞬时错误
   导致 SDK 重试时复用该 UUID，避免已执行的 `add_elements` 被再次应用。修复后的
   不同操作内容即使复用未提交的 sequence，也会使用不同 UUID。

@@ -10,7 +10,7 @@ from typing import Any
 from .card_limits import inspect_card
 from .cardkit.builder import build_complete_card, build_streaming_card_v2
 from .config import Config
-from .feishu import FeishuClient, FeishuClientConfig
+from .feishu import CARDKIT_ELEMENT_NOT_FOUND, FeishuAPIError, FeishuClient, FeishuClientConfig
 from .streaming.segments import Segment, SegmentType
 
 
@@ -20,14 +20,18 @@ def dry_run() -> dict[str, Any]:
     return {"ok": report.safe, "mode": "dry-run", "inspection": report.__dict__}
 
 
-async def live_run(chat_id: str) -> dict[str, Any]:
-    """Create → attach → stream → close → final update in an explicit test chat."""
+def _configured_client() -> FeishuClient:
     cfg = Config()
     app_id = cfg.env_app_id or cfg.feishu_app_id
     app_secret = cfg.env_app_secret or cfg.feishu_app_secret
     if not app_id or not app_secret:
         raise RuntimeError("Feishu credentials are not configured")
-    client = FeishuClient(FeishuClientConfig(app_id=app_id, app_secret=app_secret, base_url=cfg.feishu_base_url))
+    return FeishuClient(FeishuClientConfig(app_id=app_id, app_secret=app_secret, base_url=cfg.feishu_base_url))
+
+
+async def live_run(chat_id: str) -> dict[str, Any]:
+    """Create → attach → stream → close → final update in an explicit test chat."""
+    client = _configured_client()
     started = time.monotonic()
     card = build_streaming_card_v2(show_streaming_element=True, width_mode="compact")
     card_id = await client.cardkit_create(card)
@@ -47,10 +51,76 @@ async def live_run(chat_id: str) -> dict[str, Any]:
     }
 
 
-def run(*, execute: bool, chat_id: str = "") -> int:
+async def live_entity_probe() -> dict[str, Any]:
+    """Check whether CardKit accepts the same UUID after a rejected 300313.
+
+    Creates one CardKit entity but never attaches it to a chat. The second
+    stream request has exactly the same card, element, sequence, content, and
+    UUID as the first; adding the missing element in between changes only the
+    server-side element tree.
+    """
+    client = _configured_client()
+    card_id = await client.cardkit_create(build_streaming_card_v2(
+        show_tool_use=False, show_reasoning=False, show_streaming_element=False,
+    ))
+    result: dict[str, Any] = {"ok": False, "mode": "entity-probe", "attached_to_chat": False}
+    try:
+        try:
+            await client.cardkit_stream_element(card_id, "probe_text", "probe", sequence=5)
+        except FeishuAPIError as exc:
+            result["initial_error_code"] = exc.code
+        else:
+            result["initial_error_code"] = 0
+        if result["initial_error_code"] != CARDKIT_ELEMENT_NOT_FOUND:
+            return result
+
+        try:
+            await client.cardkit_batch_update(card_id, [{
+                "action": "add_elements",
+                "params": {
+                    "type": "insert_before",
+                    "target_element_id": "loading_icon",
+                    "elements": [{"tag": "markdown", "element_id": "probe_text", "content": "ready"}],
+                },
+            }], sequence=2)
+        except FeishuAPIError as exc:
+            result["add_error_code"] = exc.code
+            return result
+        try:
+            await client.cardkit_stream_element(card_id, "probe_text", "probe", sequence=5)
+        except FeishuAPIError as exc:
+            result["retry_error_code"] = exc.code
+            return result
+        result["ok"] = True
+        result["same_uuid_after_add"] = "accepted"
+        return result
+    finally:
+        try:
+            await client.cardkit_close_streaming(card_id, sequence=6)
+            result["entity_closed"] = True
+        except FeishuAPIError as exc:
+            result["entity_closed"] = False
+            result["ok"] = False
+            result["close_error_code"] = exc.code
+        except Exception as exc:
+            result["entity_closed"] = False
+            result["ok"] = False
+            result["close_error_type"] = type(exc).__name__
+
+
+def run(*, execute: bool, chat_id: str = "", entity_only: bool = False) -> int:
     if not execute:
         print(json.dumps(dry_run(), ensure_ascii=False, indent=2))
         return 0
+    if entity_only:
+        try:
+            report = asyncio.run(live_entity_probe())
+        except FeishuAPIError as exc:
+            report = {"ok": False, "mode": "entity-probe", "attached_to_chat": False, "error_code": exc.code}
+        except Exception as exc:
+            report = {"ok": False, "mode": "entity-probe", "attached_to_chat": False, "error_type": type(exc).__name__}
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["ok"] and report.get("entity_closed") else 1
     if not chat_id:
         print("--chat-id is required with --execute")
         return 2

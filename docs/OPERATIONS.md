@@ -59,6 +59,16 @@ streaming delay. The `cardkit.stream.retry_deferred` and
 hermes-lark-streaming smoke --execute --chat-id oc_TEST_CHAT
 ```
 
+For a narrower live check without a chat message, run
+`hermes-lark-streaming smoke --execute --entity-only`. It creates one
+unattached CardKit entity, intentionally streams to a missing element to
+obtain `300313`, inserts that element, retries the *identical* stream
+mutation/UUID, then closes the entity. The JSON output contains only the
+error code and acceptance/close status; success requires both the retry and
+close to succeed. This probes UUID reuse after a rejected update, not heavy
+tool-turn delivery or all paths in upstream #98. It makes real Feishu API
+calls and requires the active Hermes profile's Feishu credentials.
+
 The optional official `lark-cli` is used only for operational preflight; it is not a runtime
 dependency. `lark-cli-smoke --execute` runs read-only auth-status/schema commands.
 
