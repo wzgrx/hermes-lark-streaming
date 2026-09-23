@@ -11,6 +11,15 @@ hermes-lark-streaming lark-cli-smoke
 hermes-lark-streaming repair-sdk  # only after doctor reports a broken SDK
 ```
 
+CardKit errors are counted by operation and by a fixed, privacy-preserving
+error-code bucket, for example `api.cardkit_stream_element.error_code.300309`
+(stream already closed), `.300313` (element missing), `.300317` (sequence
+conflict), or `.other`. Compare these with the corresponding `attempt` and
+`success` counters before changing retry behavior. The metrics command reads
+the last persisted gateway snapshot, so check `started_at` and `updated_at`
+before treating it as the current process. Error counts include individual
+retry attempts, not just failed cards.
+
 `smoke` is offline by default. A real CardKit create → stream → close → update check is explicit:
 
 ```bash

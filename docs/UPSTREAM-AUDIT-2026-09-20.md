@@ -10,7 +10,7 @@
 | [#109 流式 MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/issues/109) | 已覆盖 | 保留原始 answer delta，follow-up/失败路径由插件补投，正文移除内部指令。 |
 | [#106 clarify 签名](https://github.com/Cheerwhy/hermes-lark-streaming/issues/106) | 已覆盖 | `functools.wraps` + `*args/**kwargs`，适配 2/3 参和 batch clarify。 |
 | [#105 模块化 Gateway](https://github.com/Cheerwhy/hermes-lark-streaming/issues/105) | 已覆盖 | `ModularPatcher` 跨 `run_inbound/run_turn/run_turn_runner/run_busy`，预编译、原子发布和回滚。 |
-| [#98 CardKit 300313](https://github.com/Cheerwhy/hermes-lark-streaming/issues/98) | 已加强 | 元素流更新 200/400/800ms 有界重试；batch 缺失 segment 回滚计数与 created 快照。loading anchor、答案/推理流式文本、batch 中的推理面板内文本丢失时，有界重建整卡并重放当前 segments；新卡重置恢复额度，重复失败转文本兜底。sequence 仅在成功后提交，避免连锁 300317。回归测试覆盖这些路径。 |
+| [#98 CardKit 300313](https://github.com/Cheerwhy/hermes-lark-streaming/issues/98) | 已加强，流式错误待复测 | 元素流更新 200/400/800ms 有界重试；batch 缺失 segment 回滚计数与 created 快照。loading anchor、答案/推理流式文本、batch 中的推理面板内文本丢失时，有界重建整卡并重放当前 segments；新卡重置恢复额度，重复失败转文本兜底。sequence 仅在成功后提交，避免连锁 300317。回归测试覆盖这些路径。2026-09-23 的上一轮 Gateway 指标中，`cardkit_stream_element` 有 601 次尝试、506 次错误、95 次成功，但旧指标缺少错误码，尚不足以把这些错误归因于 #98；新增固定错误码桶后再按新进程数据区分 300309/300313/300317/其他。 |
 | [#82 其他消息类型](https://github.com/Cheerwhy/hermes-lark-streaming/issues/82) | 已覆盖核心场景 | 后台复盘合并进最终卡片；审批保留 Hermes 原生按钮/回调，插件负责暂停旧流并在工具结束后换卡继续。 |
 
 ## 最新上游变化

@@ -168,3 +168,23 @@ async def test_stream_element_300313_retry_is_bounded() -> None:
 
     assert error.value.code == 300313
     assert content.call_count == 4
+
+
+@pytest.mark.asyncio
+async def test_stream_error_metrics_bucket_only_known_codes() -> None:
+    content = MagicMock(
+        side_effect=[
+            _Resp(ok=False, code=300309, msg="streaming closed"),
+            _Resp(ok=False, code=987654321, msg="opaque error"),
+        ]
+    )
+    client = _client_with(card_element_content=content)  # type: ignore[arg-type]
+    observed: list[str] = []
+    with patch("hermes_lark_streaming.feishu.metrics.increment", side_effect=observed.append):
+        with pytest.raises(FeishuAPIError):
+            await client.cardkit_stream_element("card", "answer_1", "text", sequence=2)
+        with pytest.raises(FeishuAPIError):
+            await client.cardkit_stream_element("card", "answer_1", "text", sequence=2)
+    assert "api.cardkit_stream_element.error_code.300309" in observed
+    assert "api.cardkit_stream_element.error_code.other" in observed
+    assert not any("987654321" in name for name in observed)

@@ -93,7 +93,21 @@ CARDKIT_CONTENT_FAILED = 230099  # 卡片内容创建失败（通用码，需检
 CARDKIT_ELEMENT_LIMIT = 11310  # 子码: 卡片元素数量超限
 CARDKIT_STREAMING_CLOSED = 300309  # 卡片流式模式已关闭
 CARDKIT_ELEMENT_NOT_FOUND = 300313  # add_elements 后服务端元素尚未可见
+CARDKIT_SEQUENCE_CONFLICT = 300317  # 更新序号冲突
 MSG_NOT_FOUND = 1000023  # 消息不存在/已删除
+
+# Metrics use a fixed code allowlist. An arbitrary provider error code must
+# not create unbounded counter names or leak free-form API response content.
+_METRIC_ERROR_CODES = frozenset({
+    CARDKIT_GATEWAY_TIMEOUT,
+    CARDKIT_INTERNAL_ERROR,
+    CARDKIT_SERVER_INTERNAL_ERROR,
+    CARDKIT_RATE_LIMITED,
+    CARDKIT_CONTENT_FAILED,
+    CARDKIT_STREAMING_CLOSED,
+    CARDKIT_ELEMENT_NOT_FOUND,
+    CARDKIT_SEQUENCE_CONFLICT,
+})
 
 _ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC = (0.2, 0.4, 0.8)
 
@@ -166,6 +180,8 @@ class FeishuClient:
                 return resp
             except FeishuAPIError as exc:
                 metrics.increment(f"api.{operation}.error")
+                bucket = str(exc.code) if exc.code in _METRIC_ERROR_CODES else "other"
+                metrics.increment(f"api.{operation}.error_code.{bucket}")
                 if exc.code == CARDKIT_RATE_LIMITED:
                     metrics.increment("api.rate_limited")
                 if exc.code == CARDKIT_ELEMENT_NOT_FOUND:
