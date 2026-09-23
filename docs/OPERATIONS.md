@@ -99,6 +99,19 @@ final card update does not retry that update.
 If an attach outcome remains `unknown`, CardKit entity updates continue and the plugin emits one
 idempotent generic refresh notice after completion. It does not resend the answer as plaintext.
 
+## Cron CardKit outcome ownership
+
+The injected Cron path distinguishes a verified card message ID from a confirmed
+server rejection and an ambiguous send outcome. A confirmed rejection allows
+Hermes' native delivery path. A transport timeout, an unstructured exception
+after the CardKit send starts, or a missing message ID yields an unverified
+`delivery_outcome=unknown` receipt: the hook records the unverified target and
+skips native plaintext replay. In particular, the 30-second Gateway-loop wait
+may expire while its send coroutine is still running; falling through at that
+point could deliver the same answer twice. Unknown outcomes are visible through
+Cron delivery verification diagnostics and require receipt inspection before a
+manual resend.
+
 ## Native Hermes hooks
 
 Version 0.16.0 registers current Hermes streaming/tool/approval observers through the package entry

@@ -82,6 +82,10 @@ def _strip_answer_media_directives(segments: list[Segment]) -> None:
             seg.text = strip_media_directives(seg.text)
 
 
+class CronDeliveryOutcomeUnknown(RuntimeError):
+    """A Cron card send may have committed without a usable message receipt."""
+
+
 class StreamingController:
     """流式卡片专用方法 — 由 StreamCardController 继承."""
 
@@ -1096,9 +1100,14 @@ class StreamingController:
             task_name=task_name,
             run_time=run_time,
         )
-        message_id = await client.send_card_to_chat(chat_id, card)
+        try:
+            message_id = await client.send_card_to_chat(chat_id, card)
+        except FeishuAPIError:
+            raise  # Structured server rejection is classified by the caller.
+        except Exception as exc:
+            raise CronDeliveryOutcomeUnknown("Feishu cron card send outcome unknown") from exc
         if not message_id:
-            raise RuntimeError("Feishu cron card send returned no message_id")
+            raise CronDeliveryOutcomeUnknown("Feishu cron card send returned no message_id")
         await self._deliver_card_media(chat_id, paths, reply_to_message_id=message_id, client=client)
         return str(message_id)
 

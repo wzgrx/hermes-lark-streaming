@@ -13,12 +13,15 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config, hermes_home
+from .delivery import DeliveryStatus
 from .feishu import (
+    FeishuAPIError,
     FeishuClient,
     FeishuClientConfig,
+    classify_delivery_failure,
 )
 from .metrics import metrics
-from .streaming.controller import StreamingController
+from .streaming.controller import CronDeliveryOutcomeUnknown, StreamingController
 from .streaming.media import (
     deliver_media_files,
     media_paths_to_deliver,
@@ -644,6 +647,14 @@ class StreamCardController(StreamingController):
                 "message_id": str(message_id),
                 "raw_response": {"delivery": "feishu_card"},
             }
+        except (CronDeliveryOutcomeUnknown, TimeoutError):
+            _logger.warning("cron card delivery outcome unknown; suppressing native replay", exc_info=True)
+            return {"success": False, "delivery_outcome": "unknown"}
+        except FeishuAPIError as exc:
+            _logger.warning("cron card delivery failed: code=%s", exc.code, exc_info=True)
+            if classify_delivery_failure(exc) is DeliveryStatus.UNKNOWN:
+                return {"success": False, "delivery_outcome": "unknown"}
+            return False
         except Exception:
             _logger.warning("cron card delivery failed", exc_info=True)
             return False

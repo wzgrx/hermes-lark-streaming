@@ -2039,7 +2039,16 @@ class TestCronDeliver:
         assert errors == []
         cls.assert_called_once()
 
-    def test_returns_false_on_standalone_send_failure(self) -> None:
+    def test_failure_before_send_yields_to_native_delivery(self) -> None:
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        with patch.object(
+            ctrl, "_client_for_chat", new_callable=AsyncMock, side_effect=RuntimeError("init failed")
+        ):
+            assert ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=None) is False
+
+    def test_unstructured_standalone_send_failure_is_ambiguous(self) -> None:
         ctrl = StreamCardController()
         ctrl._cfg = MagicMock()
         ctrl._cfg.enabled = True
@@ -2048,7 +2057,10 @@ class TestCronDeliver:
         ctrl._client = mock_client
         ctrl._initialized = True
 
-        assert ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=None) is False
+        assert ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=None) == {
+            "success": False,
+            "delivery_outcome": "unknown",
+        }
 
     def test_falls_back_when_gateway_loop_is_not_running(self) -> None:
         ctrl = StreamCardController()
@@ -2077,9 +2089,59 @@ class TestCronDeliver:
         ctrl._client = mock_client
         ctrl._initialized = True
 
-        assert ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=None) is False
+        result = ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=None)
+        assert result == {"success": False, "delivery_outcome": "unknown"}
 
-    def test_returns_false_on_send_failure(self) -> None:
+    def test_timeout_keeps_gateway_from_replaying_a_possible_card(self) -> None:
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        mock_client = AsyncMock()
+        mock_client.send_card_to_chat.side_effect = TimeoutError("response lost")
+        ctrl._client = mock_client
+        ctrl._initialized = True
+
+        assert ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=None) == {
+            "success": False,
+            "delivery_outcome": "unknown",
+        }
+
+    def test_gateway_loop_wait_timeout_does_not_trigger_plaintext_fallback(self) -> None:
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        loop = MagicMock()
+        loop.is_running.return_value = True
+        loop.is_closed.return_value = False
+        future = MagicMock()
+        future.result.side_effect = TimeoutError("card send still pending")
+
+        def schedule(coroutine, _loop):
+            coroutine.close()
+            return future
+
+        with patch("hermes_lark_streaming.controller.asyncio.run_coroutine_threadsafe", side_effect=schedule):
+            result = ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=loop)
+
+        assert result == {"success": False, "delivery_outcome": "unknown"}
+        future.result.assert_called_once_with(timeout=30)
+
+    @pytest.mark.parametrize(
+        ("code", "expected"),
+        [(230099, False), (2200, {"success": False, "delivery_outcome": "unknown"})],
+    )
+    def test_structured_cron_error_uses_delivery_outcome(self, code, expected) -> None:
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        mock_client = AsyncMock()
+        mock_client.send_card_to_chat.side_effect = FeishuAPIError("send failed", code=code)
+        ctrl._client = mock_client
+        ctrl._initialized = True
+
+        assert ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=None) == expected
+
+    def test_unstructured_loop_send_failure_is_ambiguous(self) -> None:
         import threading
 
         ctrl = StreamCardController()
@@ -2095,7 +2157,7 @@ class TestCronDeliver:
         threading.Thread(target=loop.run_forever, daemon=True).start()
         try:
             result = ctrl.on_cron_deliver(chat_id="c1", content="hello", loop=loop)
-            assert result is False
+            assert result == {"success": False, "delivery_outcome": "unknown"}
         finally:
             loop.call_soon_threadsafe(loop.stop)
 

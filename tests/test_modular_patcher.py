@@ -172,3 +172,7 @@ def test_modular_cron_hook_requires_message_id_evidence(modular_root):
     # A legacy truthy boolean receipt remains visible as unverified; the new
     # structured receipt with message_id takes the verified path.
     assert "unverified_targets.append(t.where)" in source
+    assert "_hermes_lark_cron_receipt.get('delivery_outcome') == 'unknown'" in source
+    assert source.index("_hermes_lark_cron_receipt.get('delivery_outcome')") < source.index(
+        "_maybe_mirror_cron_delivery(", source.index("# HERMES_LARK_CRON_DELIVER_BEGIN")
+    )
