@@ -26,6 +26,14 @@ jobs:
           path: _hermes-agent
           fetch-depth: 1
 
+      - name: Fetch pinned legacy Hermes fixture
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: NousResearch/hermes-agent
+          ref: 63279301bcbdc185c1b07b98a9312eb0c862f26d
+          path: _hermes-legacy
+          fetch-depth: 1
+
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -44,6 +52,7 @@ jobs:
       - name: Run tests against latest Hermes
         env:
           HERMES_MODULAR_SOURCE: ${{ github.workspace }}/_hermes-agent
+          HERMES_LEGACY_SOURCE: ${{ github.workspace }}/_hermes-legacy
         run: python -m pytest tests -q
 
 
@@ -64,6 +73,14 @@ jobs:
           path: _hermes-agent
           fetch-depth: 1
 
+      - name: Fetch pinned legacy Hermes fixture
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: NousResearch/hermes-agent
+          ref: 63279301bcbdc185c1b07b98a9312eb0c862f26d
+          path: _hermes-legacy
+          fetch-depth: 1
+
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
@@ -75,4 +92,5 @@ jobs:
       - name: Verify patch round-trip and callback behavior
         env:
           HERMES_MODULAR_SOURCE: ${{ github.workspace }}/_hermes-agent
+          HERMES_LEGACY_SOURCE: ${{ github.workspace }}/_hermes-legacy
         run: python -m pytest tests/test_modular_patcher.py tests/test_patcher.py -q

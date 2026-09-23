@@ -42,7 +42,10 @@ from hermes_lark_streaming.patcher import (
 SAMPLES_DIR = Path(__file__).parent / "samples"
 SAMPLE_RUN = SAMPLES_DIR / "run.py"
 SAMPLE_CRON = SAMPLES_DIR / "scheduler.py"
-HERMES_REPO = Path.home() / ".hermes" / "hermes-agent"
+# CI supplies a separate shallow checkout of the exact legacy revision.
+# Local runs can reuse the installed Hermes Git repository and still verify
+# both fixture SHA-256 values before copying the files.
+HERMES_REPO = Path(os.environ.get("HERMES_LEGACY_SOURCE") or Path.home() / ".hermes" / "hermes-agent")
 
 # Legacy monolithic patcher fixtures are pinned independently of the current
 # modular Hermes checkout. Changes to the installed gateway cannot change the
