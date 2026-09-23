@@ -168,6 +168,7 @@ $HERMES_PYTHON -m hermes_lark_streaming restore    # Restore original files from
 $HERMES_PYTHON -m hermes_lark_streaming status     # Show patch/runtime status
 $HERMES_PYTHON -m hermes_lark_streaming doctor     # Config, hook, routing and dependency checks
 $HERMES_PYTHON -m hermes_lark_streaming metrics --json
+$HERMES_PYTHON -m hermes_lark_streaming metrics --sidecar  # Optional sidecar metrics
 $HERMES_PYTHON -m hermes_lark_streaming smoke      # Offline unless --execute is explicit
 $HERMES_PYTHON -m hermes_lark_streaming lark-cli-smoke
 $HERMES_PYTHON -m hermes_lark_streaming repair-sdk  # only when doctor reports broken SDK

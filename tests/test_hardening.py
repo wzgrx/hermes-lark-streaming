@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
+import hermes_lark_streaming.sidecar as sidecar_module
 from hermes_lark_streaming import metrics as metrics_module
 from hermes_lark_streaming.__main__ import _cmd_metrics
 from hermes_lark_streaming.card_limits import MAX_JSON_BYTES, compact_card, inspect_card
@@ -73,6 +75,49 @@ def test_metrics_persist_concurrent_writers_use_distinct_staging_files(tmp_path:
     assert not list(path.parent.glob("metrics.json.*.tmp"))
 
 
+def test_sidecar_snapshot_does_not_replace_gateway_diagnostics(tmp_path: Path) -> None:
+    path = tmp_path / "state" / "metrics.json"
+    gateway = MetricsStore(path)
+    sidecar = MetricsStore(path)
+    sidecar.set_role("sidecar")
+    gateway.increment("api.cardkit_batch_update.error_code.300313")
+    sidecar.increment("sidecar.event.message.started")
+
+    gateway.persist()
+    sidecar.persist()
+
+    assert gateway.load_persisted()["counters"] == {
+        "api.cardkit_batch_update.error_code.300313": 1,
+    }
+    assert gateway.load_persisted(role="sidecar")["counters"] == {
+        "sidecar.event.message.started": 1,
+    }
+    assert sidecar.path == path.with_name("metrics-sidecar.json")
+
+
+def test_legacy_shared_snapshot_has_ambiguous_owner(tmp_path: Path) -> None:
+    path = tmp_path / "metrics.json"
+    path.write_text('{"schema": 1, "counters": {"sidecar.event.x": 1}}', encoding="utf-8")
+    assert MetricsStore(path).load_persisted(role="gateway") is None
+
+
+def test_sidecar_selects_own_snapshot_before_dispatch(monkeypatch) -> None:
+    class FakeDispatcher:
+        def close(self) -> None:
+            pass
+
+    class FakeServer:
+        def __init__(self, _address, _handler) -> None:
+            assert metrics_module.metrics.path.name == "metrics-sidecar.json"
+
+        def serve_forever(self) -> None:
+            pass
+
+    monkeypatch.setattr(sidecar_module, "SidecarDispatcher", FakeDispatcher)
+    monkeypatch.setattr(sidecar_module, "ThreadingHTTPServer", FakeServer)
+    sidecar_module.serve()
+
+
 def test_runtime_metrics_path_is_isolated_from_operator_home(tmp_path: Path) -> None:
     assert metrics_module.metrics.path.is_relative_to(tmp_path)
 
@@ -104,6 +149,23 @@ def test_metrics_cli_reads_persisted_snapshot(capsys) -> None:
     output = json.loads(capsys.readouterr().out)
     assert output["counters"]["card.cli_test"] >= 1
     assert output["schema"] == 1
+
+
+def test_metrics_cli_selects_sidecar_without_masking_gateway(capsys, monkeypatch) -> None:
+    gateway = metrics_module.metrics
+    gateway.increment("card.gateway")
+    gateway.persist()
+    sidecar = MetricsStore(gateway.path)
+    sidecar.set_role("sidecar")
+    sidecar.increment("sidecar.event.test")
+    sidecar.persist()
+    monkeypatch.setattr(sys, "argv", ["hermes_lark_streaming", "metrics", "--sidecar"])
+
+    assert _cmd_metrics() == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["process_role"] == "sidecar"
+    assert output["counters"] == {"sidecar.event.test": 1}
+    assert gateway.load_persisted()["counters"]["card.gateway"] == 1
 
 
 def test_callback_proof_rejects_replay_and_tampering() -> None:

@@ -21,6 +21,7 @@ class MetricsStore:
 
     def __init__(self, path: Path | None = None) -> None:
         self._path = path
+        self._role = "gateway"
         self._lock = threading.Lock()
         self._started_at = time.time()
         self._counters: dict[str, int] = defaultdict(int)
@@ -30,10 +31,25 @@ class MetricsStore:
 
     @property
     def path(self) -> Path:
+        return self.path_for_role(self._role)
+
+    def set_role(self, role: str) -> None:
+        """Select this process's snapshot before it begins handling events."""
+        if role not in {"gateway", "sidecar"}:
+            raise ValueError("unknown metrics process role")
+        self._role = role
+
+    def path_for_role(self, role: str) -> Path:
+        if role not in {"gateway", "sidecar"}:
+            raise ValueError("unknown metrics process role")
         if self._path is not None:
-            return self._path
-        home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
-        return home / "state" / "hermes-lark-streaming-metrics.json"
+            base = self._path
+        else:
+            home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
+            base = home / "state" / "hermes-lark-streaming-metrics.json"
+        if role == "gateway":
+            return base
+        return base.with_name(f"{base.stem}-sidecar{base.suffix}")
 
     def increment(self, name: str, value: int = 1) -> None:
         with self._lock:
@@ -61,6 +77,7 @@ class MetricsStore:
             }
             return {
                 "schema": 1,
+                "process_role": self._role,
                 "started_at": self._started_at,
                 "updated_at": time.time(),
                 "uptime_sec": round(time.time() - self._started_at, 3),
@@ -68,19 +85,23 @@ class MetricsStore:
                 "latency": latency,
             }
 
-    def load_persisted(self) -> dict[str, Any] | None:
+    def load_persisted(self, *, role: str | None = None) -> dict[str, Any] | None:
+        selected_role = role or self._role
         try:
-            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            payload = json.loads(self.path_for_role(selected_role).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
-        return payload if isinstance(payload, dict) else None
+        # Legacy snapshots had no owner, so a sidecar may have replaced a
+        # gateway snapshot at the old shared path. Do not report it as a
+        # verified gateway measurement after the role split.
+        return payload if isinstance(payload, dict) and payload.get("process_role") == selected_role else None
 
     def persist(self) -> Path:
         path = self.path
         path.parent.mkdir(parents=True, exist_ok=True)
         staged: Path | None = None
         try:
-            # Gateway and optional sidecar processes can persist concurrently.
+            # Multiple processes or threads may still target one role path.
             # A fixed .tmp path lets one writer rename the other's staging file.
             with tempfile.NamedTemporaryFile(
                 mode="w", encoding="utf-8", dir=path.parent,

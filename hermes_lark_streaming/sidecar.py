@@ -87,6 +87,9 @@ class SidecarDispatcher:
 
 
 def serve(host: str = "127.0.0.1", port: int = 8788) -> None:
+    # Sidecar and gateway are separate processes with independent counters.
+    # Keep sidecar writes from masking the gateway's CardKit error diagnostics.
+    metrics.set_role("sidecar")
     secret = os.environ.get("HERMES_LARK_SIDECAR_SECRET", "")
     guard = ReplayGuard()
     dispatcher = SidecarDispatcher()

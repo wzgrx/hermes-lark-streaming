@@ -54,7 +54,7 @@ def _print_usage() -> None:
     print("  status     Show current patch status")
     print("  verify     Verify compatibility without patching")
     print("  doctor     Run structured configuration/runtime diagnostics [--json]")
-    print("  metrics    Show privacy-preserving runtime metrics [--json]")
+    print("  metrics    Show gateway metrics [--json]; add --sidecar for the sidecar process")
     print("  smoke      CardKit dry-run; add --execute --chat-id CHAT for live E2E")
     print("  lark-cli-smoke  Inspect optional lark-cli; add --execute for read-only checks")
     print("  repair-sdk  Explicitly repair lark-oapi in the active Hermes interpreter")
@@ -273,11 +273,12 @@ def _cmd_metrics() -> int:
 
     from .metrics import metrics
 
-    snapshot = metrics.load_persisted()
+    role = "sidecar" if "--sidecar" in sys.argv[2:] else "gateway"
+    snapshot = metrics.load_persisted(role=role)
     if snapshot is None:
         print(json.dumps({
             "status": "metrics_unavailable",
-            "detail": "No readable persisted gateway metrics snapshot",
+            "detail": f"No readable persisted {role} metrics snapshot",
         }, ensure_ascii=False))
         return 1
     print(json.dumps(snapshot, ensure_ascii=False, indent=2))

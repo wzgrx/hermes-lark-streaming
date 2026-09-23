@@ -168,6 +168,7 @@ $HERMES_PYTHON -m hermes_lark_streaming restore    # 从备份恢复原始文件
 $HERMES_PYTHON -m hermes_lark_streaming status     # 查看状态（含 Hermes Python/安装目录检测）
 $HERMES_PYTHON -m hermes_lark_streaming doctor     # 配置、hook、路由和依赖诊断
 $HERMES_PYTHON -m hermes_lark_streaming metrics --json
+$HERMES_PYTHON -m hermes_lark_streaming metrics --sidecar  # 可选 sidecar 的独立指标
 $HERMES_PYTHON -m hermes_lark_streaming smoke      # 默认离线；--execute 才访问真实测试群
 $HERMES_PYTHON -m hermes_lark_streaming lark-cli-smoke
 $HERMES_PYTHON -m hermes_lark_streaming repair-sdk  # only when doctor reports broken SDK

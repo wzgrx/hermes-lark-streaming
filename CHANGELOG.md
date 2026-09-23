@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 修复
 
+- Gateway 与可选 sidecar 分别保存指标快照，避免 sidecar 最后写入时覆盖
+  CardKit 错误码统计；CLI 可用 `metrics --sidecar` 单独查看 sidecar。旧版无
+  `process_role` 的快照不再被误认作当前 Gateway 指标。
 - 仅含 `partial_update_element` 的 CardKit 批量更新遇到短暂 `300313` 时，固定
   sequence 有界重试；包含 `add_elements` 的批次维持原有回滚/重建路径，避免不确定
   回执下重复新增元素。`api.element_not_found_recovered` 现在只在重试真正成功后计数。

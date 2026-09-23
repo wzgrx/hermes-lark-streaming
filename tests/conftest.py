@@ -13,6 +13,7 @@ from hermes_lark_streaming.metrics import metrics
 def isolate_metrics_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Keep card/Feishu tests from replacing the live gateway metrics snapshot."""
     monkeypatch.setattr(metrics, "_path", tmp_path / "metrics.json")
+    monkeypatch.setattr(metrics, "_role", "gateway")
 
 
 @pytest.fixture(autouse=True)

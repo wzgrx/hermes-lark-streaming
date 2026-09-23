@@ -6,6 +6,7 @@
 hermes-lark-streaming doctor
 hermes-lark-streaming doctor --json
 hermes-lark-streaming metrics --json
+hermes-lark-streaming metrics --sidecar
 hermes-lark-streaming smoke
 hermes-lark-streaming lark-cli-smoke
 hermes-lark-streaming repair-sdk  # only after doctor reports a broken SDK
@@ -17,14 +18,18 @@ error-code bucket, for example `api.cardkit_stream_element.error_code.300309`
 conflict), or `.other`. Compare these with the corresponding `attempt` and
 `success` counters before changing retry behavior. The metrics command reads
 the last persisted gateway snapshot, so check `started_at` and `updated_at`
-before treating it as the current process. Error counts include individual
+before treating it as the current process. `process_role` must be `gateway`;
+the `--sidecar` selector reads a separate sidecar snapshot. Error counts include individual
 retry attempts, not just failed cards.
 If no readable persisted snapshot exists, the command reports
 `metrics_unavailable` and exits nonzero; it does not present an empty CLI-process
 snapshot as if it came from the Gateway.
-Gateway and optional sidecar writers stage snapshots in distinct temporary
-files before atomic replacement. If both write the same metrics path, the last
-completed snapshot wins; this file is a process snapshot, not an aggregate.
+Gateway and optional sidecar writers now publish different process snapshots:
+`hermes-lark-streaming-metrics.json` and
+`hermes-lark-streaming-metrics-sidecar.json`. Both use unique staging files
+before atomic replacement. A legacy snapshot without `process_role` has
+ambiguous ownership and is reported as `metrics_unavailable` until its process
+writes a fresh snapshot; these files are not an aggregate.
 The test suite uses a temporary metrics path and leaves the operator's live
 snapshot untouched.
 `api.element_not_found_recovered` counts only a successful stream or
