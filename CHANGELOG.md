@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 修复
 
+- 未确认的卡片/Cron 投递记录现在优先保留，不受七天终态清理影响；飞书 UUID
+  一小时去重窗口前停止自动重试，防止过期 UUID 再次生成可见消息。
+- `doctor` 在投递台账损坏时继续提供其余诊断且原文件保持不变；新增未确认记录
+  容量、最早年龄与过期 pending 数量，容量耗尽会显示需核查状态。
+- CI 的旧版 Hermes 回归样本改用固定提交的 Git checkout 与 SHA-256 校验，
+  不再在每个测试中匿名下载源码文件而触发 GitHub 429。
 - Gateway 与 Cron 的投递账本使用跨进程锁；账本内容异常时保留原文件，暂停不确定答案的明文重发并发送稳定 UUID 诊断通知。
 - Cron 卡片发送的未知结果不再触发原生明文重发；带 job ID 和到期时间的计划任务使用持久投递账本复用 UUID 与已核验回执，并以跨进程原子 claim 保证同一轮并发任务只发起一次投递；未知结果等待核验，明确拒绝才允许新尝试。
 - Hermes keyless/synthetic turn 缺少 transport message_id 时静默交回原生投递，并记录脱敏指标；不再把预期兼容路径误报成 Gateway warning。
