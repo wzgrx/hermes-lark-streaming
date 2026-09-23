@@ -28,6 +28,57 @@ def _write_concurrent_entries(path: str, worker_id: int, start, results) -> None
     results.put(worker_id)
 
 
+def _claim_same_delivery(path: str, start, results) -> None:
+    start.wait(10)
+    entry, should_send = DeliveryLedger(Path(path)).claim_send("cron:same-occurrence", "cron.card")
+    results.put((entry.request_uuid, should_send))
+
+
+def test_atomic_claim_allows_one_send_across_processes(tmp_path: Path) -> None:
+    path = tmp_path / "delivery.json"
+    context = multiprocessing.get_context("spawn")
+    start = context.Event()
+    results = context.Queue()
+    workers = [
+        context.Process(target=_claim_same_delivery, args=(str(path), start, results))
+        for _ in range(4)
+    ]
+    for worker in workers:
+        worker.start()
+    start.set()
+    for worker in workers:
+        worker.join(timeout=20)
+        if worker.is_alive():
+            worker.terminate()
+            worker.join(timeout=5)
+        assert worker.exitcode == 0
+    claims = [results.get(timeout=5) for _ in workers]
+    assert len({request_uuid for request_uuid, _ in claims}) == 1
+    assert sum(should_send for _, should_send in claims) == 1
+    assert DeliveryLedger(path).summary()["counts"]["unknown"] == 1
+
+
+def test_claim_send_preserves_pending_uuid_and_rotates_only_after_rejection(tmp_path: Path) -> None:
+    ledger = DeliveryLedger(tmp_path / "delivery.json")
+    pending = ledger.begin("cron:due", "cron.card")
+    claimed, should_send = ledger.claim_send("cron:due", "cron.card")
+    assert should_send is True
+    assert claimed.request_uuid == pending.request_uuid
+    held, should_send = ledger.claim_send("cron:due", "cron.card")
+    assert should_send is False
+    assert held.request_uuid == pending.request_uuid
+
+    ledger.failed("cron:due", DeliveryStatus.NOT_SENT, error_code=230099)
+    retried, should_send = ledger.claim_send("cron:due", "cron.card")
+    assert should_send is True
+    assert retried.request_uuid != pending.request_uuid
+    assert retried.attempt == 2
+    ledger.delivered("cron:due", card_id="", message_id="om-card")
+    delivered, should_send = ledger.claim_send("cron:due", "cron.card")
+    assert should_send is False
+    assert delivered.message_id == "om-card"
+
+
 def test_separate_ledger_instances_preserve_threaded_updates(tmp_path: Path) -> None:
     path = tmp_path / "delivery.json"
     threads = [

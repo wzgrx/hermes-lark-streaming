@@ -112,9 +112,12 @@ point could deliver the same answer twice. Unknown outcomes are visible through
 Cron delivery verification diagnostics and require receipt inspection before a
 manual resend. For scheduled jobs with both a stable job ID and due time, the
 hook also passes those values to the plugin. The SHA-256-keyed delivery ledger
-stores a request UUID for that job occurrence and target chat. A verified receipt
-is reused without another send; a prior unknown outcome is held for inspection;
-a confirmed rejection permits a fresh UUID. An occurrence without both fields
+stores a request UUID for that job occurrence and target chat. The send claim
+atomically changes from pending to unknown under the cross-process lock before
+network I/O, so two Cron workers racing on one occurrence make at most one
+outbound call. A verified receipt is reused without another send; a prior unknown
+outcome is held for inspection; a confirmed rejection permits a fresh UUID. An
+occurrence without both fields
 uses the immediate ambiguous-outcome guard but has no durable Cron dedup key.
 The ledger remains bounded to 1,024 entries or seven days, whichever comes first.
 

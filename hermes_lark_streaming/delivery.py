@@ -213,6 +213,42 @@ class DeliveryLedger:
             self._write(entries)
             return entry
 
+    def claim_send(self, logical_key: str, operation: str) -> tuple[DeliveryEntry, bool]:
+        """Atomically claim one outbound send across Gateway and Cron workers.
+
+        The claim is durably marked unknown *before* network I/O. Later workers
+        retain its request UUID but do not send again without a verified
+        rejection. A pending row from an older interrupted preparation can be
+        claimed once under the same process/file lock.
+        """
+        key = self.fingerprint(logical_key)
+        now = time.time()
+        with self._transaction():
+            entries = self._read()
+            previous = entries.get(key)
+            if previous is not None and previous.status in {
+                DeliveryStatus.UNKNOWN, DeliveryStatus.DELIVERED
+            }:
+                return previous, False
+            if previous is not None and previous.status is DeliveryStatus.PENDING:
+                request_uuid = previous.request_uuid
+                attempt = previous.attempt
+            else:
+                request_uuid = uuid.uuid4().hex
+                attempt = previous.attempt + 1 if previous is not None else 1
+            entry = DeliveryEntry(
+                key=key,
+                operation=operation,
+                request_uuid=request_uuid,
+                status=DeliveryStatus.UNKNOWN,
+                created_at=previous.created_at if previous is not None else now,
+                updated_at=now,
+                attempt=attempt,
+            )
+            entries[key] = entry
+            self._write(entries)
+            return entry, True
+
     def update(
         self,
         logical_key: str,

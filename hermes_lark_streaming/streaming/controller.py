@@ -1107,14 +1107,12 @@ class StreamingController:
         logical_key = f"cron:{job_id}:{run_time}:{chat_id}" if job_id and run_time else ""
         request_uuid: str | None = None
         if logical_key:
-            entry = delivery_ledger.begin(logical_key, "cron.card")
-            if entry.status is DeliveryStatus.DELIVERED and entry.message_id:
-                return entry.message_id
-            if entry.status is DeliveryStatus.UNKNOWN:
+            entry, should_send = delivery_ledger.claim_send(logical_key, "cron.card")
+            if not should_send:
+                if entry.status is DeliveryStatus.DELIVERED and entry.message_id:
+                    return entry.message_id
                 raise CronDeliveryOutcomeUnknown("prior cron card outcome remains unknown")
             request_uuid = entry.request_uuid
-            # Persist the uncertain boundary before starting the remote send.
-            delivery_ledger.update(logical_key, status=DeliveryStatus.UNKNOWN)
         try:
             message_id = await client.send_card_to_chat(
                 chat_id, card, request_uuid=request_uuid

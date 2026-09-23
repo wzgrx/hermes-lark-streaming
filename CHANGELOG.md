@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 修复
 
 - Gateway 与 Cron 的投递账本使用跨进程锁；账本内容异常时保留原文件，暂停不确定答案的明文重发并发送稳定 UUID 诊断通知。
-- Cron 卡片发送的未知结果不再触发原生明文重发；带 job ID 和到期时间的计划任务使用持久投递账本复用 UUID 与已核验回执，未知结果等待核验，明确拒绝才允许新尝试。
+- Cron 卡片发送的未知结果不再触发原生明文重发；带 job ID 和到期时间的计划任务使用持久投递账本复用 UUID 与已核验回执，并以跨进程原子 claim 保证同一轮并发任务只发起一次投递；未知结果等待核验，明确拒绝才允许新尝试。
 - Hermes keyless/synthetic turn 缺少 transport message_id 时静默交回原生投递，并记录脱敏指标；不再把预期兼容路径误报成 Gateway warning。
 - CardKit sequence 仅在 API 成功后提交；失败的 batch/stream/close/update 重试复用同一
   sequence，避免一次缺失元素把后续 close/update 推入持续 300317 冲突。
