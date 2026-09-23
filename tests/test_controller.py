@@ -1481,6 +1481,46 @@ class TestDoFlush:
         assert session.sequence == 2
 
     @pytest.mark.asyncio
+    async def test_transient_missing_tool_element_keeps_created_segment(self) -> None:
+        """A visibility-lag 300313 must not trigger the stale-element re-add path."""
+        ctrl = _setup_ctrl()
+        session = _make_session("msg_transient_tool")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_transient_tool"
+        session.card_msg_id = "msg_transient_tool_card"
+        session.tool_use.record_start("read", "file0")
+        session.segment_state.on_tool_event(1)
+        tool_seg = session.segment_state.segments[0]
+        tool_seg.created = True
+        tool_seg.element_estimate = estimate_segment_elements(tool_seg, session.tool_use.build_display_steps())
+        session.element_count = tool_seg.element_estimate
+        session.tool_use.record_start("read", "file1")
+        session.segment_state.on_tool_event(2)
+        assert tool_seg.dirty is True
+
+        batch_update = AsyncMock(side_effect=[
+            SimpleNamespace(success=lambda: False, code=300313, msg=f"not find elementID : {tool_seg.el_id}"),
+            SimpleNamespace(success=lambda: True, code=0, msg=""),
+        ])
+        real_client = FeishuClient.__new__(FeishuClient)
+        real_client._client = SimpleNamespace(
+            cardkit=SimpleNamespace(v1=SimpleNamespace(card=SimpleNamespace(abatch_update=batch_update)))
+        )
+        session.client = real_client
+        ctrl._sessions[session.message_id] = session
+
+        with patch("hermes_lark_streaming.feishu.asyncio.sleep", new=AsyncMock()):
+            await ctrl._do_flush(session)
+
+        assert batch_update.await_count == 2
+        assert [call.args[0].request_body.sequence for call in batch_update.await_args_list] == [2, 2]
+        assert tool_seg.created is True
+        assert tool_seg.dirty is False
+        assert session.sequence == 2
+        assert session.anchor_recovery_attempts == 0
+        assert session.flush._needs_reflush is False
+
+    @pytest.mark.asyncio
     async def test_missing_loading_anchor_reseeds_once_and_reflushes(self) -> None:
         ctrl = _setup_ctrl()
         client = ctrl._client

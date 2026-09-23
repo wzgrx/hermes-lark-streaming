@@ -19,6 +19,11 @@ conflict), or `.other`. Compare these with the corresponding `attempt` and
 the last persisted gateway snapshot, so check `started_at` and `updated_at`
 before treating it as the current process. Error counts include individual
 retry attempts, not just failed cards.
+`api.element_not_found_recovered` counts only a successful stream or
+partial-only batch update after a `300313` visibility retry. Partial-only
+batch retries reuse the original sequence for at most two delays (200/400 ms);
+batches that add elements go straight to the controller's state-reconciliation
+path instead of replaying a potentially non-idempotent add.
 
 Repeated stream-element failures use a per-card 0.5–30 second exponential
 retry delay instead of calling CardKit on every flush. Dirty text remains in

@@ -89,6 +89,64 @@ async def test_cardkit_batch_update_retries_internal_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_partial_only_batch_retries_missing_element_with_same_sequence() -> None:
+    batch_update = AsyncMock(side_effect=[
+        _Resp(ok=False, code=300313, msg="not find elementID : tools_6"),
+        _Resp(ok=True),
+    ])
+    client = _client_with(batch_update=batch_update)
+    actions = [{"action": "partial_update_element", "params": {"element_id": "tools_6"}}]
+    recorded: list[str] = []
+
+    with (
+        patch("hermes_lark_streaming.feishu.asyncio.sleep", new=AsyncMock()) as sleep,
+        patch("hermes_lark_streaming.feishu.metrics.increment", side_effect=recorded.append),
+    ):
+        await client.cardkit_batch_update("card", actions, sequence=36)
+
+    assert batch_update.await_count == 2
+    assert sleep.await_count == 1
+    assert {call.args[0].request_body.sequence for call in batch_update.await_args_list} == {36}
+    assert recorded.count("api.element_not_found_recovered") == 1
+
+
+@pytest.mark.asyncio
+async def test_batch_with_add_does_not_retry_missing_element() -> None:
+    batch_update = AsyncMock(return_value=_Resp(ok=False, code=300313, msg="not find elementID : tools_6"))
+    client = _client_with(batch_update=batch_update)
+    actions = [
+        {"action": "add_elements", "params": {"elements": [{"element_id": "tools_7"}]}},
+        {"action": "partial_update_element", "params": {"element_id": "tools_6"}},
+    ]
+
+    with pytest.raises(FeishuAPIError) as error:
+        await client.cardkit_batch_update("card", actions, sequence=36)
+
+    assert error.value.code == 300313
+    assert batch_update.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_partial_only_missing_element_retry_is_bounded() -> None:
+    batch_update = AsyncMock(return_value=_Resp(ok=False, code=300313, msg="not find elementID : tools_6"))
+    client = _client_with(batch_update=batch_update)
+    actions = [{"action": "partial_update_element", "params": {"element_id": "tools_6"}}]
+    recorded: list[str] = []
+
+    with (
+        patch("hermes_lark_streaming.feishu.asyncio.sleep", new=AsyncMock()) as sleep,
+        patch("hermes_lark_streaming.feishu.metrics.increment", side_effect=recorded.append),
+        pytest.raises(FeishuAPIError) as error,
+    ):
+        await client.cardkit_batch_update("card", actions, sequence=36)
+
+    assert error.value.code == 300313
+    assert batch_update.await_count == 3
+    assert sleep.await_count == 2
+    assert recorded.count("api.element_not_found_recovered") == 0
+
+
+@pytest.mark.asyncio
 async def test_reply_card_by_id_retries_gateway_timeout_once() -> None:
     reply = AsyncMock(
         side_effect=[
@@ -156,18 +214,40 @@ async def test_stream_element_retries_300313_with_same_sequence() -> None:
 
 
 @pytest.mark.asyncio
-async def test_stream_element_300313_retry_is_bounded() -> None:
-    content = MagicMock(return_value=_Resp(ok=False, code=300313, msg="element not found"))
+async def test_stream_missing_element_recovery_metric_requires_success() -> None:
+    content = MagicMock(side_effect=[
+        _Resp(ok=False, code=300313, msg="element not found"),
+        _Resp(ok=True),
+    ])
     client = _client_with(card_element_content=content)  # type: ignore[arg-type]
+    recorded: list[str] = []
 
     with (
         patch("hermes_lark_streaming.feishu.asyncio.sleep", new=AsyncMock()),
+        patch("hermes_lark_streaming.feishu.metrics.increment", side_effect=recorded.append),
+    ):
+        await client.cardkit_stream_element("card", "answer_1", "hello", sequence=17)
+
+    assert recorded.count("api.element_not_found") == 1
+    assert recorded.count("api.element_not_found_recovered") == 1
+
+
+@pytest.mark.asyncio
+async def test_stream_element_300313_retry_is_bounded() -> None:
+    content = MagicMock(return_value=_Resp(ok=False, code=300313, msg="element not found"))
+    client = _client_with(card_element_content=content)  # type: ignore[arg-type]
+    recorded: list[str] = []
+
+    with (
+        patch("hermes_lark_streaming.feishu.asyncio.sleep", new=AsyncMock()),
+        patch("hermes_lark_streaming.feishu.metrics.increment", side_effect=recorded.append),
         pytest.raises(FeishuAPIError) as error,
     ):
         await client.cardkit_stream_element("card", "missing", "hello", sequence=4)
 
     assert error.value.code == 300313
     assert content.call_count == 4
+    assert recorded.count("api.element_not_found_recovered") == 0
 
 
 @pytest.mark.asyncio

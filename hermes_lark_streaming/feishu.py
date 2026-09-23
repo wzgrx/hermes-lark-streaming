@@ -110,6 +110,7 @@ _METRIC_ERROR_CODES = frozenset({
 })
 
 _ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC = (0.2, 0.4, 0.8)
+_BATCH_ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC = (0.2, 0.4)
 
 
 @dataclass(frozen=True)
@@ -186,8 +187,6 @@ class FeishuClient:
                     metrics.increment("api.rate_limited")
                 if exc.code == CARDKIT_ELEMENT_NOT_FOUND:
                     metrics.increment("api.element_not_found")
-                    if attempt:
-                        metrics.increment("api.element_not_found_recovered")
                 last_error = exc
                 if exc.code not in CARDKIT_TRANSIENT_ERROR_CODES or attempt >= attempts - 1:
                     raise
@@ -421,6 +420,8 @@ class FeishuClient:
                     "cardkit_stream_element",
                     lambda: asyncio.to_thread(self._client.cardkit.v1.card_element.content, request),
                 )
+                if attempt:
+                    metrics.increment("api.element_not_found_recovered")
                 return
             except FeishuAPIError as exc:
                 if exc.code != CARDKIT_ELEMENT_NOT_FOUND or attempt >= len(_ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC):
@@ -463,10 +464,33 @@ class FeishuClient:
         """局部更新 CardKit 卡片（增删改组件）."""
         body_builder = BatchUpdateCardRequestBody.builder().sequence(sequence).actions(self._dumps(actions))
         request = BatchUpdateCardRequest.builder().card_id(card_id).request_body(body_builder.build()).build()
-        await self._checked_call(
-            "cardkit_batch_update",
-            lambda: self._client.cardkit.v1.card.abatch_update(request),
+        # A partial update overwrites existing fields and is safe to repeat
+        # with the same sequence while a freshly added element becomes visible.
+        # A batch containing add_elements is not replayed here: an ambiguous
+        # response could otherwise create duplicate elements.
+        retry_delays = (
+            _BATCH_ELEMENT_NOT_FOUND_RETRY_DELAYS_SEC
+            if actions and all(action.get("action") == "partial_update_element" for action in actions)
+            else ()
         )
+        for attempt in range(len(retry_delays) + 1):
+            try:
+                await self._checked_call(
+                    "cardkit_batch_update",
+                    lambda: self._client.cardkit.v1.card.abatch_update(request),
+                )
+                if attempt:
+                    metrics.increment("api.element_not_found_recovered")
+                return
+            except FeishuAPIError as exc:
+                if exc.code != CARDKIT_ELEMENT_NOT_FOUND or attempt >= len(retry_delays):
+                    raise
+                delay = retry_delays[attempt]
+                _logger.info(
+                    "cardkit_batch_update element not visible yet: card=%s attempt=%d/%d delay=%.1fs",
+                    card_id[:12], attempt + 1, len(retry_delays), delay,
+                )
+                await asyncio.sleep(delay)
 
     async def cardkit_close_streaming(self, card_id: str, sequence: int = 0) -> None:
         """关闭 CardKit 卡片的流式模式."""

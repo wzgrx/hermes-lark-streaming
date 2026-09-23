@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 修复
 
+- 仅含 `partial_update_element` 的 CardKit 批量更新遇到短暂 `300313` 时，固定
+  sequence 有界重试；包含 `add_elements` 的批次维持原有回滚/重建路径，避免不确定
+  回执下重复新增元素。`api.element_not_found_recovered` 现在只在重试真正成功后计数。
 - CardKit `stream_element` 遇到服务端丢失答案或推理文本元素、或 batch 更新发现推理面板内的文本元素丢失时，有界重建当前卡片并重放本地 segments；新卡重置恢复额度，重复失败转入既有文本兜底。这补齐了上游 #98/#114 的剩余元素路径。
 - 未确认的卡片/Cron 投递记录现在优先保留，不受七天终态清理影响；飞书 UUID
   一小时去重窗口前停止自动重试，防止过期 UUID 再次生成可见消息。
