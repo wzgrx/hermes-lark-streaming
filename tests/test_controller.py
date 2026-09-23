@@ -1982,6 +1982,80 @@ class TestCronDeliver:
         finally:
             loop.call_soon_threadsafe(loop.stop)
 
+    def test_scheduled_occurrence_reuses_verified_card_receipt(self, isolate_delivery_ledger) -> None:
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        mock_client = AsyncMock()
+        mock_client.send_card_to_chat.return_value = "om-cron"
+        ctrl._client = mock_client
+        ctrl._initialized = True
+        args = dict(chat_id="c1", content="hello", loop=None, job_id="job-1", run_time="due-1")
+
+        first = ctrl.on_cron_deliver(**args)
+        second = ctrl.on_cron_deliver(**args)
+
+        assert first["message_id"] == second["message_id"] == "om-cron"
+        mock_client.send_card_to_chat.assert_awaited_once()
+        request_uuid = mock_client.send_card_to_chat.await_args.kwargs["request_uuid"]
+        assert len(request_uuid) == 32
+        entry = isolate_delivery_ledger.get("cron:job-1:due-1:c1")
+        assert entry is not None and entry.status is DeliveryStatus.DELIVERED
+        assert entry.request_uuid == request_uuid
+
+    def test_scheduled_unknown_outcome_is_held_without_second_send(self, isolate_delivery_ledger) -> None:
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        mock_client = AsyncMock()
+        mock_client.send_card_to_chat.side_effect = TimeoutError("response lost")
+        ctrl._client = mock_client
+        ctrl._initialized = True
+        args = dict(chat_id="c1", content="hello", loop=None, job_id="job-2", run_time="due-2")
+
+        first = ctrl.on_cron_deliver(**args)
+        second = ctrl.on_cron_deliver(**args)
+
+        assert first == second == {"success": False, "delivery_outcome": "unknown"}
+        mock_client.send_card_to_chat.assert_awaited_once()
+        entry = isolate_delivery_ledger.get("cron:job-2:due-2:c1")
+        assert entry is not None and entry.status is DeliveryStatus.UNKNOWN
+
+    def test_scheduled_confirmed_rejection_rotates_request_uuid(self, isolate_delivery_ledger) -> None:
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        mock_client = AsyncMock()
+        mock_client.send_card_to_chat.side_effect = [
+            FeishuAPIError("rejected", code=230099), "om-retry"
+        ]
+        ctrl._client = mock_client
+        ctrl._initialized = True
+        args = dict(chat_id="c1", content="hello", loop=None, job_id="job-3", run_time="due-3")
+
+        assert ctrl.on_cron_deliver(**args) is False
+        assert ctrl.on_cron_deliver(**args)["message_id"] == "om-retry"
+        uuids = [call.kwargs["request_uuid"] for call in mock_client.send_card_to_chat.await_args_list]
+        assert len(set(uuids)) == 2
+        entry = isolate_delivery_ledger.get("cron:job-3:due-3:c1")
+        assert entry is not None and entry.status is DeliveryStatus.DELIVERED
+        assert entry.attempt == 2
+
+    def test_scheduled_corrupt_ledger_holds_delivery(self, isolate_delivery_ledger) -> None:
+        isolate_delivery_ledger.path.write_text('{"entries":')
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        mock_client = AsyncMock()
+        ctrl._client = mock_client
+        ctrl._initialized = True
+
+        assert ctrl.on_cron_deliver(
+            chat_id="c1", content="hello", loop=None, job_id="job-4", run_time="due-4"
+        ) == {"success": False, "delivery_outcome": "unknown"}
+        mock_client.send_card_to_chat.assert_not_awaited()
+        assert isolate_delivery_ledger.path.read_text() == '{"entries":'
+
     def test_sends_card_without_gateway_loop(self) -> None:
         ctrl = StreamCardController()
         ctrl._cfg = MagicMock()

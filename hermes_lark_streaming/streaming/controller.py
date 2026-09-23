@@ -1089,6 +1089,7 @@ class StreamingController:
         *,
         task_name: str = "",
         run_time: str = "",
+        job_id: str = "",
         media_files: object = None,
     ) -> str:
         client = await self._client_for_chat(chat_id)
@@ -1100,14 +1101,36 @@ class StreamingController:
             task_name=task_name,
             run_time=run_time,
         )
+        # A scheduled occurrence has a stable job ID and due time. Hash this
+        # logical key in the shared ledger and reuse its Feishu request UUID.
+        # A prior unknown result is held for receipt inspection, not resent.
+        logical_key = f"cron:{job_id}:{run_time}:{chat_id}" if job_id and run_time else ""
+        request_uuid: str | None = None
+        if logical_key:
+            entry = delivery_ledger.begin(logical_key, "cron.card")
+            if entry.status is DeliveryStatus.DELIVERED and entry.message_id:
+                return entry.message_id
+            if entry.status is DeliveryStatus.UNKNOWN:
+                raise CronDeliveryOutcomeUnknown("prior cron card outcome remains unknown")
+            request_uuid = entry.request_uuid
+            # Persist the uncertain boundary before starting the remote send.
+            delivery_ledger.update(logical_key, status=DeliveryStatus.UNKNOWN)
         try:
-            message_id = await client.send_card_to_chat(chat_id, card)
-        except FeishuAPIError:
+            message_id = await client.send_card_to_chat(
+                chat_id, card, request_uuid=request_uuid
+            )
+        except FeishuAPIError as exc:
+            if logical_key:
+                delivery_ledger.failed(
+                    logical_key, classify_delivery_failure(exc), error_code=exc.code
+                )
             raise  # Structured server rejection is classified by the caller.
         except Exception as exc:
             raise CronDeliveryOutcomeUnknown("Feishu cron card send outcome unknown") from exc
         if not message_id:
             raise CronDeliveryOutcomeUnknown("Feishu cron card send returned no message_id")
+        if logical_key:
+            delivery_ledger.delivered(logical_key, card_id="", message_id=str(message_id))
         await self._deliver_card_media(chat_id, paths, reply_to_message_id=message_id, client=client)
         return str(message_id)
 

@@ -169,6 +169,7 @@ def test_modular_cron_hook_requires_message_id_evidence(modular_root):
     source = (modular_root / "cron/scheduler_delivery.py").read_text()
     assert "_hermes_lark_cron_receipt" in source
     assert "_hermes_lark_cron_receipt.get('message_id')" in source
+    assert "job_id=job.get('id', '')" in source
     # A legacy truthy boolean receipt remains visible as unverified; the new
     # structured receipt with message_id takes the verified path.
     assert "unverified_targets.append(t.where)" in source

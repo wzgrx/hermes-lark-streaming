@@ -226,7 +226,7 @@ class ModularCronPatcher(ModularPatcher):
                 "            chat_id=t.chat_id, content=cleaned_delivery_content.strip(),",
                 (
                     "            loop=loop, task_name=job.get('name', ''), "
-                    "run_time=job.get('next_run_at', ''),"
+                    "run_time=job.get('next_run_at', ''), job_id=job.get('id', ''),"
                 ),
                 "            media_files=locals().get('media_files') or [])",
                 "        if _hermes_lark_cron_receipt:",

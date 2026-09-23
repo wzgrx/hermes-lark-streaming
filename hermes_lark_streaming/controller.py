@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config, hermes_home
-from .delivery import DeliveryStatus
+from .delivery import DeliveryLedgerError, DeliveryStatus
 from .feishu import (
     FeishuAPIError,
     FeishuClient,
@@ -614,6 +614,7 @@ class StreamCardController(StreamingController):
         loop: asyncio.AbstractEventLoop | None,
         task_name: str = "",
         run_time: str = "",
+        job_id: str = "",
         media_files: object = None,
     ) -> dict[str, object] | bool:
         """Cron 推送 — 包装为静态卡片发送；成功返回带 message_id 的证据回执."""
@@ -624,6 +625,7 @@ class StreamCardController(StreamingController):
             content,
             task_name=task_name,
             run_time=run_time,
+            job_id=job_id,
             media_files=media_files,
         )
         try:
@@ -647,7 +649,7 @@ class StreamCardController(StreamingController):
                 "message_id": str(message_id),
                 "raw_response": {"delivery": "feishu_card"},
             }
-        except (CronDeliveryOutcomeUnknown, TimeoutError):
+        except (CronDeliveryOutcomeUnknown, DeliveryLedgerError, TimeoutError):
             _logger.warning("cron card delivery outcome unknown; suppressing native replay", exc_info=True)
             return {"success": False, "delivery_outcome": "unknown"}
         except FeishuAPIError as exc:

@@ -819,7 +819,7 @@ class TestCronApplyRemove:
         sent = []
 
         def fake_on_cron_deliver(
-            *, chat_id, content, loop, task_name, run_time, media_files=None
+            *, chat_id, content, loop, task_name, run_time, job_id="", media_files=None
         ):
             sent.append((chat_id, content, task_name, run_time))
             return True
@@ -930,7 +930,7 @@ class TestOnCronDeliverHook:
             assert on_cron_deliver(chat_id="c1", content="text", loop=None) is True
             ctrl.on_cron_deliver.assert_called_once_with(
                 chat_id="c1", content="text", loop=None,
-                task_name="", run_time="", media_files=None,
+                task_name="", run_time="", job_id="", media_files=None,
             )
 
     def test_delegates_to_controller(self) -> None:
@@ -946,7 +946,7 @@ class TestOnCronDeliverHook:
             assert result is True
             ctrl.on_cron_deliver.assert_called_once_with(
                 chat_id="c1", content="hello", loop=loop,
-                task_name="", run_time="", media_files=None,
+                task_name="", run_time="", job_id="", media_files=None,
             )
 
 

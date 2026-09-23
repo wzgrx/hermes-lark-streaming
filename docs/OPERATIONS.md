@@ -110,7 +110,13 @@ skips native plaintext replay. In particular, the 30-second Gateway-loop wait
 may expire while its send coroutine is still running; falling through at that
 point could deliver the same answer twice. Unknown outcomes are visible through
 Cron delivery verification diagnostics and require receipt inspection before a
-manual resend.
+manual resend. For scheduled jobs with both a stable job ID and due time, the
+hook also passes those values to the plugin. The SHA-256-keyed delivery ledger
+stores a request UUID for that job occurrence and target chat. A verified receipt
+is reused without another send; a prior unknown outcome is held for inspection;
+a confirmed rejection permits a fresh UUID. An occurrence without both fields
+uses the immediate ambiguous-outcome guard but has no durable Cron dedup key.
+The ledger remains bounded to 1,024 entries or seven days, whichever comes first.
 
 ## Native Hermes hooks
 

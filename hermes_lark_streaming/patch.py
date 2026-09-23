@@ -304,6 +304,7 @@ def on_cron_deliver(
     loop: Any = None,
     task_name: str = "",
     run_time: str = "",
+    job_id: str = "",
     media_files: object = None,
 ) -> dict[str, object] | bool:
     """[注入点 10] cron 推送 — 包装为飞书卡片发送并返回可核验回执.
@@ -318,7 +319,7 @@ def on_cron_deliver(
             return False
         return ctrl.on_cron_deliver(
             chat_id=chat_id, content=content, loop=loop,
-            task_name=task_name, run_time=run_time, media_files=media_files,
+            task_name=task_name, run_time=run_time, job_id=job_id, media_files=media_files,
         )
     except Exception as exc:
         _logger.warning("on_cron_deliver error: %s", exc, exc_info=True)
