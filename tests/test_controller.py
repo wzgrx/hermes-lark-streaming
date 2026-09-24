@@ -2323,8 +2323,36 @@ class TestCronDeliver:
 
         mock_client.send_card_to_chat.assert_awaited_once()
         mock_client.send_file_to_chat.assert_awaited_once()
-        entry = isolate_delivery_ledger.get("cron:job-media:due-media:c1:media:0")
+        from hermes_lark_streaming.streaming.media import _media_delivery_key
+
+        entry = isolate_delivery_ledger.get(
+            _media_delivery_key("cron:job-media:due-media:c1", str(media))
+        )
         assert entry is not None and entry.status is DeliveryStatus.DELIVERED
+
+    def test_scheduled_retry_reordered_media_preserves_file_identity(
+        self, isolate_delivery_ledger, tmp_path,
+    ) -> None:
+        a = tmp_path / "a.md"
+        b = tmp_path / "b.md"
+        a.write_text("a", encoding="utf-8")
+        b.write_text("b", encoding="utf-8")
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        mock_client = AsyncMock()
+        mock_client.send_card_to_chat.return_value = "om-cron"
+        mock_client.upload_file.side_effect = ["key-a", None, "key-b"]
+        mock_client.send_file_to_chat.side_effect = ["om-a", "om-b"]
+        ctrl._client = mock_client
+        ctrl._initialized = True
+        args = dict(chat_id="c1", content="hello", loop=None, job_id="job-order", run_time="due-order")
+
+        first = ctrl.on_cron_deliver(**args, media_files=[(str(a), False), (str(b), False)])
+        second = ctrl.on_cron_deliver(**args, media_files=[(str(b), False), (str(a), False)])
+        assert first["message_id"] == second["message_id"] == "om-cron"
+        mock_client.send_card_to_chat.assert_awaited_once()
+        assert mock_client.send_file_to_chat.await_count == 2
 
     def test_scheduled_unknown_outcome_is_held_without_second_send(self, isolate_delivery_ledger) -> None:
         ctrl = StreamCardController()

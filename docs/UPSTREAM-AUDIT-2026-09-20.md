@@ -1,4 +1,4 @@
-# 上游 Issue / PR 审计（复核于 2026-09-23）
+# 上游 Issue / PR 审计（复核于 2026-09-24）
 
 对象：[`Cheerwhy/hermes-lark-streaming`](https://github.com/Cheerwhy/hermes-lark-streaming)。本表记录当日仍开放的项目以及本 fork 中的可验证对应实现。
 
@@ -6,7 +6,7 @@
 
 | 上游 | 本 fork 状态 | 实现/验证 |
 |---|---|---|
-| [#111 cron MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/issues/111) | 已覆盖 | 模块化 cron hook 透传 `media_files`，图片与文件按类型投递，有去重测试。 |
+| [#111 cron MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/issues/111) | 已覆盖 | 模块化 cron hook 透传 `media_files`，图片与文件按类型投递；新轮次附件按规范化路径记账而不是按列表下标，重排后重试也不会串文件；旧轮次的下标台账继续沿用。 |
 | [#109 流式 MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/issues/109) | 已覆盖 | 保留原始 answer delta，follow-up/失败路径由插件补投，正文移除内部指令。 |
 | [#106 clarify 签名](https://github.com/Cheerwhy/hermes-lark-streaming/issues/106) | 已覆盖 | `functools.wraps` + `*args/**kwargs`，适配 2/3 参和 batch clarify。 |
 | [#105 模块化 Gateway](https://github.com/Cheerwhy/hermes-lark-streaming/issues/105) | 已覆盖 | `ModularPatcher` 跨 `run_inbound/run_turn/run_turn_runner/run_busy`，预编译、原子发布和回滚。 |
@@ -28,10 +28,16 @@
 | [#107 clarify](https://github.com/Cheerwhy/hermes-lark-streaming/pull/107) | 签名透传、完整异常日志、modular hook 已覆盖。 |
 | [#108 split gateway](https://github.com/Cheerwhy/hermes-lark-streaming/pull/108) | 重新实现为原子多文件 patch plan，并对 `v2026.9.11` / `v2026.9.14` / `v2026.9.21` / `main` 跑兼容矩阵。 |
 | [#110 流式 MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/pull/110) | 已吸收并补上 inline image / duplicate suppression。 |
-| [#112 cron MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/pull/112) | 已吸收 cron 透传和 image message 路由；同一计划轮次的卡片/附件分别持久记账，重试仅补上传失败或明确拒绝的附件。 |
+| [#112 cron MEDIA](https://github.com/Cheerwhy/hermes-lark-streaming/pull/112) | 已吸收 cron 透传和 image message 路由；同一计划轮次的卡片/附件分别持久记账，新轮次附件键绑定路径，重试仅补上传失败或明确拒绝的附件；旧下标键兼容读取。 |
 | [#114 CardKit anchor/sequence](https://github.com/Cheerwhy/hermes-lark-streaming/pull/114) | 已吸收成功后提交 sequence 与 loading anchor 恢复，并继续补齐流式/嵌套文本丢失路径。 |
 
 ## 审计原则
+
+2026-09-24 补充 cron 附件重试：此前附件键为 `:media:<index>`，同一轮次的
+`media_files` 在重试时换序，可能使已投递文件占用另一文件的下标。新轮次使用
+绝对路径摘要作为键；`set` / `frozenset` 输入先排序再执行每轮数量上限。
+检测到旧下标台账的轮次继续旧格式，防止升级本身触发重投。旧台账没有保存
+原始路径，因此无法回溯证明旧轮次在输入换序后的逐文件对应关系。
 
 2026-09-24 补充 [#98](https://github.com/Cheerwhy/hermes-lark-streaming/issues/98)
 诊断链：本地测试会调用卡片完成/失败路径并写入默认

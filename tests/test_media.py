@@ -11,6 +11,7 @@ from hermes_lark_streaming.feishu import FeishuAPIError
 from hermes_lark_streaming.streaming.media import (
     DELIVERABLE_EXTS,
     MAX_MEDIA_FILES_PER_TURN,
+    _media_delivery_key,
     deliver_media_files,
     extract_media_paths,
     hook_media_paths,
@@ -24,6 +25,13 @@ def _make_file(tmp_path, name: str = "report.md", content: str = "hello") -> str
     path = tmp_path / name
     path.write_text(content, encoding="utf-8")
     return str(path)
+
+
+def test_media_delivery_key_normalizes_equivalent_paths(tmp_path, monkeypatch) -> None:
+    path = _make_file(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    assert _media_delivery_key("cron:one", path) == _media_delivery_key("cron:one", "./report.md")
+    assert path not in _media_delivery_key("cron:one", path)
 
 
 class TestIsDeliverableMediaFile:
@@ -149,6 +157,11 @@ class TestHookMediaPaths:
         ]
         assert len(hook_media_paths(entries)) == MAX_MEDIA_FILES_PER_TURN
 
+    @pytest.mark.parametrize("container", [set, frozenset])
+    def test_unordered_inputs_have_stable_order_and_cap(self, tmp_path, container) -> None:
+        paths = [_make_file(tmp_path, f"f{i:02d}.md") for i in range(MAX_MEDIA_FILES_PER_TURN + 3)]
+        assert hook_media_paths(container(paths)) == sorted(paths)[:MAX_MEDIA_FILES_PER_TURN]
+
 
 class TestMediaPathsToDeliver:
     def test_gateway_text_media_is_left_to_gateway(self, tmp_path) -> None:
@@ -226,12 +239,13 @@ class TestDeliverMediaFiles:
         kwargs = {"delivery_key_prefix": "cron:job:due:chat", "ledger": isolate_delivery_ledger}
 
         assert await deliver_media_files(client, "chat", [path], **kwargs) == 0
-        assert isolate_delivery_ledger.get("cron:job:due:chat:media:0") is None
+        key = _media_delivery_key("cron:job:due:chat", path)
+        assert isolate_delivery_ledger.get(key) is None
         assert await deliver_media_files(client, "chat", [path], **kwargs) == 1
         assert await deliver_media_files(client, "chat", [path], **kwargs) == 0
         client.send_file_to_chat.assert_awaited_once()
         assert client.send_file_to_chat.await_args.kwargs["request_uuid"]
-        entry = isolate_delivery_ledger.get("cron:job:due:chat:media:0")
+        entry = isolate_delivery_ledger.get(key)
         assert entry is not None and entry.status is DeliveryStatus.DELIVERED
 
     @pytest.mark.asyncio
@@ -245,7 +259,7 @@ class TestDeliverMediaFiles:
         assert await deliver_media_files(client, "chat", [path], **kwargs) == 0
         assert await deliver_media_files(client, "chat", [path], **kwargs) == 0
         client.send_file_to_chat.assert_awaited_once()
-        entry = isolate_delivery_ledger.get("cron:job:due:chat:media:0")
+        entry = isolate_delivery_ledger.get(_media_delivery_key("cron:job:due:chat", path))
         assert entry is not None and entry.status is DeliveryStatus.UNKNOWN
 
     @pytest.mark.asyncio
@@ -257,11 +271,50 @@ class TestDeliverMediaFiles:
         kwargs = {"delivery_key_prefix": "cron:job:due:chat", "ledger": isolate_delivery_ledger}
 
         assert await deliver_media_files(client, "chat", [path], **kwargs) == 0
-        rejected = isolate_delivery_ledger.get("cron:job:due:chat:media:0")
+        rejected = isolate_delivery_ledger.get(_media_delivery_key("cron:job:due:chat", path))
         assert rejected is not None and rejected.status is DeliveryStatus.NOT_SENT
         assert await deliver_media_files(client, "chat", [path], **kwargs) == 1
         uuids = [call.kwargs["request_uuid"] for call in client.send_file_to_chat.await_args_list]
         assert len(set(uuids)) == 2
+
+    @pytest.mark.asyncio
+    async def test_cron_retry_reordered_files_does_not_skip_or_duplicate(
+        self, tmp_path, isolate_delivery_ledger,
+    ) -> None:
+        a = _make_file(tmp_path, "a.md")
+        b = _make_file(tmp_path, "b.md")
+        client = MagicMock()
+        client.upload_file = AsyncMock(side_effect=["key-a", None, "key-b"])
+        client.send_file_to_chat = AsyncMock(side_effect=["message-a", "message-b"])
+        kwargs = {"delivery_key_prefix": "cron:reordered:due:chat", "ledger": isolate_delivery_ledger}
+
+        assert await deliver_media_files(client, "chat", [a, b], **kwargs) == 1
+        assert await deliver_media_files(client, "chat", [b, a], **kwargs) == 1
+        assert await deliver_media_files(client, "chat", [a, b], **kwargs) == 0
+        assert client.send_file_to_chat.await_count == 2
+        a_entry = isolate_delivery_ledger.get(_media_delivery_key(kwargs["delivery_key_prefix"], a))
+        b_entry = isolate_delivery_ledger.get(_media_delivery_key(kwargs["delivery_key_prefix"], b))
+        assert a_entry is not None and a_entry.message_id == "message-a"
+        assert b_entry is not None and b_entry.message_id == "message-b"
+
+    @pytest.mark.asyncio
+    async def test_legacy_positional_media_ledger_still_blocks_duplicate(
+        self, tmp_path, isolate_delivery_ledger,
+    ) -> None:
+        path = _make_file(tmp_path)
+        prefix = "cron:legacy:due:chat"
+        old_key = f"{prefix}:media:0"
+        isolate_delivery_ledger.claim_send(old_key, "cron.media")
+        isolate_delivery_ledger.delivered(old_key, card_id="", message_id="old-message")
+        client = MagicMock()
+        client.upload_file = AsyncMock(return_value="key")
+        client.send_file_to_chat = AsyncMock(return_value="new-message")
+
+        assert await deliver_media_files(
+            client, "chat", [path], delivery_key_prefix=prefix, ledger=isolate_delivery_ledger,
+        ) == 0
+        client.send_file_to_chat.assert_not_awaited()
+        assert isolate_delivery_ledger.get(_media_delivery_key(prefix, path)) is None
 
     @pytest.mark.asyncio
     async def test_uploads_and_sends_each_file(self, tmp_path) -> None:

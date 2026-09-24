@@ -13,6 +13,7 @@ await self._deliver_media_from_response(...)``)。流式卡片路径上有两处
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
@@ -168,7 +169,18 @@ def hook_media_paths(media_files: object) -> list[str]:
             paths.append(path)
         else:
             _logger.warning("hook media: undeliverable path skipped: %s", path)
+    # set/frozenset have no input order. Sort before the cap so a restart with a
+    # different hash seed selects the same files for the same cron occurrence.
+    if isinstance(media_files, (set, frozenset)):
+        paths.sort()
     return paths[:MAX_MEDIA_FILES_PER_TURN]
+
+
+def _media_delivery_key(prefix: str, path: str) -> str:
+    """Bind cron idempotency to the file, not its position in a retry's list."""
+    normalized = os.path.normpath(os.path.abspath(os.path.expanduser(path)))
+    digest = hashlib.sha256(os.fsencode(normalized)).hexdigest()
+    return f"{prefix}:media:v2:{digest}"
 
 
 def media_paths_to_deliver(
@@ -252,9 +264,25 @@ async def deliver_media_files(
         return 0
     if delivery_key_prefix and ledger is None:
         raise ValueError("delivery ledger required for keyed media delivery")
+    selected_paths = paths[:MAX_MEDIA_FILES_PER_TURN]
+    # An occurrence started by an older Gateway used positional keys. Keep that
+    # scheme for its remaining retries; new occurrences use path-bound keys.
+    use_legacy_keys = bool(
+        delivery_key_prefix
+        and ledger is not None
+        and any(
+            ledger.get(f"{delivery_key_prefix}:media:{index}") is not None
+            for index in range(MAX_MEDIA_FILES_PER_TURN)
+        )
+    )
     sent = 0
-    for index, path in enumerate(paths[:MAX_MEDIA_FILES_PER_TURN]):
-        key = f"{delivery_key_prefix}:media:{index}" if delivery_key_prefix else ""
+    for index, path in enumerate(selected_paths):
+        if not delivery_key_prefix:
+            key = ""
+        elif use_legacy_keys:
+            key = f"{delivery_key_prefix}:media:{index}"
+        else:
+            key = _media_delivery_key(delivery_key_prefix, path)
         try:
             if key and ledger is not None:
                 previous = ledger.get(key)
