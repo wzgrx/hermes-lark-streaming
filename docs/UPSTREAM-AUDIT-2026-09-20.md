@@ -77,6 +77,15 @@ batch，包含 `add_elements` 时有不确定回执后重复执行的风险。�
 `started_at`、`updated_at` 和错误码桶核对实际高负载会话，不以单次 `300309`
 推断持续故障（该会话后续 CardKit 更新继续成功）。
 
+2026-09-24 17:10 CST 重启后的单 Gateway 进程（PID 2090734）指标快照：
+仅创建并投递 1 张卡；`cardkit_batch_update` 19/19 成功，
+`cardkit_stream_element` 29 次成功、1 次 `300309`，随后
+`cardkit_update` 1/1 成功、`card.completed=1`、`delivery.delivered=1`。
+在该进程截至快照的唯一卡片上，流已关闭后的 `300309` 没有阻止最终整卡
+投递；这与 `streaming_closed` 后保留最终全量更新的代码路径相符。
+该快照没有 `300313`，但仅覆盖一张真实卡片，不足以关闭上游 #98 的
+间歇性高并发问题；下一轮仍需采集同进程的多卡、密集工具调用样本。
+
 1. 不以 commit SHA 相同作为“已修复”证据，以行为、fixture 和兼容测试为准。
 2. 可操作审批继续使用 Hermes 官方 adapter；插件不复制第二套按钮鉴权、过期和 resolver。
 3. 所有重试都有上限，所有注入都先 compile，不以静默跳过掩盖上游结构漂移。
