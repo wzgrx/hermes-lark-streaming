@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from hermes_lark_streaming.config import Config
 
@@ -363,3 +365,55 @@ def test_nested_lark_domain_uses_larksuite_url() -> None:
 
     with patch.dict(os.environ, {}, clear=True):
         assert cfg.feishu_base_url == "https://open.larksuite.com"
+
+
+class TestRuntimeReloadCache:
+    @staticmethod
+    def _home(tmp_path, text: str):
+        home = tmp_path / ".hermes"
+        home.mkdir()
+        (home / "config.yaml").write_text(text, encoding="utf-8")
+        return home
+
+    def test_stream_deltas_share_one_parse(self, tmp_path) -> None:
+        cfg = Config(self._home(tmp_path, "display:\n  show_reasoning: true\n"))
+        with patch("hermes_lark_streaming.config.yaml.safe_load", wraps=yaml.safe_load) as parse:
+            for _ in range(50):
+                assert cfg.show_reasoning is True
+                assert cfg.show_tool_use is True
+        assert parse.call_count == 1
+
+    def test_concurrent_deltas_share_one_parse(self, tmp_path) -> None:
+        cfg = Config(self._home(tmp_path, "display:\n  show_reasoning: true\n"))
+        with (
+            patch("hermes_lark_streaming.config.yaml.safe_load", wraps=yaml.safe_load) as parse,
+            ThreadPoolExecutor(max_workers=12) as pool,
+        ):
+            assert all(pool.map(lambda _: cfg.show_reasoning, range(48)))
+        assert parse.call_count == 1
+
+    def test_unchanged_file_is_not_reparsed_after_ttl(self, tmp_path, monkeypatch) -> None:
+        cfg = Config(self._home(tmp_path, "display:\n  show_reasoning: true\n"))
+        monkeypatch.setattr("hermes_lark_streaming.config._CONFIG_RELOAD_TTL_S", 0.0)
+        with patch("hermes_lark_streaming.config.yaml.safe_load", wraps=yaml.safe_load) as parse:
+            assert cfg.show_reasoning is True
+            assert cfg.show_reasoning is True
+        assert parse.call_count == 1
+
+    def test_edit_is_visible_after_ttl(self, tmp_path, monkeypatch) -> None:
+        home = self._home(tmp_path, "display:\n  show_reasoning: false\n")
+        cfg = Config(home)
+        assert cfg.show_reasoning is False
+        monkeypatch.setattr("hermes_lark_streaming.config._CONFIG_RELOAD_TTL_S", 0.0)
+        (home / "config.yaml").write_text("display:\n  show_reasoning: true\n", encoding="utf-8")
+        assert cfg.show_reasoning is True
+
+    def test_missing_file_and_later_creation(self, tmp_path, monkeypatch) -> None:
+        home = tmp_path / "empty"
+        home.mkdir()
+        cfg = Config(home)
+        assert cfg.show_reasoning is False
+        assert cfg.show_tool_use is True
+        monkeypatch.setattr("hermes_lark_streaming.config._CONFIG_RELOAD_TTL_S", 0.0)
+        (home / "config.yaml").write_text("display:\n  show_reasoning: true\n", encoding="utf-8")
+        assert cfg.show_reasoning is True

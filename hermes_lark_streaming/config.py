@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +12,7 @@ import yaml
 
 DEFAULT_DOMAIN = "https://open.feishu.cn"  # SDK 根域名，Larksuite 用 https://open.larksuite.com
 LARK_DOMAIN = "https://open.larksuite.com"
+_CONFIG_RELOAD_TTL_S = 1.0
 
 
 def hermes_home() -> Path:
@@ -40,6 +43,11 @@ class Config:
     def __init__(self, home: Path | None = None) -> None:
         self._home = Path(home) if home is not None else None
         self._raw: dict[str, Any] | None = None
+        self._reload_lock = threading.Lock()
+        self._reload_cache: dict[str, Any] | None = None
+        self._reload_cache_at = 0.0
+        self._reload_cache_path: Path | None = None
+        self._reload_cache_stat: tuple[int, int, int] | None = None
 
     @property
     def enabled(self) -> bool:
@@ -57,7 +65,7 @@ class Config:
     def show_reasoning(self) -> bool:
         """是否展示推理过程（display.platforms.feishu.show_reasoning → display.show_reasoning）.
 
-        每次都从磁盘重读，因为 /reasoning 命令会在运行时修改配置文件.
+        通过短时缓存感知 /reasoning 命令在运行时修改的配置文件.
         """
         display = self._reload().get("display")
         if not isinstance(display, dict):
@@ -74,7 +82,7 @@ class Config:
         """是否在卡片中展示工具调用面板.
 
         优先级：display.platforms.feishu.show_tool_use → display.show_tool_use，
-        默认 True（保持向后兼容）。每次从磁盘重读以支持运行时切换。
+        默认 True（保持向后兼容）。短时缓存支持运行时切换。
         """
         display = self._reload().get("display")
         if not isinstance(display, dict):
@@ -279,9 +287,25 @@ class Config:
         return self._raw
 
     def _reload(self) -> dict[str, Any]:
-        """从磁盘重新读取配置（不更新缓存），供运行时可变的配置项使用."""
+        """短时缓存运行时配置，避免每个流式增量都解析整份 YAML."""
         path = _config_path(self._home)
-        if path.exists():
-            text = path.read_text(encoding="utf-8")
-            return yaml.safe_load(text) or {}
-        return {}
+        with self._reload_lock:
+            now = time.monotonic()
+            if (
+                self._reload_cache is not None
+                and self._reload_cache_path == path
+                and now - self._reload_cache_at < _CONFIG_RELOAD_TTL_S
+            ):
+                return self._reload_cache
+            try:
+                stat = path.stat()
+                file_stat = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+            except OSError:
+                file_stat = None
+            if self._reload_cache is None or self._reload_cache_path != path or self._reload_cache_stat != file_stat:
+                raw = yaml.safe_load(path.read_text(encoding="utf-8")) if file_stat is not None else {}
+                self._reload_cache = raw or {}
+                self._reload_cache_path = path
+                self._reload_cache_stat = file_stat
+            self._reload_cache_at = time.monotonic()
+            return self._reload_cache
