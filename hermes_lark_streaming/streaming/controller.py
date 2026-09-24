@@ -370,7 +370,7 @@ class StreamingController:
 
     async def _do_flush(self, session: CardSession) -> None:
         """幂等 flush：按 segment 顺序处理结构性变更，超阈值时拆卡."""
-        if session.state.is_terminal or not session.card_id:
+        if session.state.is_terminal or not session.card_id or session.streaming_closed:
             return
         segment_state = session.segment_state
         if segment_state is None:
@@ -567,6 +567,15 @@ class StreamingController:
                     streamed_any = True
                     seg.dirty = False
             except FeishuAPIError as e:
+                if e.code == CARDKIT_STREAMING_CLOSED:
+                    session.streaming_closed = True
+                    metrics.increment("cardkit.stream.closed_before_completion")
+                    metrics.persist_throttled(min_interval_sec=2.0)
+                    _logger.info(
+                        "CardKit stream closed before completion; reserving final full-card update: msg=%s",
+                        session.message_id[:12],
+                    )
+                    return
                 missing_el_id = extract_missing_element_id(e)
                 streamed_el_id = seg.text_el_id if seg.type == SegmentType.REASONING else seg.el_id
                 if missing_el_id in (streamed_el_id, _LOADING_ELEMENT_ID):
@@ -723,6 +732,14 @@ class StreamingController:
                     seg.dirty = False
         except FeishuAPIError as e:
             metrics_interval = 2.0
+            if e.code == CARDKIT_STREAMING_CLOSED:
+                session.streaming_closed = True
+                metrics.increment("cardkit.stream.closed_before_completion")
+                _logger.info(
+                    "CardKit batch stream closed before completion; reserving final full-card update: msg=%s",
+                    session.message_id[:12],
+                )
+                return False
             session.flush.record_failure(rate_limited=e.code == CARDKIT_RATE_LIMITED)
             missing_el_id = extract_missing_element_id(e)
             action_summary = summarize_actions(actions)
@@ -1129,7 +1146,7 @@ class StreamingController:
             width_mode=self._cfg.width_mode,
         )
 
-        streaming_closed = False
+        streaming_closed = session.streaming_closed
         for attempt in range(3):
             try:
                 _ = self._session_client(session)
@@ -1164,6 +1181,13 @@ class StreamingController:
                 metrics.persist()
                 return True
             except FeishuAPIError as e:
+                if e.code == CARDKIT_STREAMING_CLOSED and not streaming_closed:
+                    # The server has already ended streaming (often after a
+                    # long turn). The final full-card update is still needed.
+                    streaming_closed = True
+                    session.streaming_closed = True
+                    metrics.increment("cardkit.stream.closed_before_completion")
+                    continue
                 _logger.warning(
                     "CardKit complete attempt %d failed: code=%s msg=%s card_id=%s seq=%d",
                     attempt,

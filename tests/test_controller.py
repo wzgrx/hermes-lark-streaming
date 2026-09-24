@@ -1090,6 +1090,63 @@ class TestDoCreateCard:
 
 class TestDoFlush:
     @pytest.mark.asyncio
+    async def test_closed_stream_stops_retries_and_preserves_final_full_card(self) -> None:
+        ctrl = _setup_ctrl()
+        client = ctrl._client
+        client.cardkit_stream_element = AsyncMock(
+            side_effect=FeishuAPIError("streaming closed", code=300309)
+        )
+        session = _make_session("msg_stream_closed")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_stream_closed"
+        session.card_msg_id = "reply_stream_closed"
+        session.segment_state.on_answer_delta("final answer")
+        ctrl._sessions[session.message_id] = session
+
+        await ctrl._do_flush(session)
+        assert session.streaming_closed is True
+        assert session.segment_state.segments[0].dirty is True
+        await ctrl._do_flush(session)
+        client.cardkit_stream_element.assert_awaited_once()
+
+        assert await ctrl._do_complete_card(session) is True
+        client.cardkit_close_streaming.assert_not_called()
+        client.cardkit_update.assert_awaited_once()
+        assert "final answer" in str(client.cardkit_update.await_args.args[1])
+
+    @pytest.mark.asyncio
+    async def test_closed_batch_stream_skips_later_flushes_but_finalizes(self) -> None:
+        ctrl = _setup_ctrl()
+        client = ctrl._client
+        client.cardkit_batch_update = AsyncMock(
+            side_effect=FeishuAPIError("streaming closed", code=300309)
+        )
+        session = _make_session("msg_batch_closed")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_batch_closed"
+        session.card_msg_id = "reply_batch_closed"
+        session.segment_state.on_answer_delta("complete answer")
+        ctrl._sessions[session.message_id] = session
+
+        await ctrl._do_flush(session)
+        assert session.streaming_closed is True
+        await ctrl._do_flush(session)
+        client.cardkit_batch_update.assert_awaited_once()
+        client.cardkit_stream_element.assert_not_called()
+
+        assert await ctrl._do_complete_card(session) is True
+        client.cardkit_close_streaming.assert_not_called()
+        client.cardkit_update.assert_awaited_once()
+        assert "complete answer" in str(client.cardkit_update.await_args.args[1])
+
+    def test_replacement_card_reopens_streaming_state(self) -> None:
+        session = _make_session("msg_card_replacement")
+        session.set_card(card_id="old_card", card_msg_id="old_reply")
+        session.streaming_closed = True
+        session.set_card(card_id="new_card", card_msg_id="new_reply")
+        assert session.streaming_closed is False
+
+    @pytest.mark.asyncio
     async def test_three_step_pipeline(self) -> None:
         """step1 创建元素 → step2 刷文本 → step3 创建 tool 面板."""
         ctrl = _setup_ctrl()
@@ -1965,6 +2022,27 @@ class TestDoFlush:
 
 
 class TestDoCompleteCard:
+    @pytest.mark.asyncio
+    async def test_close_reports_already_closed_then_updates_full_card(self) -> None:
+        ctrl = _setup_ctrl()
+        client = ctrl._client
+        client.cardkit_close_streaming = AsyncMock(
+            side_effect=FeishuAPIError("streaming closed", code=300309)
+        )
+        session = _make_session("msg_close_already_closed")
+        session.state = SessionState.STREAMING
+        session.card_id = "card_close_already_closed"
+        session.card_msg_id = "reply_close_already_closed"
+        session.segment_state.on_answer_delta("completed text")
+        ctrl._sessions[session.message_id] = session
+
+        assert await ctrl._do_complete_card(session) is True
+        client.cardkit_close_streaming.assert_awaited_once()
+        client.cardkit_update.assert_awaited_once()
+        assert session.streaming_closed is True
+        assert session.sequence == 2
+        assert "completed text" in str(client.cardkit_update.await_args.args[1])
+
     @pytest.mark.asyncio
     async def test_closes_streaming_then_updates(self) -> None:
         ctrl = _setup_ctrl()
