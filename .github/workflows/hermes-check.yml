@@ -12,7 +12,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   check:
@@ -40,8 +39,7 @@ jobs:
         id: verify
         continue-on-error: true
         run: |
-          set +e
-          python - <<'PY' > /tmp/verify.log 2>&1
+          python - <<'PY' > "$RUNNER_TEMP/hermes-compat-verify.log" 2>&1
           from pathlib import Path
           from hermes_lark_streaming.patcher import CronPatcher, Patcher
 
@@ -50,53 +48,23 @@ jobs:
           CronPatcher(root / 'cron/scheduler.py').verify_target()
           print('Gateway and cron targets are compatible with latest Hermes main.')
           PY
-          code=$?
+
+      - name: Summarize compatibility failure
+        if: always() && steps.verify.outcome == 'failure'
+        run: |
+          echo '::error title=Hermes main compatibility check failed::Inspect Gateway and cron injection anchors.'
           {
-            echo "exit=${code}"
-            echo 'log<<VERIFY_EOF'
-            cat /tmp/verify.log
-            echo 'VERIFY_EOF'
-          } >> "$GITHUB_OUTPUT"
-          exit "$code"
-
-      - name: Open issue on compatibility failure
-        if: always() && steps.verify.outcome != 'success'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        env:
-          VERIFY_LOG: ${{ steps.verify.outputs.log }}
-        with:
-          script: |
-            const label = 'hermes-compat';
-            const title = 'Hermes main compatibility check failed';
-            const log = process.env.VERIFY_LOG || '(no output captured)';
-            const run = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            const body = `The daily check against the latest modular Hermes source failed.\n\nInspect injection anchors under \`gateway/run_*.py\` and \`cron/scheduler_delivery.py\`.\n\n<details><summary>verify output</summary>\n\n\`\`\`\n${log}\n\`\`\`\n\n</details>\n\nWorkflow run: ${run}`;
-            try {
-              await github.rest.issues.createLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                name: label,
-                color: 'e99695',
-              });
-            } catch (error) {
-              if (error.status !== 422) throw error;
-            }
-            const issues = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: label,
-            });
-            if (issues.data.length === 0) {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title,
-                body,
-                labels: [label],
-              });
-            }
-
+            echo '## Hermes main compatibility check failed'
+            echo ''
+            echo 'Inspect injection anchors under `gateway/run_*.py` and `cron/scheduler_delivery.py`.'
+            echo ''
+            echo '```text'
+            if [ -f "$RUNNER_TEMP/hermes-compat-verify.log" ]; then cat "$RUNNER_TEMP/hermes-compat-verify.log"; else echo '(verify log unavailable)'; fi
+            echo '```'
+            echo ''
+            echo "Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$RUNNER_TEMP/hermes-compat-verify.log" ]; then cat "$RUNNER_TEMP/hermes-compat-verify.log"; fi
       - name: Fail job on compatibility break
-        if: always() && steps.verify.outcome != 'success'
+        if: always() && steps.verify.outcome == 'failure'
         run: exit 1
