@@ -81,6 +81,14 @@ calls and requires the active Hermes profile's Feishu credentials.
 The optional official `lark-cli` is used only for operational preflight; it is not a runtime
 dependency. `lark-cli-smoke --execute` runs read-only auth-status/schema commands.
 
+`smoke --execute --closed-stream-probe` creates an unattached CardKit entity,
+streams once, closes streaming, observes a subsequent stream response, then
+attempts a final full-card update. It never sends a chat message. An unattached
+entity may accept the immediate post-close stream even though an older attached
+card reports `300309`; the probe records the actual code and treats either
+that acceptance or `300309` as compatible only when the final full update
+succeeds. This is not a reproduction of the ten-minute attached-card expiry.
+
 ## Adaptive backpressure and history compaction
 
 ```yaml

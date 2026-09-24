@@ -171,6 +171,7 @@ $HERMES_PYTHON -m hermes_lark_streaming metrics --json
 $HERMES_PYTHON -m hermes_lark_streaming metrics --sidecar  # 可选 sidecar 的独立指标
 $HERMES_PYTHON -m hermes_lark_streaming smoke      # 默认离线，不访问飞书
 $HERMES_PYTHON -m hermes_lark_streaming smoke --execute --entity-only  # 飞书实体探针，不发群消息
+$HERMES_PYTHON -m hermes_lark_streaming smoke --execute --closed-stream-probe  # 关闭流式后验证终态全量更新；不发群消息
 $HERMES_PYTHON -m hermes_lark_streaming lark-cli-smoke
 $HERMES_PYTHON -m hermes_lark_streaming repair-sdk  # only when doctor reports broken SDK
 ```

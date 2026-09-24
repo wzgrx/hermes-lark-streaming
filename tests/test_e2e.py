@@ -115,3 +115,88 @@ def test_entity_probe_requires_explicit_execute_and_never_requires_chat(monkeypa
     assert e2e.run(execute=True, entity_only=True) == 0
     assert json.loads(capsys.readouterr().out)["mode"] == "entity-probe"
     probe.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_closed_stream_probe_updates_unattached_entity_after_300309(monkeypatch) -> None:
+    client = SimpleNamespace(
+        cardkit_create=AsyncMock(return_value="card_closed"),
+        cardkit_stream_element=AsyncMock(side_effect=[
+            None, FeishuAPIError("streaming closed", 300309),
+        ]),
+        cardkit_close_streaming=AsyncMock(),
+        cardkit_update=AsyncMock(),
+        send_card_to_chat=AsyncMock(),
+    )
+    monkeypatch.setattr(e2e, "_configured_client", lambda: client)
+
+    report = await e2e.live_closed_stream_probe()
+
+    assert report == {
+        "ok": True,
+        "mode": "closed-stream-probe",
+        "attached_to_chat": False,
+        "entity_closed": True,
+        "post_close_stream_error_code": 300309,
+        "final_update_accepted": True,
+    }
+    assert [call.kwargs["sequence"] for call in client.cardkit_stream_element.await_args_list] == [2, 4]
+    assert client.cardkit_close_streaming.await_args.kwargs["sequence"] == 3
+    assert client.cardkit_update.await_args.kwargs["sequence"] == 4
+    client.send_card_to_chat.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_closed_stream_probe_reports_unexpected_stream_code(monkeypatch) -> None:
+    client = SimpleNamespace(
+        cardkit_create=AsyncMock(return_value="card_closed"),
+        cardkit_stream_element=AsyncMock(side_effect=[
+            None, FeishuAPIError("sequence conflict", 300317),
+        ]),
+        cardkit_close_streaming=AsyncMock(),
+        cardkit_update=AsyncMock(),
+        send_card_to_chat=AsyncMock(),
+    )
+    monkeypatch.setattr(e2e, "_configured_client", lambda: client)
+
+    report = await e2e.live_closed_stream_probe()
+
+    assert report["ok"] is False
+    assert report["post_close_stream_error_code"] == 300317
+    assert report["final_update_accepted"] is True
+    client.send_card_to_chat.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_closed_stream_probe_accepts_unattached_entity_stream_after_close(monkeypatch) -> None:
+    client = SimpleNamespace(
+        cardkit_create=AsyncMock(return_value="card_closed"),
+        cardkit_stream_element=AsyncMock(),
+        cardkit_close_streaming=AsyncMock(),
+        cardkit_update=AsyncMock(),
+        send_card_to_chat=AsyncMock(),
+    )
+    monkeypatch.setattr(e2e, "_configured_client", lambda: client)
+
+    report = await e2e.live_closed_stream_probe()
+
+    assert report["ok"] is True
+    assert report["post_close_stream_error_code"] == 0
+    assert report["final_update_accepted"] is True
+    assert client.cardkit_update.await_args.kwargs["sequence"] == 5
+    client.send_card_to_chat.assert_not_called()
+
+
+def test_closed_stream_probe_requires_explicit_execute(monkeypatch, capsys) -> None:
+    probe = AsyncMock(return_value={
+        "ok": True, "mode": "closed-stream-probe", "entity_closed": True,
+    })
+    monkeypatch.setattr(e2e, "live_closed_stream_probe", probe)
+
+    assert e2e.run(execute=False, closed_stream_probe=True) == 0
+    probe.assert_not_awaited()
+    capsys.readouterr()
+
+    assert e2e.run(execute=True, closed_stream_probe=True) == 0
+    assert json.loads(capsys.readouterr().out)["mode"] == "closed-stream-probe"
+    probe.assert_awaited_once()

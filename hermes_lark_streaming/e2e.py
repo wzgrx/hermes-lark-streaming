@@ -10,7 +10,13 @@ from typing import Any
 from .card_limits import inspect_card
 from .cardkit.builder import build_complete_card, build_streaming_card_v2
 from .config import Config
-from .feishu import CARDKIT_ELEMENT_NOT_FOUND, FeishuAPIError, FeishuClient, FeishuClientConfig
+from .feishu import (
+    CARDKIT_ELEMENT_NOT_FOUND,
+    CARDKIT_STREAMING_CLOSED,
+    FeishuAPIError,
+    FeishuClient,
+    FeishuClientConfig,
+)
 from .streaming.segments import Segment, SegmentType
 
 
@@ -108,10 +114,88 @@ async def live_entity_probe() -> dict[str, Any]:
             result["close_error_type"] = type(exc).__name__
 
 
-def run(*, execute: bool, chat_id: str = "", entity_only: bool = False) -> int:
+async def live_closed_stream_probe() -> dict[str, Any]:
+    """Observe post-close behavior and verify an unattached final update."""
+    client = _configured_client()
+    card_id = await client.cardkit_create(build_streaming_card_v2(
+        show_tool_use=False, show_reasoning=False, show_streaming_element=True,
+    ))
+    result: dict[str, Any] = {
+        "ok": False,
+        "mode": "closed-stream-probe",
+        "attached_to_chat": False,
+    }
+    sequence = 1
+    closed = False
+    try:
+        await client.cardkit_stream_element(
+            card_id, "streaming_content", "probe before close", sequence=sequence + 1,
+        )
+        sequence += 1
+        await client.cardkit_close_streaming(card_id, sequence=sequence + 1)
+        sequence += 1
+        closed = True
+        result["entity_closed"] = True
+
+        try:
+            await client.cardkit_stream_element(
+                card_id, "streaming_content", "probe after close", sequence=sequence + 1,
+            )
+        except FeishuAPIError as exc:
+            result["post_close_stream_error_code"] = exc.code
+        else:
+            sequence += 1
+            result["post_close_stream_error_code"] = 0
+
+        segment = Segment(SegmentType.ANSWER, "closed_probe_answer")
+        segment.text = "Closed-stream final update probe"
+        final = build_complete_card(segments=[segment], all_tool_steps=[])
+        try:
+            await client.cardkit_update(card_id, final, sequence=sequence + 1)
+        except FeishuAPIError as exc:
+            result["final_update_error_code"] = exc.code
+        else:
+            result["final_update_accepted"] = True
+            result["ok"] = (
+                result["post_close_stream_error_code"] in (0, CARDKIT_STREAMING_CLOSED)
+            )
+        return result
+    except FeishuAPIError as exc:
+        result["setup_error_code"] = exc.code
+        return result
+    finally:
+        if not closed:
+            try:
+                await client.cardkit_close_streaming(card_id, sequence=sequence + 1)
+                result["entity_closed"] = True
+            except FeishuAPIError as exc:
+                result["entity_closed"] = False
+                result["cleanup_error_code"] = exc.code
+            except Exception as exc:
+                result["entity_closed"] = False
+                result["cleanup_error_type"] = type(exc).__name__
+
+
+def run(*, execute: bool, chat_id: str = "", entity_only: bool = False,
+        closed_stream_probe: bool = False) -> int:
     if not execute:
         print(json.dumps(dry_run(), ensure_ascii=False, indent=2))
         return 0
+    if closed_stream_probe:
+        try:
+            report = asyncio.run(live_closed_stream_probe())
+        except FeishuAPIError as exc:
+            report = {
+                "ok": False, "mode": "closed-stream-probe",
+                "attached_to_chat": False, "error_code": exc.code,
+            }
+        except Exception as exc:
+            report = {
+                "ok": False, "mode": "closed-stream-probe",
+                "attached_to_chat": False, "error_type": type(exc).__name__,
+            }
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["ok"] and report.get("entity_closed") else 1
     if entity_only:
         try:
             report = asyncio.run(live_entity_probe())

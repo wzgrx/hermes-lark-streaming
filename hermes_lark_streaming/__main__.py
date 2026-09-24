@@ -55,7 +55,7 @@ def _print_usage() -> None:
     print("  verify     Verify compatibility without patching")
     print("  doctor     Run structured configuration/runtime diagnostics [--json]")
     print("  metrics    Show gateway metrics [--json]; add --sidecar for the sidecar process")
-    print("  smoke      CardKit dry-run; add --execute --chat-id CHAT or --entity-only")
+    print("  smoke      CardKit dry-run; add --execute --chat-id CHAT, --entity-only, or --closed-stream-probe")
     print("  lark-cli-smoke  Inspect optional lark-cli; add --execute for read-only checks")
     print("  repair-sdk  Explicitly repair lark-oapi in the active Hermes interpreter")
     print("  sidecar    Run optional health/metrics sidecar [--host HOST --port PORT]")
@@ -297,7 +297,12 @@ def _cmd_smoke() -> int:
         if index + 1 < len(args):
             chat_id = args[index + 1]
     _load_hermes_environment()
-    return run(execute="--execute" in args, chat_id=chat_id, entity_only="--entity-only" in args)
+    return run(
+        execute="--execute" in args,
+        chat_id=chat_id,
+        entity_only="--entity-only" in args,
+        closed_stream_probe="--closed-stream-probe" in args,
+    )
 
 
 def _cmd_lark_cli_smoke() -> int:

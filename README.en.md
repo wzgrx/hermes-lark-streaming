@@ -170,6 +170,7 @@ $HERMES_PYTHON -m hermes_lark_streaming doctor     # Config, hook, routing and d
 $HERMES_PYTHON -m hermes_lark_streaming metrics --json
 $HERMES_PYTHON -m hermes_lark_streaming metrics --sidecar  # Optional sidecar metrics
 $HERMES_PYTHON -m hermes_lark_streaming smoke      # Offline unless --execute is explicit
+$HERMES_PYTHON -m hermes_lark_streaming smoke --execute --closed-stream-probe  # Unattached entity; verify final update after close
 $HERMES_PYTHON -m hermes_lark_streaming lark-cli-smoke
 $HERMES_PYTHON -m hermes_lark_streaming repair-sdk  # only when doctor reports broken SDK
 ```
