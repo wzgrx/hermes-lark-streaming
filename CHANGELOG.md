@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 修复
 
+- 定时任务的卡片回执与附件回执分开记录：同一计划轮次重试时，已送达的卡片不重复发送，
+  但仍补投上次上传失败的附件；每个附件使用稳定的飞书请求 UUID，未知发送结果保持待核验，
+  明确拒绝后才启用新 UUID。普通会话附件路径不改变。
 - `metrics` 输出新增 `snapshot_status`：通过 Gateway PID 与启动指纹识别重启后
   遗留的旧快照；旧格式或无法核验的宿主状态标为 `unverified`，避免把历史错误计数
   当作当前进程的故障。

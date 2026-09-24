@@ -319,9 +319,10 @@ class FeishuClient:
         file_key: str,
         *,
         reply_to_message_id: str | None = None,
+        request_uuid: str | None = None,
     ) -> str:
         """发送 file 消息（附件）到聊天，返回 message_id."""
-        request_uuid = uuid.uuid4().hex
+        request_uuid = request_uuid or uuid.uuid4().hex
         content = self._dumps({"file_key": file_key})
         if reply_to_message_id:
             request = (
@@ -619,9 +620,10 @@ class FeishuClient:
         image_key: str,
         *,
         reply_to_message_id: str | None = None,
+        request_uuid: str | None = None,
     ) -> str:
         """发送 image 消息（聊天内联显示图片）到聊天，返回 message_id."""
-        request_uuid = uuid.uuid4().hex
+        request_uuid = request_uuid or uuid.uuid4().hex
         content = self._dumps({"image_key": image_key})
         if reply_to_message_id:
             request = (

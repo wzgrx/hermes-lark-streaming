@@ -48,6 +48,28 @@ def _client_with(**methods: AsyncMock) -> FeishuClient:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["file", "image"])
+@pytest.mark.parametrize("reply_to", [None, "om-parent"])
+async def test_media_send_preserves_caller_request_uuid(kind: str, reply_to: str | None) -> None:
+    create = AsyncMock(return_value=_Resp(ok=True, data=SimpleNamespace(message_id="om-media")))
+    reply = AsyncMock(return_value=_Resp(ok=True, data=SimpleNamespace(message_id="om-media")))
+    client = _client_with(create_message=create, reply=reply)
+
+    if kind == "file":
+        result = await client.send_file_to_chat(
+            "chat", "file-key", reply_to_message_id=reply_to, request_uuid="stable-media-uuid",
+        )
+    else:
+        result = await client.send_image_to_chat(
+            "chat", "image-key", reply_to_message_id=reply_to, request_uuid="stable-media-uuid",
+        )
+
+    assert result == "om-media"
+    send = reply if reply_to else create
+    assert send.await_args.args[0].request_body.uuid == "stable-media-uuid"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("code", "message"),
     [

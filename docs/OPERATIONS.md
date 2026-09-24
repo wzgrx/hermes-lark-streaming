@@ -192,6 +192,14 @@ outbound call. A verified receipt is reused without another send; a prior unknow
 outcome is held for inspection; a confirmed rejection permits a fresh UUID. An
 occurrence without both fields
 uses the immediate ambiguous-outcome guard but has no durable Cron dedup key.
+Cron media files use separate per-index ledger entries for the same scheduled
+occurrence. A repeated delivery of that occurrence reuses the card receipt and
+tries media again only when its upload failed or Feishu definitively rejected the
+send. A transport timeout or missing media message receipt remains `unknown` and
+is held for inspection; a verified media receipt is skipped. The upload happens
+before the atomic send claim, so a failed upload leaves no ambiguous send record.
+The cron scheduler may already regard a card receipt as success; this recovery
+path runs when the same occurrence is retried, not as an automatic new schedule.
 The ledger retains unresolved attempts until a verified terminal outcome; only terminal
 entries expire after seven days. At 1,024 unresolved attempts, new sends are held while
 existing evidence remains intact. `doctor --json` reports the unresolved count, the oldest

@@ -19,7 +19,11 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..delivery import DeliveryStatus
+from ..feishu import classify_delivery_failure
+
 if TYPE_CHECKING:
+    from ..delivery import DeliveryLedger
     from ..feishu import FeishuClient
 
 _logger = logging.getLogger("hermes_lark_streaming")
@@ -236,35 +240,76 @@ async def deliver_media_files(
     paths: list[str],
     *,
     reply_to_message_id: str | None = None,
+    delivery_key_prefix: str = "",
+    ledger: DeliveryLedger | None = None,
 ) -> int:
     """逐个上传并发送文件消息，返回成功条数.
 
-    单条失败只记日志、继续下一条；本函数不抛异常（附件投递失败不能影响卡片收尾）。
+    定时任务可传入稳定的投递前缀和 ledger：上传失败可在下次重试；
+    发出后结果不明则保留 UNKNOWN，避免重复发送附件。单条失败只记日志并继续。
     """
     if not chat_id or not paths:
         return 0
+    if delivery_key_prefix and ledger is None:
+        raise ValueError("delivery ledger required for keyed media delivery")
     sent = 0
-    for path in paths[:MAX_MEDIA_FILES_PER_TURN]:
+    for index, path in enumerate(paths[:MAX_MEDIA_FILES_PER_TURN]):
+        key = f"{delivery_key_prefix}:media:{index}" if delivery_key_prefix else ""
         try:
+            if key and ledger is not None:
+                previous = ledger.get(key)
+                if previous is not None and previous.status in {
+                    DeliveryStatus.DELIVERED, DeliveryStatus.UNKNOWN
+                }:
+                    continue
             image_key = await client.upload_local_image(path) if _is_image_path(path) else None
-            if image_key:
-                # 图片走 image 消息：聊天里直接内联显示，而不是一个文件卡片。
-                await client.send_image_to_chat(
-                    chat_id,
-                    image_key,
-                    reply_to_message_id=reply_to_message_id,
-                )
-            else:
+            file_key: str | None = None
+            if not image_key:
                 file_type = FEISHU_FILE_TYPES.get(Path(path).suffix.lower(), "stream")
                 file_key = await client.upload_file(path, file_type=file_type)
                 if not file_key:
                     _logger.warning("media delivery: upload failed for %s", path)
                     continue
-                await client.send_file_to_chat(
-                    chat_id,
-                    file_key,
-                    reply_to_message_id=reply_to_message_id,
-                )
+            request_uuid: str | None = None
+            if key and ledger is not None:
+                entry, should_send = ledger.claim_send(key, "cron.media")
+                if not should_send:
+                    continue
+                request_uuid = entry.request_uuid
+            try:
+                if image_key:
+                    # 图片走 image 消息：聊天里直接内联显示，而不是一个文件卡片。
+                    if request_uuid:
+                        message_id = await client.send_image_to_chat(
+                            chat_id, image_key, reply_to_message_id=reply_to_message_id,
+                            request_uuid=request_uuid,
+                        )
+                    else:
+                        message_id = await client.send_image_to_chat(
+                            chat_id, image_key, reply_to_message_id=reply_to_message_id,
+                        )
+                else:
+                    assert file_key is not None
+                    if request_uuid:
+                        message_id = await client.send_file_to_chat(
+                            chat_id, file_key, reply_to_message_id=reply_to_message_id,
+                            request_uuid=request_uuid,
+                        )
+                    else:
+                        message_id = await client.send_file_to_chat(
+                            chat_id, file_key, reply_to_message_id=reply_to_message_id,
+                        )
+                if not message_id:
+                    raise RuntimeError("media send returned no message_id")
+            except Exception as exc:
+                if key and ledger is not None:
+                    try:
+                        ledger.failed(key, classify_delivery_failure(exc), error_code=getattr(exc, "code", 0) or 0)
+                    except Exception:
+                        _logger.warning("media delivery ledger update failed", exc_info=True)
+                raise
+            if key and ledger is not None:
+                ledger.delivered(key, card_id="", message_id=str(message_id))
             sent += 1
         except Exception:
             _logger.warning("media delivery failed for %s", path, exc_info=True)

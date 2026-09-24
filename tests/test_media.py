@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from hermes_lark_streaming.delivery import DeliveryStatus
+from hermes_lark_streaming.feishu import FeishuAPIError
 from hermes_lark_streaming.streaming.media import (
     DELIVERABLE_EXTS,
     MAX_MEDIA_FILES_PER_TURN,
@@ -213,6 +215,54 @@ class TestStripMediaDirectives:
 
 
 class TestDeliverMediaFiles:
+    @pytest.mark.asyncio
+    async def test_cron_media_upload_failure_is_retryable_without_duplicate_send(
+        self, tmp_path, isolate_delivery_ledger,
+    ) -> None:
+        path = _make_file(tmp_path)
+        client = MagicMock()
+        client.upload_file = AsyncMock(side_effect=[None, "file_key"])
+        client.send_file_to_chat = AsyncMock(return_value="media_msg")
+        kwargs = {"delivery_key_prefix": "cron:job:due:chat", "ledger": isolate_delivery_ledger}
+
+        assert await deliver_media_files(client, "chat", [path], **kwargs) == 0
+        assert isolate_delivery_ledger.get("cron:job:due:chat:media:0") is None
+        assert await deliver_media_files(client, "chat", [path], **kwargs) == 1
+        assert await deliver_media_files(client, "chat", [path], **kwargs) == 0
+        client.send_file_to_chat.assert_awaited_once()
+        assert client.send_file_to_chat.await_args.kwargs["request_uuid"]
+        entry = isolate_delivery_ledger.get("cron:job:due:chat:media:0")
+        assert entry is not None and entry.status is DeliveryStatus.DELIVERED
+
+    @pytest.mark.asyncio
+    async def test_cron_media_ambiguous_send_is_held_on_retry(self, tmp_path, isolate_delivery_ledger) -> None:
+        path = _make_file(tmp_path)
+        client = MagicMock()
+        client.upload_file = AsyncMock(return_value="file_key")
+        client.send_file_to_chat = AsyncMock(side_effect=TimeoutError("response lost"))
+        kwargs = {"delivery_key_prefix": "cron:job:due:chat", "ledger": isolate_delivery_ledger}
+
+        assert await deliver_media_files(client, "chat", [path], **kwargs) == 0
+        assert await deliver_media_files(client, "chat", [path], **kwargs) == 0
+        client.send_file_to_chat.assert_awaited_once()
+        entry = isolate_delivery_ledger.get("cron:job:due:chat:media:0")
+        assert entry is not None and entry.status is DeliveryStatus.UNKNOWN
+
+    @pytest.mark.asyncio
+    async def test_cron_media_confirmed_rejection_rotates_uuid(self, tmp_path, isolate_delivery_ledger) -> None:
+        path = _make_file(tmp_path)
+        client = MagicMock()
+        client.upload_file = AsyncMock(return_value="file_key")
+        client.send_file_to_chat = AsyncMock(side_effect=[FeishuAPIError("rejected", code=230099), "media_msg"])
+        kwargs = {"delivery_key_prefix": "cron:job:due:chat", "ledger": isolate_delivery_ledger}
+
+        assert await deliver_media_files(client, "chat", [path], **kwargs) == 0
+        rejected = isolate_delivery_ledger.get("cron:job:due:chat:media:0")
+        assert rejected is not None and rejected.status is DeliveryStatus.NOT_SENT
+        assert await deliver_media_files(client, "chat", [path], **kwargs) == 1
+        uuids = [call.kwargs["request_uuid"] for call in client.send_file_to_chat.await_args_list]
+        assert len(set(uuids)) == 2
+
     @pytest.mark.asyncio
     async def test_uploads_and_sends_each_file(self, tmp_path) -> None:
         a = _make_file(tmp_path, "a.md")

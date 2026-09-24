@@ -2222,6 +2222,32 @@ class TestCronDeliver:
         assert entry is not None and entry.status is DeliveryStatus.DELIVERED
         assert entry.request_uuid == request_uuid
 
+    def test_scheduled_retry_delivers_media_after_card_receipt(self, isolate_delivery_ledger, tmp_path) -> None:
+        media = tmp_path / "report.md"
+        media.write_text("report", encoding="utf-8")
+        ctrl = StreamCardController()
+        ctrl._cfg = MagicMock()
+        ctrl._cfg.enabled = True
+        mock_client = AsyncMock()
+        mock_client.send_card_to_chat.return_value = "om-cron"
+        mock_client.upload_file.side_effect = [None, "file_key"]
+        mock_client.send_file_to_chat.return_value = "om-media"
+        ctrl._client = mock_client
+        ctrl._initialized = True
+        args = dict(
+            chat_id="c1", content="hello", loop=None, job_id="job-media", run_time="due-media",
+            media_files=[(str(media), False)],
+        )
+
+        assert ctrl.on_cron_deliver(**args)["message_id"] == "om-cron"
+        assert ctrl.on_cron_deliver(**args)["message_id"] == "om-cron"
+        assert ctrl.on_cron_deliver(**args)["message_id"] == "om-cron"
+
+        mock_client.send_card_to_chat.assert_awaited_once()
+        mock_client.send_file_to_chat.assert_awaited_once()
+        entry = isolate_delivery_ledger.get("cron:job-media:due-media:c1:media:0")
+        assert entry is not None and entry.status is DeliveryStatus.DELIVERED
+
     def test_scheduled_unknown_outcome_is_held_without_second_send(self, isolate_delivery_ledger) -> None:
         ctrl = StreamCardController()
         ctrl._cfg = MagicMock()

@@ -1230,6 +1230,10 @@ class StreamingController:
             entry, should_send = delivery_ledger.claim_send(logical_key, "cron.card")
             if not should_send:
                 if entry.status is DeliveryStatus.DELIVERED and entry.message_id:
+                    await self._deliver_card_media(
+                        chat_id, paths, reply_to_message_id=entry.message_id,
+                        client=client, delivery_key_prefix=logical_key,
+                    )
                     return entry.message_id
                 raise CronDeliveryOutcomeUnknown("prior cron card outcome remains unknown")
             request_uuid = entry.request_uuid
@@ -1249,7 +1253,10 @@ class StreamingController:
             raise CronDeliveryOutcomeUnknown("Feishu cron card send returned no message_id")
         if logical_key:
             delivery_ledger.delivered(logical_key, card_id="", message_id=str(message_id))
-        await self._deliver_card_media(chat_id, paths, reply_to_message_id=message_id, client=client)
+        await self._deliver_card_media(
+            chat_id, paths, reply_to_message_id=message_id,
+            client=client, delivery_key_prefix=logical_key,
+        )
         return str(message_id)
 
     async def _deliver_card_media(
@@ -1259,13 +1266,18 @@ class StreamingController:
         *,
         reply_to_message_id: str | None = None,
         client: FeishuClient | None = None,
+        delivery_key_prefix: str = "",
     ) -> int:
         """静态卡片发出后补投附件（best-effort，绝不影响卡片投递结果）."""
         if not paths:
             return 0
         client = client or await self._client_for_chat(chat_id)
         try:
-            sent = await deliver_media_files(client, chat_id, paths, reply_to_message_id=reply_to_message_id)
+            sent = await deliver_media_files(
+                client, chat_id, paths, reply_to_message_id=reply_to_message_id,
+                delivery_key_prefix=delivery_key_prefix,
+                ledger=delivery_ledger if delivery_key_prefix else None,
+            )
             _logger.info(
                 "static card media delivery: chat=%s files=%d sent=%d",
                 chat_id[:12],
