@@ -61,8 +61,14 @@ def test_status_reports_all_active_patcher_markers(monkeypatch, tmp_path: Path, 
     monkeypatch.setattr(config, "Config", FakeConfig)
     monkeypatch.setattr(patcher_module, "hermes_python", lambda: None)
     monkeypatch.setattr(patcher_module, "hermes_install_dir", lambda: None)
+    monkeypatch.setattr(
+        sys,
+        "path",
+        [*sys.path, "/tmp/.hermes/installs/id/environments/id/venv/lib/python3.14/site-packages"],
+    )
 
     assert entrypoint._cmd_status() == 0
     output = capsys.readouterr().out
     assert "normalize: run_inbound.py" in output
     assert "approval: run_turn_runner.py" in output
+    assert "Hermes Python: managed PM runtime" in output

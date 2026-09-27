@@ -23,22 +23,21 @@ hermes plugins list
 hermes pm doctor
 ```
 
-Find the Python executable used by the `hermes-gateway.service` process, then run
-the following with that executable:
+Use Hermes's durable managed launcher. It selects the same PM dependency generation
+as the Gateway; the raw process executable alone does not select that generation:
 
 ```bash
-GATEWAY_PYTHON=/path/from/running/gateway/process
-"$GATEWAY_PYTHON" -c 'import hermes_lark_streaming; print(hermes_lark_streaming.__version__)'
-"$GATEWAY_PYTHON" -m hermes_lark_streaming verify
-"$GATEWAY_PYTHON" -m hermes_lark_streaming status
+HERMES_LAUNCHER="$HOME/.local/bin/hermes"
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming verify
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming status
 ```
 
 The native plugin provides lifecycle observers. On Hermes releases without a native
 Feishu renderer, the reversible AST hooks remain the CardKit delivery path:
 
 ```bash
-"$GATEWAY_PYTHON" -m hermes_lark_streaming install
-"$GATEWAY_PYTHON" -m hermes_lark_streaming status
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming install
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming status
 hermes gateway restart
 ```
 
@@ -54,14 +53,14 @@ hermes plugins doctor hermes-lark-streaming --ci
 hermes pm install
 ```
 
-Re-run `verify` and `status` using the **new** Gateway environment. If a Hermes source
-update changed hook anchors, run `uninstall` then `install` with that environment
+Re-run `verify` and `status` using the durable launcher. If a Hermes source
+update changed hook anchors, run `uninstall` then `install` with that launcher
 before the Gateway restart. Preserve the `.hermes_lark.bak` files for rollback.
 
 ## Rollback
 
 ```bash
-"$GATEWAY_PYTHON" -m hermes_lark_streaming restore
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming restore
 hermes plugins disable hermes-lark-streaming
 hermes gateway restart
 ```

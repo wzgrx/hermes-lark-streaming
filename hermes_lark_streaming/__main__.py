@@ -220,13 +220,20 @@ def _cmd_status() -> int:
     # Python interpreter check
     from .patcher import hermes_install_dir, hermes_python
 
-    expected_py = hermes_python()
-    if expected_py is not None:
-        print(f"Hermes Python: {expected_py}")
-        current = Path(sys.executable).resolve()
-        if current != expected_py.resolve():
-            print(f"  warning: running under {current}, but Hermes uses {expected_py}")
-            print(f"  rerun commands with: {expected_py} -m hermes_lark_streaming ...")
+    managed_pm = any(
+        "/installs/" in entry and "/environments/" in entry and "site-packages" in entry
+        for entry in sys.path
+    )
+    if managed_pm:
+        print("Hermes Python: managed PM runtime (use ~/.local/bin/hermes --run-module hermes_lark_streaming ...)")
+    else:
+        expected_py = hermes_python()
+        if expected_py is not None:
+            print(f"Hermes Python: {expected_py}")
+            current = Path(sys.executable).resolve()
+            if current != expected_py.resolve():
+                print(f"  warning: running under {current}, but Hermes uses {expected_py}")
+                print(f"  rerun commands with: {expected_py} -m hermes_lark_streaming ...")
 
     install_dir = hermes_install_dir()
     if install_dir is not None:

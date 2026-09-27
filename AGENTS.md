@@ -11,24 +11,24 @@ Hermes Gateway plugin that injects hooks into the current modular `gateway/run_*
 hermes plugins install wzgrx/hermes-lark-streaming --enable
 hermes pm install
 
-# Set this to the Python executable of the running Gateway environment.
-HERMES_PYTHON=/path/from/running/gateway/process
+# Durable managed launcher selects the Gateway's PM dependency generation.
+HERMES_LAUNCHER="$HOME/.local/bin/hermes"
 
-$HERMES_PYTHON -m hermes_lark_streaming verify     # Check compatibility (safe, no file changes)
-$HERMES_PYTHON -m hermes_lark_streaming install    # Inject hooks into run.py and cron/scheduler.py
-$HERMES_PYTHON -m hermes_lark_streaming uninstall  # Remove hooks
-$HERMES_PYTHON -m hermes_lark_streaming restore    # Restore from .hermes_lark.bak backup
-$HERMES_PYTHON -m hermes_lark_streaming status     # Show patch status
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming verify     # Check compatibility
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming install    # Inject hooks
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall  # Remove hooks
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming restore    # Restore backup
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming status     # Show patch status
 
 # Install for development in an isolated test environment, not Gateway's venv.
 python -m pip install -e ".[dev]"
 
 # Lint
-$HERMES_PYTHON -m ruff check hermes_lark_streaming tests
-$HERMES_PYTHON -m mypy hermes_lark_streaming/
+python -m ruff check hermes_lark_streaming tests
+python -m mypy hermes_lark_streaming/
 
 # Run tests (local Hermes source; CI checks current Hermes main and pinned legacy fixtures)
-$HERMES_PYTHON -m pytest tests/ -q
+python -m pytest tests/ -q
 ```
 
 ## Architecture
