@@ -3,11 +3,13 @@
 The current Hermes package manager creates versioned runtime environments. Installing
 only into `~/.hermes/hermes-agent/venv` does not install the plugin into the Gateway's
 active environment. Use the managed directory plugin instead.
+The community-source scan currently reports CAUTION for documentation, CI, and test
+patterns; review its findings before using `--force` for this repository.
 
 ## Install
 
 ```bash
-hermes plugins install wzgrx/hermes-lark-streaming --enable
+hermes plugins install wzgrx/hermes-lark-streaming --enable --force
 hermes plugins doctor hermes-lark-streaming --ci
 hermes pm install
 ```
@@ -48,7 +50,7 @@ its journal for import or hook errors.
 ## Update
 
 ```bash
-hermes plugins update hermes-lark-streaming
+hermes plugins install wzgrx/hermes-lark-streaming --enable --force
 hermes plugins doctor hermes-lark-streaming --ci
 hermes pm install
 ```

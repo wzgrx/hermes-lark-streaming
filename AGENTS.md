@@ -8,7 +8,7 @@ Hermes Gateway plugin that injects hooks into the current modular `gateway/run_*
 
 ```bash
 # Install through Hermes's managed plugin/PM workflow (see INSTALL.md).
-hermes plugins install wzgrx/hermes-lark-streaming --enable
+hermes plugins install wzgrx/hermes-lark-streaming --enable --force
 hermes pm install
 
 # Durable managed launcher selects the Gateway's PM dependency generation.
