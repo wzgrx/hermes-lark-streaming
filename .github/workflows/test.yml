@@ -47,7 +47,7 @@ jobs:
         run: python -m ruff check hermes_lark_streaming tests
 
       - name: Run mypy
-        run: python -m mypy hermes_lark_streaming
+        run: python -m mypy --explicit-package-bases hermes_lark_streaming
 
       - name: Run tests against latest Hermes
         env:

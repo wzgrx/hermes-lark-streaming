@@ -25,7 +25,7 @@ python -m pip install -e ".[dev]"
 
 # Lint
 python -m ruff check hermes_lark_streaming tests
-python -m mypy hermes_lark_streaming/
+python -m mypy --explicit-package-bases hermes_lark_streaming/
 
 # Run tests (local Hermes source; CI checks current Hermes main and pinned legacy fixtures)
 python -m pytest tests/ -q
