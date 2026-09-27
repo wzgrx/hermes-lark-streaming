@@ -7,8 +7,12 @@ Hermes Gateway plugin that injects hooks into the current modular `gateway/run_*
 ## Commands
 
 ```bash
-# All commands must use Hermes's venv Python
-HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
+# Install through Hermes's managed plugin/PM workflow (see INSTALL.md).
+hermes plugins install wzgrx/hermes-lark-streaming --enable
+hermes pm install
+
+# Set this to the Python executable of the running Gateway environment.
+HERMES_PYTHON=/path/from/running/gateway/process
 
 $HERMES_PYTHON -m hermes_lark_streaming verify     # Check compatibility (safe, no file changes)
 $HERMES_PYTHON -m hermes_lark_streaming install    # Inject hooks into run.py and cron/scheduler.py
@@ -16,9 +20,8 @@ $HERMES_PYTHON -m hermes_lark_streaming uninstall  # Remove hooks
 $HERMES_PYTHON -m hermes_lark_streaming restore    # Restore from .hermes_lark.bak backup
 $HERMES_PYTHON -m hermes_lark_streaming status     # Show patch status
 
-# Install for development
-$HERMES_PYTHON -m pip install -e .
-$HERMES_PYTHON -m pip install -e ".[dev]"  # test dependencies
+# Install for development in an isolated test environment, not Gateway's venv.
+python -m pip install -e ".[dev]"
 
 # Lint
 $HERMES_PYTHON -m ruff check hermes_lark_streaming tests
