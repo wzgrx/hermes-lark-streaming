@@ -589,6 +589,42 @@ async def test_generated_followup_hook_handles_distinct_delivery_result() -> Non
     assert delivery_result["final_response"] == ""
 
 
+@pytest.mark.asyncio
+async def test_generated_followup_hook_uses_core_interrupt_flag_on_distinct_results() -> None:
+    complete = _build_followup_complete_hook_runner()
+    raw_result = {"interrupted": False, "final_response": "raw answer"}
+    delivery_result = {"interrupted": True, "final_response": "normalized answer"}
+
+    with patch("hermes_lark_streaming.patch.get_controller") as mock_get:
+        ctrl = MagicMock()
+        ctrl.enabled = True
+        ctrl.on_completed_wait = AsyncMock(return_value=True)
+        mock_get.return_value = ctrl
+        raw_result, delivery_result = await complete("message", raw_result, delivery_result)
+
+    assert ctrl.on_completed_wait.await_args.kwargs["answer"] == "normalized answer"
+    assert raw_result["already_sent"] is True
+    assert delivery_result["final_response"] == ""
+
+
+@pytest.mark.asyncio
+async def test_generated_followup_hook_skips_core_interrupted_turn() -> None:
+    complete = _build_followup_complete_hook_runner()
+    raw_result = {"interrupted": True, "final_response": "discarded"}
+    delivery_result = {"interrupted": False, "final_response": "normalized"}
+
+    with patch("hermes_lark_streaming.patch.get_controller") as mock_get:
+        ctrl = MagicMock()
+        ctrl.enabled = True
+        ctrl.on_completed_wait = AsyncMock(return_value=True)
+        mock_get.return_value = ctrl
+        raw_result, delivery_result = await complete("message", raw_result, delivery_result)
+
+    ctrl.on_completed_wait.assert_not_awaited()
+    assert raw_result["final_response"] == "discarded"
+    assert delivery_result["final_response"] == "normalized"
+
+
 class TestApplyRemove:
     def test_apply_injects_all_markers(self, run_copy: Path) -> None:
         original = run_copy.read_text(encoding="utf-8")

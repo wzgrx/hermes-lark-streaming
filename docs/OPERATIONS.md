@@ -62,6 +62,16 @@ starts fresh, and terminal close/full-card update is independent of this
 streaming delay. The `cardkit.stream.retry_deferred` and
 `cardkit.stream.backoff_skipped` counters show this protection in action.
 
+CardKit closes a card's streaming mode after about ten minutes. A long turn
+rolls over to a new attached card at eight minutes, before the server deadline.
+The old card is sealed with its full segment snapshot. If `300309` arrives
+first (for example after a long tool call), the next flush performs the same
+rollover. A replacement with an uncertain attach is never activated; retry is
+limited to once every 20 seconds. Inspect `cardkit.rollover.time_limit`,
+`cardkit.rollover.closed`, and `cardkit.rollover.failed` together with the
+current-process metrics snapshot. The rollover is an extra visible card, not
+an in-place extension of the expired streaming window.
+
 `smoke` is offline by default. A real CardKit create → stream → close → update check is explicit:
 
 ```bash

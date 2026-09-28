@@ -59,6 +59,11 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger("hermes_lark_streaming")
 
+# CardKit closes streaming mode about ten minutes after a card is opened.
+# Rotate with a two-minute margin so long Hermes turns keep producing visible cards.
+_CARDKIT_ROLLOVER_AGE_SEC = 8 * 60
+_CARDKIT_ROLLOVER_RETRY_SEC = 20.0
+
 
 async def _resolve_answer_images(
     segments: list[Segment],
@@ -370,7 +375,24 @@ class StreamingController:
 
     async def _do_flush(self, session: CardSession) -> None:
         """幂等 flush：按 segment 顺序处理结构性变更，超阈值时拆卡."""
-        if session.state.is_terminal or not session.card_id or session.streaming_closed:
+        if session.state.is_terminal or not session.card_id:
+            return
+        # A single Hermes turn can outlive CardKit's streaming window many times.
+        # The previous behavior stopped all updates on 300309 until final completion,
+        # leaving an apparently dead card for the rest of a long-running turn.
+        if session.card_msg_id and session.card_started_at:
+            now = time.monotonic()
+            age = now - session.card_started_at
+            if (
+                not session.manual_split_in_progress
+                and (session.streaming_closed or age >= _CARDKIT_ROLLOVER_AGE_SEC)
+                and now >= session.rollover_retry_after
+            ):
+                reason = "closed" if session.streaming_closed else "time_limit"
+                if await self._rollover_timed_out_card(session, reason=reason):
+                    return
+                session.rollover_retry_after = time.monotonic() + _CARDKIT_ROLLOVER_RETRY_SEC
+        if session.streaming_closed:
             return
         segment_state = session.segment_state
         if segment_state is None:
@@ -572,9 +594,10 @@ class StreamingController:
                     metrics.increment("cardkit.stream.closed_before_completion")
                     metrics.persist_throttled(min_interval_sec=2.0)
                     _logger.info(
-                        "CardKit stream closed before completion; reserving final full-card update: msg=%s",
+                        "CardKit stream closed before completion; rotating card: msg=%s",
                         session.message_id[:12],
                     )
+                    session.flush.request_reflush()
                     return
                 missing_el_id = extract_missing_element_id(e)
                 streamed_el_id = seg.text_el_id if seg.type == SegmentType.REASONING else seg.el_id
@@ -736,9 +759,10 @@ class StreamingController:
                 session.streaming_closed = True
                 metrics.increment("cardkit.stream.closed_before_completion")
                 _logger.info(
-                    "CardKit batch stream closed before completion; reserving final full-card update: msg=%s",
+                    "CardKit batch stream closed before completion; rotating card: msg=%s",
                     session.message_id[:12],
                 )
+                session.flush.request_reflush()
                 return False
             session.flush.record_failure(rate_limited=e.code == CARDKIT_RATE_LIMITED)
             missing_el_id = extract_missing_element_id(e)
@@ -857,6 +881,45 @@ class StreamingController:
             return "failed"
         return "split"
 
+    async def _rollover_timed_out_card(self, session: CardSession, *, reason: str) -> bool:
+        """Continue a long turn on a fresh visible card before/after stream expiry."""
+        segment_state = session.segment_state
+        old_card_id = session.card_id
+        if segment_state is None or not old_card_id or not session.card_msg_id:
+            return False
+        old_sequence = session.sequence
+        old_streaming_closed = session.streaming_closed
+        old_started_at = session.card_started_at
+        new_card = await self._create_streaming_card(session)
+        if new_card is None:
+            metrics.increment("cardkit.rollover.failed")
+            metrics.persist_throttled(min_interval_sec=2.0)
+            return False
+
+        # Switch the active session before the old-card API calls. Incoming deltas
+        # then start a new segment instead of mutating the sealed old-card snapshot.
+        old_segments = list(segment_state.segments[session.split_index :])
+        new_card_id, new_msg_id = new_card
+        session.set_card(card_id=new_card_id, card_msg_id=new_msg_id)
+        session.sequence = 1
+        session.element_count = 1
+        session.split_disabled = False
+        session.split_index = len(segment_state.segments)
+        segment_state.on_notice("↪ 接续上一张卡片 / Continued from previous card")
+        session.flush.request_reflush()
+        await self._seal_current_card(
+            session, old_segments, card_id=old_card_id,
+            sequence=old_sequence, streaming_closed=old_streaming_closed,
+        )
+        metrics.increment(f"cardkit.rollover.{reason}")
+        metrics.persist_throttled(min_interval_sec=2.0)
+        _logger.info(
+            "CardKit stream rollover: msg=%s old_card=%s new_card=%s reason=%s age=%.1fs",
+            session.message_id[:12], old_card_id[:12], new_card_id[:12],
+            reason, time.monotonic() - old_started_at,
+        )
+        return True
+
     async def _seal_current_card(
         self,
         session: CardSession,
@@ -864,6 +927,7 @@ class StreamingController:
         *,
         card_id: str | None = None,
         sequence: int | None = None,
+        streaming_closed: bool = False,
     ) -> None:
         """封印指定卡（默认 session.card_id）：close_streaming + 全量重建。失败仅记录日志。
 
@@ -896,10 +960,21 @@ class StreamingController:
         )
         try:
             seq = session.sequence if sequence is None else sequence
-            seq += 1
-            await self._session_client(session).cardkit_close_streaming(old_card_id, sequence=seq)
-            seq += 1
-            await self._session_client(session).cardkit_update(old_card_id, seal_card, sequence=seq)
+            if not streaming_closed:
+                try:
+                    await self._session_client(session).cardkit_close_streaming(
+                        old_card_id, sequence=seq + 1,
+                    )
+                except FeishuAPIError as exc:
+                    if exc.code != CARDKIT_STREAMING_CLOSED:
+                        raise
+                else:
+                    seq += 1
+            # The server may have auto-closed the stream already. A full-card
+            # update still seals the partial card and removes its loading state.
+            await self._session_client(session).cardkit_update(
+                old_card_id, seal_card, sequence=seq + 1,
+            )
         except Exception:
             _logger.warning(
                 "CardKit seal failed for old card %s, continuing",
@@ -1023,6 +1098,7 @@ class StreamingController:
 
         # 先禁拆卡再等 flush：否则进行中的 flush 可能先拆卡，随后被本流程封印成空白卡。
         session.split_disabled = True
+        session.manual_split_in_progress = True
         try:
             await session.flush.wait_for_flush()
             try:
@@ -1070,6 +1146,7 @@ class StreamingController:
             return True
         finally:
             session.split_disabled = False  # 取消/异常/失败均恢复拆卡能力
+            session.manual_split_in_progress = False
 
     def _handle_flush_error(self, e: FeishuAPIError) -> None:
         if e.code == CARDKIT_RATE_LIMITED:

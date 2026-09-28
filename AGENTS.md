@@ -110,6 +110,7 @@ Card templates (cardkit/)
 ## Modular upstream compatibility — 2026-09-10
 
 - Keep upstream queued-terminal inbound ledger updates after the follow-up result hook.
+- CardKit streaming expires after roughly ten minutes: rotate at eight minutes, recover on 300309, and retain the old card for a final full update. Preserve segment boundaries and confirmed attachment before switching cards.
 - `_stream_delta_cb` accepts `Optional[str]`: `None` is an upstream audio flush signal, not answer text. Preserve its delivery to native/TTS consumers.
 - When Lark consumes a non-streamed commentary segment, flush the `stts` segment boundary, emit the commentary to `stts`, then flush again before returning. Already-streamed commentary is not emitted twice.
 - Modular patch plans must still compile completely before file replacement; run the full plugin tests and Hermes queued-follow-up regressions after any anchor migration.

@@ -168,9 +168,19 @@ def on_message_needs_text_fallback(*, ctrl: Any, message_id: str) -> bool:
 
 
 @_safe_hook(default_return=False)
-async def on_queued_followup_boundary(*, ctrl: Any, message_id: str, result: dict[str, Any]) -> bool:
-    """Complete the current card before Hermes drains a queued follow-up turn."""
-    if not isinstance(result, dict) or result.get("interrupted"):
+async def on_queued_followup_boundary(
+    *, ctrl: Any, message_id: str, result: dict[str, Any],
+    interrupted: bool | None = None,
+) -> bool:
+    """Complete the current card before Hermes drains a queued follow-up turn.
+
+    Hermes decides whether to deliver the first response from the raw result,
+    while its normalized delivery result can be a separate dict. Follow the
+    same interrupt decision as the core branch, not the normalized dict's flag.
+    """
+    if not isinstance(result, dict) or (
+        bool(result.get("interrupted")) if interrupted is None else interrupted
+    ):
         return False
 
     sent = bool(

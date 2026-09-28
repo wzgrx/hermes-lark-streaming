@@ -46,6 +46,8 @@ The plugin dynamically renders thinking, tool call, and answer elements in event
 
 When long conversations or excessive tool steps cause the card to approach Feishu's 200-element limit, it automatically splits into multiple cards: the old card is sealed with complete data, a new card continues output, and only the last card includes the footer. Oversized tool panels are also split at step boundaries.
 
+CardKit automatically closes streaming mode after about ten minutes. Long turns proactively roll over each card after eight minutes; an early `300309` also triggers a fresh continuation card while the old card is sealed.
+
 ![](assets/streaming.jpg)
 
 ---

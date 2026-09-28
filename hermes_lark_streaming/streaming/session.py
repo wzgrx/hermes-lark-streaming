@@ -49,6 +49,7 @@ class CardSession:
         "bot_id",
         "card_id",
         "card_msg_id",
+        "card_started_at",
         "chat_id",
         "clarify_pending_split",
         "client",
@@ -67,8 +68,10 @@ class CardSession:
         "footer",
         "guard",
         "image_resolver",
+        "manual_split_in_progress",
         "media_text",
         "message_id",
+        "rollover_retry_after",
         "segment_state",
         "sequence",
         "session_key",
@@ -100,6 +103,8 @@ class CardSession:
         self.stream_failure_streak = 0
         self.streaming_closed = False
         self.stream_retry_after = 0.0
+        self.rollover_retry_after = 0.0
+        self.card_started_at = 0.0
         self.card_msg_id: str | None = None
         self.card_id: str | None = None
         self.tool_use = ToolUseTracker()
@@ -127,6 +132,7 @@ class CardSession:
         self.segment_state: SegmentState | None = SegmentState()
         self.element_count: int = 0
         self.split_disabled = False
+        self.manual_split_in_progress = False
         self.split_index: int = 0
         self.clarify_pending_split: bool = False
         self.media_text: list[str] = []
@@ -143,6 +149,8 @@ class CardSession:
             self.stream_failure_streak = 0
             self.streaming_closed = False
             self.stream_retry_after = 0.0
+            self.rollover_retry_after = 0.0
+            self.card_started_at = time.monotonic()
         self.card_id = card_id
         self.card_msg_id = card_msg_id
 

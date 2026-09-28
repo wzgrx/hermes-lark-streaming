@@ -1090,6 +1090,124 @@ class TestDoCreateCard:
 
 class TestDoFlush:
     @pytest.mark.asyncio
+    async def test_long_turn_rolls_over_before_stream_expiry(self) -> None:
+        ctrl = _setup_ctrl()
+        session = _make_session("msg_rollover_age")
+        session.state = SessionState.STREAMING
+        session.set_card(card_id="old_card", card_msg_id="old_reply")
+        session.card_started_at -= 8 * 60 + 1
+        session.segment_state.on_answer_delta("before rollover")
+        ctrl._sessions[session.message_id] = session
+
+        with patch.object(
+            ctrl, "_create_streaming_card", new_callable=AsyncMock,
+            return_value=("new_card", "new_reply"),
+        ) as create, patch.object(
+            ctrl, "_seal_current_card", new_callable=AsyncMock,
+        ) as seal:
+            await ctrl._do_flush(session)
+
+        create.assert_awaited_once_with(session)
+        seal.assert_awaited_once()
+        assert seal.await_args.args[1][0].text == "before rollover"
+        assert seal.await_args.kwargs["card_id"] == "old_card"
+        assert session.card_id == "new_card"
+        assert session.streaming_closed is False
+        assert session.split_index == 1
+        assert session.segment_state.segments[1].type.value == "notice"
+        assert ctrl._client.cardkit_stream_element.await_count == 0
+
+        session.segment_state.on_answer_delta("after rollover")
+        await ctrl._do_flush(session)
+        assert ctrl._client.cardkit_stream_element.await_count == 1
+        assert "after rollover" in str(ctrl._client.cardkit_stream_element.await_args)
+
+    @pytest.mark.asyncio
+    async def test_manual_split_owns_card_handoff_without_extra_rollover(self) -> None:
+        ctrl = _setup_ctrl()
+        session = _make_session("msg_manual_split")
+        session.state = SessionState.STREAMING
+        session.set_card(card_id="old_card", card_msg_id="old_reply")
+        session.card_started_at -= 8 * 60 + 1
+        session.manual_split_in_progress = True
+        session.segment_state.on_answer_delta("before clarify")
+        ctrl._sessions[session.message_id] = session
+
+        with patch.object(ctrl, "_create_streaming_card", new_callable=AsyncMock) as create:
+            await ctrl._do_flush(session)
+
+        create.assert_not_awaited()
+        ctrl._client.cardkit_stream_element.assert_awaited_once()
+        assert session.card_id == "old_card"
+
+    @pytest.mark.asyncio
+    async def test_auto_closed_stream_recovers_on_fresh_card(self) -> None:
+        ctrl = _setup_ctrl()
+        client = ctrl._client
+        client.cardkit_stream_element = AsyncMock(
+            side_effect=FeishuAPIError("streaming closed", code=300309)
+        )
+        session = _make_session("msg_rollover_closed")
+        session.state = SessionState.STREAMING
+        session.set_card(card_id="old_card", card_msg_id="old_reply")
+        session.segment_state.on_answer_delta("old content")
+        ctrl._sessions[session.message_id] = session
+
+        await ctrl._do_flush(session)
+        assert session.streaming_closed is True
+
+        with patch.object(
+            ctrl, "_create_streaming_card", new_callable=AsyncMock,
+            return_value=("new_card", "new_reply"),
+        ), patch.object(ctrl, "_seal_current_card", new_callable=AsyncMock) as seal:
+            await ctrl._do_flush(session)
+
+        assert session.card_id == "new_card"
+        assert session.streaming_closed is False
+        assert seal.await_args.kwargs["streaming_closed"] is True
+        assert client.cardkit_stream_element.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_rollover_failure_keeps_live_card_and_backs_off(self) -> None:
+        ctrl = _setup_ctrl()
+        session = _make_session("msg_rollover_failure")
+        session.state = SessionState.STREAMING
+        session.set_card(card_id="old_card", card_msg_id="old_reply")
+        session.card_started_at -= 8 * 60 + 1
+        session.segment_state.on_answer_delta("still visible")
+        ctrl._sessions[session.message_id] = session
+
+        with patch.object(
+            ctrl, "_create_streaming_card", new_callable=AsyncMock, return_value=None,
+        ) as create:
+            await ctrl._do_flush(session)
+            await ctrl._do_flush(session)
+
+        create.assert_awaited_once_with(session)
+        assert session.card_id == "old_card"
+        assert session.rollover_retry_after > time.monotonic()
+        ctrl._client.cardkit_stream_element.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_seal_updates_card_when_server_already_closed_stream(self) -> None:
+        ctrl = _setup_ctrl()
+        client = ctrl._client
+        client.cardkit_close_streaming = AsyncMock(
+            side_effect=FeishuAPIError("streaming closed", code=300309)
+        )
+        session = _make_session("msg_seal_closed")
+        session.set_card(card_id="new_card", card_msg_id="new_reply")
+        seg = Segment("answer", "answer_1")
+        seg.text = "old card text"
+        await ctrl._seal_current_card(
+            session, [seg], card_id="old_card", sequence=7,
+        )
+        client.cardkit_close_streaming.assert_awaited_once_with("old_card", sequence=8)
+        assert client.cardkit_update.await_args.args[0] == "old_card"
+        assert client.cardkit_update.await_args.kwargs["sequence"] == 8
+        assert "old card text" in str(client.cardkit_update.await_args.args[1])
+
+    @pytest.mark.asyncio
     async def test_closed_stream_stops_retries_and_preserves_final_full_card(self) -> None:
         ctrl = _setup_ctrl()
         client = ctrl._client
