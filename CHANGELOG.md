@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Correct pin removal guidance: ordinary reinstall retains an existing pin; document backup, managed removal, interactive main install and provenance verification, plus the maintained update review flag.
 - Cache runtime display flags for one second instead of parsing `config.yaml` on every stream delta; recheck file metadata after expiry and serialize concurrent readers so `/reasoning` changes still appear promptly.
 - Mark Hermes' native stream consumer as intentionally unfed when CardKit owns a delta, eliminating the core's false "possible duplicate send" warning without suppressing the native fallback path.
 
