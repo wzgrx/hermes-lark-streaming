@@ -8,6 +8,13 @@ patterns; review its findings before using `--force` for this repository.
 
 ## Install
 
+Run the install command in an interactive terminal and approve the displayed
+Python dependencies. `--enable` enables the plugin; it does not grant dependency
+consent. Without a TTY, Hermes declines to replace an active plugin when it has
+not received dependency consent, leaving the prior installation untouched.
+For an already installed plugin with unchanged dependencies, use the managed
+update command below instead of reinstalling it.
+
 ```bash
 hermes plugins install wzgrx/hermes-lark-streaming --enable --force
 hermes plugins doctor hermes-lark-streaming --ci
@@ -49,11 +56,18 @@ its journal for import or hook errors.
 
 ## Update
 
+For the existing managed installation, keep its provenance and dependency
+consent with the update command:
+
 ```bash
-hermes plugins install wzgrx/hermes-lark-streaming --enable --force
+hermes plugins update hermes-lark-streaming
 hermes plugins doctor hermes-lark-streaming --ci
 hermes pm install
 ```
+
+If the installation is pinned with `--ref`, that pin intentionally prevents
+tracking a newer main commit. To change the pin or switch back to main, use the
+interactive install command above and verify the installed Git SHA.
 
 Re-run `verify` and `status` using the durable launcher. If a Hermes source
 update changed hook anchors, run `uninstall` then `install` with that launcher
