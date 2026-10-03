@@ -1,6 +1,6 @@
 # 用户参考卡片 V1 — 设计基准与代码契约
 
-> 0.20.2 增强账本与后台采样正确性，不改变本页冻结图、原生布局或钩子。1450 项本地测试及精确提交 Tests / CodeQL 通过，已空闲部署并通过运行健康检查。下列真实轮次/客户端证据仍明确归属 0.20.1；0.20.2 重启后真实新轮次待验。见 [历史与采样增强](HISTORY-RESILIENCE.md)和[独立部署记录](assets/history-resilience-deployment-checks.json)。
+> 0.20.2 增强账本与后台采样正确性，不改变本页冻结图、原生布局或钩子。1450 项本地测试及精确提交 Tests / CodeQL 通过，已空闲部署并通过运行健康检查。[本版真实新轮次](assets/history-resilience-real-gateway-checks.json)已验证工具退出 0 / 7、原话题投递、客户端字段和账本一致；下列旧轮次/截图仍明确归属 0.20.1，不冒充手机或展开逐像素验收。见 [历史与采样增强](HISTORY-RESILIENCE.md)和[独立部署记录](assets/history-resilience-deployment-checks.json)。
 
 2026-10-03，用户将本轮整卡设计冻结为 **V1**，要求实现后与图逐项对照。0.20.1 已托管部署，Gateway 空闲重启、健康检查及真实成功/预期失败两轮通过。本页将源码测试、部署、真实新轮次及跨端外观分开验收。
 

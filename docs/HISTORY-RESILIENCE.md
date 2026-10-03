@@ -31,4 +31,12 @@ SQLite 仍以 `mode=ro` 打开，0.2 秒锁等待和 0.5 秒 SQL progress deadli
 
 [独立部署健康记录](assets/history-resilience-deployment-checks.json)显示 Gateway 运行、飞书连接正常、doctor 所有检查通过、托管工作区干净、账本只读 `quick_check` 正常及当前进程日志无 traceback。配置和凭据哈希保持不变，会话、模型、账本 schema 和历史卡片未迁移；原更新定时器已恢复。
 
-**剩余边界**：0.20.2 重启后还没有验收真实新轮次。doctor 的 `metrics_stale` 表示当前进程尚无可验证新轮次指标，不使用旧进程计数冒充实时成功；历史一条 `delivery_unknown` 保留，不为清零告警自动重发。只读检查还发现本机 `lark-cli` 未配置应用，不自动创建身份、扩大权限或发起登录；现有 Gateway 的飞书连接不依赖该 CLI 配置。0.20.1 的真实 Gateway 测试和客户端截图保持原版本范围，跨端与像素级验收仍单列。
+## 本版真实轮次验收
+
+用户逐条确认的唯一测试经已登录飞书客户端送入原 V1 独立话题；没有再次发送、重启 Gateway 或重置主会话。真实 Hermes 记录两个 `terminal` 调用，命令分别为 `printf CARD0202_OK` 与 `sh -c 'printf CARD0202_EXPECTED_FAILURE; exit 7'`，退出码为 0 / 7，两个 stdout 标记均保留。原话题的一条 interactive 回复读取成功；卡片是一成功、一失败，回答仍独立完成为“验收完成”。
+
+客户端字段文本与真实记录核对：两次主 API 请求、零 API 错误、输入/输出与缓存汇总一致，标题采用末次请求上下文而非全轮累计，今日/月/总历史摘要与只读 SQL 快照一致；max 明确标为请求值。账本只存请求身份哈希，不存会话 ID、正文或凭据；通过空闲基线、唯一新入站/投递、当前进程唯一完成卡片和时间窗核对隔离测试，而不是伪造不存在的会话列关联。仅公开无标识符的[验收摘要](assets/history-resilience-real-gateway-checks.json)，原始消息、客户端统计和日志保留在受保护本机目录。
+
+该轮完成后 doctor 的 `metrics_stale` 已解除；当前进程 CardKit API 错误及 traceback 为零。历史一条 `delivery_unknown` 保留，不为清零告警自动重发。只读检查还发现本机 `lark-cli` 未配置应用；没有创建身份、扩大权限或发起登录，现有 Gateway 和已登录客户端的链路独立通过。
+
+**剩余边界**：以上证明真实调用、投递和客户端字段一致，不将 SDK 内容或折叠子元素的可访问文本当作展开截图/逐像素证明。0.20.1 客户端截图保持原版本范围，手机、跨端主题/缩放与像素级验收仍单列。

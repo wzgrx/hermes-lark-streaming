@@ -1,6 +1,6 @@
 # Hermes Footer V2：任务计划与验收边界
 
-> **后续增强与部署 0.20.2（2026-10-03）**：修复历史零值、并发快照、嵌套缓存与慢线程占位；1450 项本地测试和精确提交 Tests / CodeQL 通过。已空闲部署并重启，Gateway/飞书、doctor、钩子和只读账本健康通过，配置、核心与 LCM 未变。0.20.2 重启后真实新轮次仍待验收；下表 V1 轮次/客户端证据保留 0.20.1 范围，不更改冻结图。见 [历史与采样增强](HISTORY-RESILIENCE.md)及[独立部署记录](assets/history-resilience-deployment-checks.json)。
+> **后续增强与部署 0.20.2（2026-10-03）**：修复历史零值、并发快照、嵌套缓存与慢线程占位；1450 项本地测试和精确提交 Tests / CodeQL 通过。已空闲部署并重启，Gateway/飞书、doctor、钩子和只读账本健康通过，配置、核心与 LCM 未变。本版一条真实新轮次通过工具退出 0 / 7、原话题投递、客户端统计与账本核对；下表旧截图保留 0.20.1 范围，不更改冻结图。见 [历史与采样增强](HISTORY-RESILIENCE.md)、[独立部署记录](assets/history-resilience-deployment-checks.json)及[本版真实轮次](assets/history-resilience-real-gateway-checks.json)。
 
 > **V1 整卡新基准（2026-10-03）**：0.20.1 已托管部署并空闲重启；1435 回归、Ruff/mypy、Tests / CodeQL / Hermes Compat Check 通过。真实 Gateway 成功输出和预期退出 7 两轮、独立话题投递、max（请求）与账本统计一致通过；修复了工具完成 metadata 遗漏与脱敏问题。现有手机登录验证过期，跨端/像素级验收待完成；不新增功能扩大本轮范围。下文 0.19.2 阶段表保留为历史记录，当前证据以 [REFERENCE-V1.md](REFERENCE-V1.md) 为准。
 
@@ -23,7 +23,7 @@
 | 托管部署与真实 Gateway | `assets/reference-v1-deployment-checks.json`、`reference-v1-real-gateway-checks.json` | 0.20.1 空闲部署；成功/预期失败两轮及统计核对通过，原配置和数据保留 |
 | 与冻结设计逐项视觉对照 | 合成 CardKit 探针与真实 Windows 展开/局部更新/工具结果截图 | 桌面结构和交互已验；手机/跨端字号、主题/缩放及逐像素一致性仍待实机证据 |
 
-剩余必需验收为 0.20.2 重启后的真实新轮次、可测试的已登录手机飞书界面和跨端视觉对照。账户额度、实际费用、完整 LCM 压缩提交事件、网页 Dashboard 等是已有文档列明的独立后续项，不以新增这些功能代替剩余验收。
+剩余必需验收为可测试的已登录手机飞书界面和跨端视觉对照。0.20.2 真实新轮次已通过，但客户端字段读取不替代展开/逐像素截图验收。账户额度、实际费用、完整 LCM 压缩提交事件、网页 Dashboard 等是已有文档列明的独立后续项，不以新增这些功能代替剩余验收。
 
 ## 历史完成情况（0.19.2 阶段快照）
 
