@@ -3,10 +3,12 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.2-blue)
+![Code version](https://img.shields.io/badge/code-0.20.3-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
+
+> **0.20.3 code hardening:** apply live history timezone changes and isolate nested sealed-turn snapshots. Day/month totals refresh after a timezone change; obsolete reads stay owned until completion and cannot overwrite the new zone. See the [changelog](CHANGELOG.md#0203---2026-10-03). Deployment and real-turn evidence below retain their version scope.
 
 > **Source and managed runtime 0.20.2:** preserve known zero usage, use a consistent read-only history snapshot, keep slow-thread sampling coalesced and isolate nested cached data. 1450 local tests, Ruff, mypy and exact-revision GitHub Tests / CodeQL pass. Deployed with rollback copies and an idle restart; Gateway, Feishu connection, doctor, hooks and read-only ledger health pass. **One explicitly confirmed real turn after restart passes:** two terminal calls exit 0 / 7, one success and one failure, independent final-answer completion, original-topic delivery and message readbacks. Native-client footer fields agree with the isolated usage events and read-only history snapshot. No dependency, V1 layout, generated-hook or configuration changes; older screenshots stay scoped to 0.20.1 and mobile/pixel acceptance remains separate. See [history and sampler hardening](docs/HISTORY-RESILIENCE.md), [deployment](docs/assets/history-resilience-deployment-checks.json) and [real-turn evidence](docs/assets/history-resilience-real-gateway-checks.json).
 

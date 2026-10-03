@@ -82,6 +82,14 @@ class HistorySummary:
     def snapshot(self) -> dict[str, Any]:
         return deepcopy(self._cached)
 
+    def set_timezone(self, timezone: str) -> None:
+        """Apply validated live config on the Gateway loop without detaching a read."""
+        if timezone == self._timezone:
+            return
+        self._timezone = timezone
+        self._cached = {"status": "pending", "timezone": timezone}
+        self._at = float("-inf")
+
     def request(self, *, force: bool = False) -> None:
         if self._task is None and (force or time.monotonic() - self._at >= 60):
             self._task = asyncio.create_task(self._read())
@@ -104,13 +112,18 @@ class HistorySummary:
                 self._cached = {"status": "unavailable", "timezone": self._timezone}
 
     async def _read(self) -> None:
+        timezone = self._timezone
         try:
             # Timing out to_thread() does not stop its underlying OS thread.
             # Keep ownership until it really exits so requests stay coalesced.
             # SQL retains its own deadline; finish() bounds callers' wait time.
-            self._cached = await asyncio.to_thread(read_summary, self._path, self._timezone)
+            result = await asyncio.to_thread(read_summary, self._path, timezone)
         except (OSError, TimeoutError, ValueError, sqlite3.Error, ZoneInfoNotFoundError):
-            self._cached = {"status": "unavailable", "timezone": self._timezone}
+            result = {"status": "unavailable", "timezone": timezone}
         finally:
-            self._at = time.monotonic()
+            self._at = time.monotonic() if timezone == self._timezone else float("-inf")
             self._task = None
+        # A config change can happen while SQLite runs on its worker thread.
+        # Old-period totals (or errors) must not be published under a new zone.
+        if timezone == self._timezone:
+            self._cached = result

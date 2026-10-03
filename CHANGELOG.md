@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.3] - 2026-10-03
+
+### Fixed
+- Apply live history timezone changes to the existing controller-scoped reader. Invalidate old day/month totals immediately, retain ownership of any in-flight SQL thread, and discard its obsolete result or error. The next read uses the new timezone without the old 60-second cache delay.
+- Return independent nested snapshots from sealed turn telemetry. A consumer modifying the service-provider path no longer changes subsequent card snapshots or disagrees with the stored route count.
+
+### Validation
+- Five new regressions cover both sealed snapshot entry points, a real SQLite UTC/Shanghai day-and-month boundary, and timezone changes during successful/failing background reads. Layout, dependencies, generated hooks and database schema are unchanged. Runtime deployment and visual acceptance are recorded separately.
+- 1455 full local tests, Ruff and mypy (49 source files) pass; the 0.20.3 wheel builds offline. Correct history documentation to distinguish canonical-hook zeros in the ledger from raw-provider presence and per-turn cache display.
+
 ## [0.20.2] - 2026-10-03
 
 ### Fixed

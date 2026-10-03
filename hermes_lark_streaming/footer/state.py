@@ -6,6 +6,7 @@ import math
 import re
 import threading
 import time
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -197,12 +198,12 @@ class TurnFooter:
         with self._lock:
             if self._sealed is None:
                 self._sealed = self._snapshot()
-            return dict(self._sealed)
+            return deepcopy(self._sealed)
 
     def snapshot(self) -> dict[str, Any]:
         """Read live counters without sealing the turn or retaining body content."""
         with self._lock:
-            return dict(self._sealed) if self._sealed is not None else self._snapshot()
+            return deepcopy(self._sealed) if self._sealed is not None else self._snapshot()
 
     def _snapshot(self) -> dict[str, Any]:
         requests = list(self._requests.values())

@@ -4,11 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.2-blue)
+![Code version](https://img.shields.io/badge/code-0.20.3-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
+
+> **0.20.3 代码增强**：修复历史时区热更新及已结束轮次的嵌套快照隔离。切换统计时区后，今日/月用量重新计算；旧后台读取保留占位，结果不会覆盖新时区。见 [变更记录](CHANGELOG.md#0203---2026-10-03)。下方部署与真实轮次证据仍标注各自版本。
 
 > **代码与托管运行版本 0.20.2**：修复历史零值丢失、并发读取快照不一致及慢线程重复采样风险；补齐深层快照隔离和终态超时口径。1450 项本地回归、Ruff、mypy 及精确提交的 GitHub Tests / CodeQL 通过。已保留回滚副本、空闲部署并重启；Gateway、飞书连接、doctor、钩子和只读账本检查通过。**重启后的一条真实测试已通过**：两个终端调用退出 0 / 7、一成功一失败、最终回答独立完成、原话题投递与读取成功；Footer 的两次 API 请求、输入/输出、缓存、末次上下文和历史摘要与账本核对一致。不新增依赖、不改变 V1 布局、钩子模板或配置；旧截图保持 0.20.1 范围，手机及像素级验收仍单列。详见 [历史与采样增强](docs/HISTORY-RESILIENCE.md)、[本版部署记录](docs/assets/history-resilience-deployment-checks.json)和[真实轮次证据](docs/assets/history-resilience-real-gateway-checks.json)。
 

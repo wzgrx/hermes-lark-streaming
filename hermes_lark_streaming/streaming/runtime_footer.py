@@ -43,10 +43,12 @@ class RuntimeFooterController:
         if self._reference_host is None:
             self._reference_host = HostSampler()
         history_enabled = self._cfg.footer_history.get("enabled") is True
-        if history_enabled and self._reference_history is None:
-            self._reference_history = HistorySummary(
-                self._profile_home / "state/card-usage.sqlite3", self._cfg.reference_history_timezone
-            )
+        if history_enabled:
+            timezone = self._cfg.reference_history_timezone
+            if self._reference_history is None:
+                self._reference_history = HistorySummary(self._profile_home / "state/card-usage.sqlite3", timezone)
+            else:
+                self._reference_history.set_timezone(timezone)
         if not session.state.is_terminal:
             # Background coalesced reads do not block answer/segment streaming.
             if self._cfg.reference_resources_enabled:
