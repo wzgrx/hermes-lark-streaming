@@ -12,6 +12,8 @@
 
 > **当前代码与托管版 0.20.3**：修复历史时区热更新及已结束轮次的嵌套快照隔离；1455 项本地测试、Ruff/mypy、精确提交的 GitHub Tests/CodeQL 通过。已在空闲时部署并重启，Gateway、飞书、doctor、钩子和只读账本检查通过。V1 布局与依赖未变；本版健康检查未新增真实消息测试，下方 0.20.2 实测保留原版本范围。见 [变更记录](CHANGELOG.md#0203---2026-10-03)及[部署摘要](docs/assets/footer-cache-boundaries-deployment-checks.json)。
 
+> **桌面展开验收补充**：对既有 0.20.2 真实测试卡片，已逐项检查浅色/深色的工具、资源和 Footer 展开显示；失败高亮、双列指标及历史口径可读，已恢复用户原浅色主题。未新增消息或重启。手机登录验证仍待本人完成；不声明全平台逐像素一致。见[版本与主题验收表](docs/REFERENCE-V1.md#真实卡片的桌面主题复核0202)。
+
 > **历史部署与真实轮次 · 0.20.2**：修复历史零值丢失、并发读取快照不一致及慢线程重复采样风险；补齐深层快照隔离和终态超时口径。1450 项本地回归、Ruff、mypy 及精确提交的 GitHub Tests / CodeQL 通过。已保留回滚副本、空闲部署并重启；Gateway、飞书连接、doctor、钩子和只读账本检查通过。**重启后的一条真实测试已通过**：两个终端调用退出 0 / 7、一成功一失败、最终回答独立完成、原话题投递与读取成功；Footer 的两次 API 请求、输入/输出、缓存、末次上下文和历史摘要与账本核对一致。不新增依赖、不改变 V1 布局、钩子模板或配置；旧截图保持 0.20.1 范围，手机及像素级验收仍单列。详见 [历史与采样增强](docs/HISTORY-RESILIENCE.md)、[本版部署记录](docs/assets/history-resilience-deployment-checks.json)和[真实轮次证据](docs/assets/history-resilience-real-gateway-checks.json)。
 
 > **历史 V1 实机验收 · 0.20.1 / 2026-10-03**：1435 项全量测试、Ruff、mypy、GitHub Tests / CodeQL / Hermes Compat Check 通过。真实 Gateway 成功与预期非零退出两轮均投递成功；Windows 已核对 stdout、失败浅红底、max（请求）和账本统计一致。当时 doctor、钩子及只读账本健康通过，配置/凭据/会话/模型未迁移。手机端曾发现登录验证过期；跨端字号/主题/缩放及像素级一致性仍单独待验。详见[历史部署检查](docs/assets/reference-v1-deployment-checks.json)与[真实轮次记录](docs/assets/reference-v1-real-gateway-checks.json)。代码版本不等于同名 PyPI/Release 发布。
@@ -62,7 +64,7 @@ Hermes 负责提供商认证、模型调用、工具执行和会话；本插件�
 | 可靠投递 | 成功后提交 sequence、稳定 UUID、投递三态台账 | `unknown` 不冒充成功，不自动重复发送答案 |
 | 长任务续卡 | 时间/元素预算续卡，旧片封存 | 卡片历史收缩不等于 LCM 上下文压缩 |
 | 打断与审批 | `/stop`、排队、后台/Cron、审批边界适配 | 原生审批 resolver 仍由 Hermes 持有 |
-| V1 整卡 / Footer V2 | 工具、资源、正文、模型和历史；旧紧凑布局保留 | 当前运行 0.20.2；本版真实轮次通过，跨端像素矩阵待验 |
+| V1 整卡 / Footer V2 | 工具、资源、正文、模型和历史；旧紧凑布局保留 | 当前运行 0.20.3；0.20.2 真实轮次及桌面双主题展开已验，手机/跨端像素矩阵待验 |
 | 历史用量 | SQLite 持久化，按月/日/模型/服务商/订阅标签查询 | 从启用后开始收集；不是账户全局账单 |
 | 多提供商口径 | Hermes canonical + 6 类协议字段解析测试 | 226 个目录入口不等于 226 家真实账号验收 |
 | 运维 | doctor、metrics、只读检查、显式 API smoke | 测试通过、服务端通过、客户端验收分别记录 |

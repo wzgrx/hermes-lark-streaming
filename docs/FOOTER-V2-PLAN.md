@@ -2,6 +2,8 @@
 
 > **0.20.3 后续增强**：历史时区热更新与终态快照隔离已修复，1455 项本地测试及精确提交 CI 通过并空闲部署。见[独立部署摘要](assets/footer-cache-boundaries-deployment-checks.json)。本版没有新增真实消息测试，手机与跨端像素验收仍待完成；下列旧版本证据保持原范围。
 
+> **桌面主题复核**：同一条 0.20.2 真实卡片已完成浅色/深色工具、资源、Footer 展开观察；原浅色设置已恢复。此次没有新增消息或重启，截图留在私有目录。见[公开范围摘要](assets/reference-v1-real-desktop-theme-checks.json)。手机验证、其他宽度/缩放与逐像素一致性仍单列，不通过反复桌面检查或新增功能替代。
+
 > **后续增强与部署 0.20.2（2026-10-03）**：修复历史零值、并发快照、嵌套缓存与慢线程占位；1450 项本地测试和精确提交 Tests / CodeQL 通过。已空闲部署并重启，Gateway/飞书、doctor、钩子和只读账本健康通过，配置、核心与 LCM 未变。本版一条真实新轮次通过工具退出 0 / 7、原话题投递、客户端统计与账本核对；下表旧截图保留 0.20.1 范围，不更改冻结图。见 [历史与采样增强](HISTORY-RESILIENCE.md)、[独立部署记录](assets/history-resilience-deployment-checks.json)及[本版真实轮次](assets/history-resilience-real-gateway-checks.json)。
 
 > **V1 整卡新基准（2026-10-03）**：0.20.1 已托管部署并空闲重启；1435 回归、Ruff/mypy、Tests / CodeQL / Hermes Compat Check 通过。真实 Gateway 成功输出和预期退出 7 两轮、独立话题投递、max（请求）与账本统计一致通过；修复了工具完成 metadata 遗漏与脱敏问题。现有手机登录验证过期，跨端/像素级验收待完成；不新增功能扩大本轮范围。下文 0.19.2 阶段表保留为历史记录，当前证据以 [REFERENCE-V1.md](REFERENCE-V1.md) 为准。
