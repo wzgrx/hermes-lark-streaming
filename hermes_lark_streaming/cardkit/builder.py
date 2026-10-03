@@ -249,14 +249,18 @@ def _escape_md(value: str) -> str:
     return re.sub(r"([`*_{}\[\]<>])", r"\\\1", value.replace("\\", "\\\\"))
 
 
-def _build_notice_panel(text: str, *, element_id: str | None = None) -> dict:
+def _build_notice_panel(text: str, *, element_id: str | None = None, kind: str = "review") -> dict:
     """Render a background/system notice without mixing it into the assistant answer."""
+    en_title, zh_title = (
+        ("↪ Continued from previous card", "↪ 接续上一张卡片")
+        if kind == "continuation" else ("💾 Background review", "💾 后台复盘")
+    )
     panel = _collapsible_panel(
         expanded=False,
         title_el={
             "tag": "plain_text",
-            "content": "💾 Background review",
-            "i18n_content": _i18n("💾 Background review", "💾 后台复盘"),
+            "content": en_title,
+            "i18n_content": _i18n(en_title, zh_title),
             "text_color": "grey",
             "text_size": "notation",
         },
@@ -524,7 +528,7 @@ def build_complete_card(
             if steps:
                 elements.append(_build_tool_panel(steps, expanded=panel_expanded, element_id=None))
         elif seg.type == SegmentType.NOTICE and seg.text:
-            elements.append(_build_notice_panel(seg.text))
+            elements.append(_build_notice_panel(seg.text, kind=seg.notice_kind))
         elif seg.type == SegmentType.ANSWER and seg.text:
             has_answer = True
             content = _downgrade_tables(optimize_markdown_style(seg.text))

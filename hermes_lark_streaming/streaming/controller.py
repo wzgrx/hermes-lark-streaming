@@ -928,7 +928,7 @@ class StreamingController(RuntimeFooterController):
         session.element_count = 1
         session.split_disabled = False
         session.split_index = len(segment_state.segments)
-        segment_state.on_notice("↪ 接续上一张卡片 / Continued from previous card")
+        segment_state.on_notice("↪ 接续上一张卡片 / Continued from previous card", kind="continuation")
         session.flush.request_reflush()
         await self._seal_current_card(
             session, old_segments, card_id=old_card_id,

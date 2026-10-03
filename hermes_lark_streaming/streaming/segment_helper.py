@@ -88,7 +88,7 @@ def build_add_segment_action(
     elif seg.type == SegmentType.ANSWER:
         element = _streaming_element(element_id=seg.el_id, text_size=text_size)
     elif seg.type == SegmentType.NOTICE:
-        element = _build_notice_panel(seg.text, element_id=seg.el_id)
+        element = _build_notice_panel(seg.text, element_id=seg.el_id, kind=seg.notice_kind)
     elif seg.type == SegmentType.TOOL:
         start = seg.tool_offset
         end = seg.tool_end_offset if seg.tool_end_offset else len(all_steps)

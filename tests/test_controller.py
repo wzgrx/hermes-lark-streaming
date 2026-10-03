@@ -1115,6 +1115,7 @@ class TestDoFlush:
         assert session.streaming_closed is False
         assert session.split_index == 1
         assert session.segment_state.segments[1].type.value == "notice"
+        assert session.segment_state.segments[1].notice_kind == "continuation"
         assert ctrl._client.cardkit_stream_element.await_count == 0
 
         session.segment_state.on_answer_delta("after rollover")

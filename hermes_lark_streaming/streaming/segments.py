@@ -22,6 +22,7 @@ class Segment:
         "el_id",
         "elapsed_ms",
         "element_estimate",
+        "notice_kind",
         "reasoning_finalized",
         "start_time",
         "text",
@@ -37,6 +38,7 @@ class Segment:
         self.created = False
         self.dirty = True
         self.element_estimate: int = 0
+        self.notice_kind: str = "review"
         self.text: str = ""
         self.text_el_id: str = ""
         self.tool_offset: int = 0
@@ -82,10 +84,11 @@ class SegmentState:
         self.segments.append(seg)
         return seg
 
-    def _new_notice(self, text: str) -> Segment:
+    def _new_notice(self, text: str, *, kind: str = "review") -> Segment:
         c = self._counter
         self._counter += 1
         seg = Segment(SegmentType.NOTICE, f"notice_{c}_panel")
+        seg.notice_kind = kind
         seg.text = text
         self._finalize_prev_reasoning(time.time())
         self.segments.append(seg)
@@ -124,10 +127,10 @@ class SegmentState:
         else:
             self._new_answer(text)
 
-    def on_notice(self, text: str) -> None:
+    def on_notice(self, text: str, *, kind: str = "review") -> None:
         """Append a non-conversational lifecycle notice to the card."""
         if text.strip():
-            self._new_notice(text.strip())
+            self._new_notice(text.strip(), kind=kind)
 
     def on_tool_event(self, tool_step_count: int) -> None:
         """处理工具调用事件，同类型标记 dirty 否则新建 segment 并终结前序 tool segment."""

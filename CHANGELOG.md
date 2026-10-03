@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-10-03
+
+### Fixed
+- Distinguish automatic card continuation from background reviews with explicit notice metadata. Streaming, recovery and final cards now label rollover notices as “Continued from previous card”; actual background reviews keep their original title. Do not infer notice type from text.
+
+### Validation
+- A real-clock synthetic run on managed 0.19.0 rotated at 481.66 seconds and finished at 488.42 seconds, with two confirmed cards, no API errors and timer cleanup. Direct client inspection exposed the misleading notice title fixed here; no model was called. Post-fix acceptance remains separate from that pre-fix evidence.
+- 1144 full tests, Ruff and mypy pass. Five new notice-rendering cases cover streaming/final titles, unchanged review behavior and no text-based classification; the rollover regression asserts explicit continuation metadata.
+
 ## [0.19.0] - 2026-10-03
 
 ### Added
