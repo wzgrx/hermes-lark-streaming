@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.2] - 2026-10-03
+
+### Fixed
+- Preserve known zero cache-read, cache-write and reasoning usage in the ledger. A repeated event can correct a previously nonzero value to zero; missing metadata still preserves existing values. No schema change or speculative backfill of older NULL records.
+- Read period totals and model groups in one read-only SQLite transaction so concurrent WAL writers do not produce mixed-snapshot footers. Aggregate the three periods together and return independent nested cache snapshots.
+- Keep history and /proc worker ownership until the blocking thread actually exits, rather than assuming an asyncio timeout stops that thread. Coalesce later sampling requests; keep terminal waiting bounded and show unavailable history if its forced refresh times out.
+
+### Validation
+- Fifteen synthetic regressions cover zero/missing usage, idempotent corrections, concurrent WAL writes, two-query aggregation, snapshot isolation, slow-thread coalescing, bounded callers and cancelled waiters. Ten of the initial eleven regression cases failed on 0.20.1 before the fix.
+- 1450 full local tests, Ruff and mypy pass. A disposable 60,000-row comparison produces identical reports; medians were 48.477 ms before and 49.853 ms after in that run. Query count drops from five to two, but no fixed speedup is claimed.
+- No dependency, renderer or generated-hook changes. Managed runtime and real-client evidence remain at 0.20.1 until a separately verified deployment; this source update does not restart Gateway.
+
 ## [0.20.1] - 2026-10-03
 
 ### Fixed

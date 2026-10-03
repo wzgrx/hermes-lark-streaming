@@ -73,9 +73,9 @@ class UsageLedger:
             int(failed),
             usage.prompt,
             usage.output,
-            usage.cache_read or None,
-            usage.cache_write or None,
-            usage.reasoning or None,
+            usage.cache_read,
+            usage.cache_write,
+            usage.reasoning,
         )
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         # Create privately before SQLite opens the file; no process-global umask changes.

@@ -88,7 +88,9 @@ class HostSampler:
     async def _collect(self) -> None:
         process = None
         try:
-            result, cpu = await asyncio.wait_for(asyncio.to_thread(read_proc), 0.5)
+            # A timed-out to_thread() keeps running. Retain this task's slot
+            # until /proc sampling actually exits; finish() bounds the waiter.
+            result, cpu = await asyncio.to_thread(read_proc)
             if cpu is not None and self._cpu is not None:
                 total, idle = cpu[0] - self._cpu[0], cpu[1] - self._cpu[1]
                 if total > 0 and 0 <= idle <= total:

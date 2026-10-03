@@ -3,10 +3,12 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.1-blue)
+![Code version](https://img.shields.io/badge/code-0.20.2-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
+
+> **Source 0.20.2:** preserve known zero usage, use a consistent read-only history snapshot, keep slow-thread sampling coalesced and isolate nested cached data. 1450 local tests pass. No dependency, V1 layout or generated-hook changes; managed runtime remains 0.20.1 in this source-only update. See [history and sampler hardening](docs/HISTORY-RESILIENCE.md).
 
 > **2026-10-03 status:** V1 0.20.1 is managed-deployed after exact-revision CI and an idle restart. 1435 full tests, Ruff, mypy, Tests / CodeQL / Hermes Compat Check pass. Two real Gateway turns verify successful stdout and expected nonzero exit, delivery, failure highlighting, requested max and footer/ledger agreement. Doctor/hooks/read-only ledger health pass; configuration, credentials, sessions and models were not migrated. The existing mobile login has expired; mobile/theme/scale and pixel-identical acceptance remain separate. See [deployment](docs/assets/reference-v1-deployment-checks.json) and [real-turn evidence](docs/assets/reference-v1-real-gateway-checks.json). Source version is not a published-package claim.
 

@@ -4,11 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.1-blue)
+![Code version](https://img.shields.io/badge/code-0.20.2-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
+
+> **代码 0.20.2**：修复历史零值丢失、并发读取快照不一致及慢线程重复采样风险；补齐深层快照隔离和终态超时口径。1450 项本地回归通过，不新增依赖、不改变 V1 布局或钩子。本轮只更新代码，运行中的托管版本仍为 0.20.1。详见 [历史与采样增强](docs/HISTORY-RESILIENCE.md)。
 
 > **当前状态 · 2026-10-03**：V1 整卡 0.20.1 已托管部署并空闲重启；1435 项全量测试、Ruff、mypy、GitHub Tests / CodeQL / Hermes Compat Check 通过。真实 Gateway 成功与预期非零退出两轮均投递成功；Windows 已核对 stdout、失败浅红底、max（请求）和账本统计一致。doctor、钩子及只读账本健康通过，配置/凭据/会话/模型未迁移。手机端现有登录验证过期，跨端字号/主题/缩放及像素级一致性仍单独待验。详见[部署检查](docs/assets/reference-v1-deployment-checks.json)与[真实轮次记录](docs/assets/reference-v1-real-gateway-checks.json)。代码版本不等于同名 PyPI/Release 发布。
 

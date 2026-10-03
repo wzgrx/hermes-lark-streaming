@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import time
-from contextlib import closing, suppress
+from contextlib import closing
+from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -23,24 +24,35 @@ def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict
     if not path.is_file():
         return result
     measured = "input_tokens IS NOT NULL AND output_tokens IS NOT NULL"
+    periods = (
+        ("today", today.timestamp(), tomorrow.timestamp()),
+        ("month", month.timestamp(), end_month.timestamp()),
+        ("total", 0, 253402214400),
+    )
+    columns = ["MIN(occurred_at)"]
+    params: list[float] = []
+    for _key, start, end in periods:
+        # One scan for all periods, not MIN plus three independent scans.
+        inside = "occurred_at >= ? AND occurred_at < ?"
+        columns.extend((
+            f"SUM(CASE WHEN {inside} THEN 1 ELSE 0 END)",
+            f"SUM(CASE WHEN {inside} AND {measured} THEN 1 ELSE 0 END)",
+            f"SUM(CASE WHEN {inside} AND {measured} THEN input_tokens+output_tokens END)",
+        ))
+        params.extend((start, end) * 3)
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.2)) as db:
         deadline = time.monotonic() + 0.5
         db.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
-        first = db.execute("SELECT MIN(occurred_at) FROM usage_events WHERE scope='main'").fetchone()[0]
+        # WAL writers keep running, but the totals and model groups must share
+        # the same read snapshot. No write transaction/checkpoint is performed.
+        db.execute("BEGIN")
+        row = db.execute("SELECT " + ", ".join(columns) + " FROM usage_events WHERE scope='main'", params).fetchone()
+        first = row[0]
         if first is None:
             return result
         result.update(status="ok", since=datetime.fromtimestamp(first, tz).strftime("%Y-%m-%d"))
-        for key, start, end in (
-            ("today", today.timestamp(), tomorrow.timestamp()),
-            ("month", month.timestamp(), end_month.timestamp()),
-            ("total", 0, 253402214400),
-        ):
-            requests, known, tokens = db.execute(
-                f"SELECT COUNT(*), SUM(CASE WHEN {measured} THEN 1 ELSE 0 END), "
-                f"SUM(CASE WHEN {measured} THEN input_tokens+output_tokens END) FROM usage_events "
-                "WHERE scope='main' AND occurred_at >= ? AND occurred_at < ?",
-                (start, end),
-            ).fetchone()
+        for index, (key, _start, _end) in enumerate(periods):
+            requests, known, tokens = row[1 + index * 3:4 + index * 3]
             # A truly empty period is zero once recording exists. Requests with
             # missing usage remain unknown/partial, never an invented zero.
             result[key] = {
@@ -68,7 +80,7 @@ class HistorySummary:
         self._task: asyncio.Task[None] | None = None
 
     def snapshot(self) -> dict[str, Any]:
-        return dict(self._cached)
+        return deepcopy(self._cached)
 
     def request(self, *, force: bool = False) -> None:
         if self._task is None and (force or time.monotonic() - self._at >= 60):
@@ -77,19 +89,26 @@ class HistorySummary:
     async def finish(self) -> None:
         # Drain an earlier cache read, then query AFTER the terminal usage hook.
         if self._task is not None:
-            with suppress(TimeoutError):
+            try:
                 await asyncio.wait_for(asyncio.shield(self._task), 0.8)
+            except TimeoutError:
+                # Do not label an older cache as a completed terminal refresh.
+                # The worker stays owned and may complete for the next turn.
+                self._cached = {"status": "unavailable", "timezone": self._timezone}
+                return
         self.request(force=True)
         if self._task is not None:
-            with suppress(TimeoutError):
+            try:
                 await asyncio.wait_for(asyncio.shield(self._task), 0.8)
+            except TimeoutError:
+                self._cached = {"status": "unavailable", "timezone": self._timezone}
 
     async def _read(self) -> None:
         try:
-            self._cached = await asyncio.wait_for(
-                asyncio.to_thread(read_summary, self._path, self._timezone),
-                0.6,
-            )
+            # Timing out to_thread() does not stop its underlying OS thread.
+            # Keep ownership until it really exits so requests stay coalesced.
+            # SQL retains its own deadline; finish() bounds callers' wait time.
+            self._cached = await asyncio.to_thread(read_summary, self._path, self._timezone)
         except (OSError, TimeoutError, ValueError, sqlite3.Error, ZoneInfoNotFoundError):
             self._cached = {"status": "unavailable", "timezone": self._timezone}
         finally:
