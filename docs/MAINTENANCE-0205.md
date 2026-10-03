@@ -39,3 +39,32 @@ No new user-message model turn or client pixel-equality claim is implied.
   The remaining upstream Telegram early-cancellation regression is outside this
   Feishu deployment's enabled platform, and is retained as a known finding rather
   than silently excluded or described as an all-green core suite.
+
+## Published and deployed
+
+- Code commit: `51980761d2bf9b4faaadfe64a497c02d9b7dc1bc` on this fork's main.
+- [Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37161552505)
+  and [CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37161552509)
+  succeeded on that exact code commit.
+- LCM compatibility against the new Hermes snapshot: 3482 passed, 6 skipped,
+  12 expected failures. LCM source revision was intentionally unchanged.
+- Feishu CardKit accepted unattached complete-card entities for both failure and
+  stop states. This validates JSON acceptance, not desktop rendering or a model turn.
+- Double-idle guarded deployment completed. Core runtime:
+  `194501c6a78574f6ea7498ae7661dc78ec36276c`, incorporating the official main target
+  and 30 retained local commits. Card loads 0.20.5 from the PM-managed generation.
+- Gateway running, Feishu connected; PM doctor, both plugin doctors, hook
+  verify/install/status, Card doctor and dry smoke pass. All three SQLite
+  databases pass read-only quick_check. Config and credential files are byte-identical.
+- TUI/Web build freshness verified. The staged Web receipt initially differed
+  because the runtime source retained older untracked fonts/assets. Rebuilding
+  through the official Web builder preserved these files and restored freshness;
+  nothing was deleted to force a passing check.
+- Historical `delivery_unknown` and the pre-turn `metrics_stale` warning remain
+  visible. Core doctor still reports optional unconfigured tools, including
+  image generation; no keys or permissions were invented and no tools disabled.
+- Current-process journal has no traceback. No new user-message model turn was
+  sent; older chat cards were not rewritten. This is not a blanket zero-bug claim.
+
+Private deployment/rollback receipt on the operator host:
+`/home/wzgrx/.hermes/state/hermes-reviewed-deploy-20261004-card0205.json`.
