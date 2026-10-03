@@ -21,12 +21,12 @@ in parallel.
 Before an upgrade:
 
 ```bash
-python -m hermes_lark_streaming doctor --json
-python -m hermes_lark_streaming verify
+hermes --run-module hermes_lark_streaming doctor --json
+hermes --run-module hermes_lark_streaming verify
 ```
 
 If doctor reports missing `lark-oapi` constructors, repair only the active Hermes interpreter:
 
 ```bash
-~/.hermes/hermes-agent/venv/bin/python -m hermes_lark_streaming repair-sdk
+hermes --run-module hermes_lark_streaming repair-sdk
 ```

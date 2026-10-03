@@ -1,275 +1,187 @@
 # Hermes Lark Streaming
 
-[![PyPI](https://img.shields.io/badge/python-%E2%89%A53.11-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+**让 Hermes 的回复成为持续更新、可追溯的飞书卡片。**
 
-[Hermes](https://github.com/NousResearch/hermes-agent) Gateway 飞书流式卡片插件 — 基于 CardKit v2.0 的进程内流式消息卡片。
+[![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
+[![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
+![Code version](https://img.shields.io/badge/code-0.17.1-blue)
+![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
+[![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-灵感来源于 [openclaw-lark](https://github.com/larksuite/openclaw-lark) 和 [hermes-feishu-streaming-card](https://github.com/baileyh8/hermes-feishu-streaming-card)。
+[English](README.en.md) · [安装](INSTALL.md) · [Footer](docs/FOOTER-V2.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md) · [视觉审查](docs/FOOTER-DESIGN-AUDIT.md)
 
-[English](README.en.md)
+> **当前状态 · 2026-10-03**：代码 0.17.1 已部署并通过服务端卡片测试；1058 项离线测试通过。**设计图的视觉验收尚未通过**：当前是两列详情，三列对齐、标题样式和部分字段仍待完善。原计划没有全部完成。此处版本指源码，不等于已发布同名 PyPI/Release 包。
 
-![](assets/cover.jpg)
+![运行架构：Hermes、Card 插件、飞书客户端及独立用量账本](docs/assets/runtime-overview.svg)
 
----
+## 这是什么
 
-## Footer V2（0.17.0，按需开启）
+这是 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的飞书/Lark CardKit 2.0 插件，维护分支来自社区项目。**只做 Hermes 集成，不是 OpenClaw 插件，也不是独立模型客户端。**
 
-新增 Hermes 专用两行摘要与默认折叠的「本轮详情」，统一不同提供商的输入/缓存/上下文口径。
-设置 `streaming.footer.mode: enhanced` 开启；默认 `classic` 保留现有布局。完整目录收录 226 个提供商入口，不等同真实账号逐家验收。
+Hermes 负责提供商认证、模型调用、工具执行和会话；本插件负责卡片流式显示、可靠投递与只读用量采集。现有 Gateway 飞书连接保持唯一，额外安装 Node SDK 不会自动改变卡片外观。
 
-- [使用与边界](docs/FOOTER-V2.md) · [任务计划](docs/FOOTER-V2-PLAN.md)
-- [全部提供商与协议覆盖清单](docs/PROVIDER-COVERAGE.md) · [架构图](docs/assets/footer-v2-architecture.png)
-- [测试和交付证据](docs/FOOTER-V2-VALIDATION.md)
-- [历史用量：按月/模型/服务商/订阅统计](docs/USAGE-HISTORY.md)，独立可选的 SQLite 账本与 CLI/JSON。
+## 功能一览
 
-## Cron 投递证据
+| 能力 | 当前实现 | 边界 |
+|---|---|---|
+| 流式卡片 | 回答、思考与工具按事件顺序显示 | 思考内容以模型实际返回及 Hermes 展示设置为准 |
+| 可靠投递 | 成功后提交 sequence、稳定 UUID、投递三态台账 | `unknown` 不冒充成功，不自动重复发送答案 |
+| 长任务续卡 | 时间/元素预算续卡，旧片封存 | 卡片历史收缩不等于 LCM 上下文压缩 |
+| 打断与审批 | `/stop`、排队、后台/Cron、审批边界适配 | 原生审批 resolver 仍由 Hermes 持有 |
+| Footer V2 | 两行摘要、A–E 分组折叠详情 | 按需开启；视觉设计还在收敛 |
+| 历史用量 | SQLite 持久化，按月/日/模型/服务商/订阅标签查询 | 从启用后开始收集；不是账户全局账单 |
+| 多提供商口径 | Hermes canonical + 6 类协议字段解析测试 | 226 个目录入口不等于 226 家真实账号验收 |
+| 运维 | doctor、metrics、只读检查、显式 API smoke | 测试通过、服务端通过、客户端验收分别记录 |
 
-现代 Hermes Cron 钩子会等待 CardKit 返回真实 `message_id`，再把结构化回执交回调度器。成功卡片会清除 `last_delivery_unverified`；旧版只有布尔值的回执仍标记为未核验，不会被静默当成有证据的成功。
+## Footer 长什么样
 
-流式 API 的 sequence 只在成功后提交。服务端丢失 loading anchor、答案文本、推理文本或推理面板内部文本元素时，插件至多重建当前卡片一次并重放本地 segments；新卡独立计算恢复额度，持续失败则进入 Hermes 文本兜底，避免连续 300313/300315/300317。
+下面的图从**实际 `build_footer` 生成的字段与分组**绘制，使用合成数据。
+**它是结构示意，不是飞书客户端截图，也不承诺像素一致。**
 
-## 功能
+![0.17.1 当前 Footer 两列结构；示例数据，非客户端截图](docs/assets/footer-current-structure.svg)
 
-- **流式输出** — AI 回复实时显示在交互卡片中，打字机效果
-- **流式卡片** — 按事件顺序在单张卡片内动态渲染思考、工具调用、回答内容
-- **思考过程** — 显示模型的推理/思考内容
-- **工具调用** — 实时展示工具调用状态和进度，含标准图标和结果/错误块
-- **CardKit v2.0** — 使用飞书 CardKit 流式 API；卡片创建失败时交回 Hermes Gateway 默认回复
-- **终态卡片** — 完成后展示完整结果，含 token 用量、耗时、上下文信息
-- **卡片样式** — 可配置卡片 header、footer 显示开关及正文字字大小
-- **消息保护** — 消息被删除/撤回后自动终止更新，避免无效 API 调用
-- **图片解析** — 自动识别 markdown 图片引用，下载上传后替换为飞书 img_key
-- **中断处理** — 处理 `/stop` 命令和消息打断，展示中断状态卡片并自动开启新会话
-- **Cron 卡片推送** — 定时任务结果以飞书卡片形式推送，保留 Markdown 渲染
-- **后台任务卡片推送** — `/background`（`/btw`）任务完成后以卡片形式推送，支持话题内回复
-- **审批边界** — 保留 Hermes 原生可操作审批卡，自动暂停/封存当前流并在审批后新卡继续
-- **复盘收纳** — Self-improvement/background review 通知在完成前到达时合并进终态卡片
-- **崩溃安全投递** — 稳定 UUID + `delivered/not_sent/unknown` 台账，避免网络超时后重复答案
-- **Hermes 原生观测** — 兼容 0.21.3/main 的流、工具、审批 hooks；CardKit 仍由单一 owner 投递
-- **元素/序号自愈** — 300313 元素可见性有界重试，loading anchor 与流式/嵌套文本丢失时单次重建并重放，失败 sequence 原位重试，避免连锁 300317
-- **多语言** — 卡片文本（状态、工具面板、思考标签等）内置中英双语，根据飞书客户端语言自动切换
+五组详情：**A 这次用了谁 · B 时间花在哪里 · C 本轮累计用了多少 · D 对话有多长 · E 切换与计费**。
 
----
+- 默认折叠；展开后查看 provider、请求/返回模型、时间、token、缓存、末次上下文和路由。
+- 输入包含缓存，缓存不重复加总。多次请求累计 token 与末次上下文是不同指标。
+- 缺失值明确显示“未提供”，不编造费用、账户额度或压缩完成状态。
+- 本轮实机观察到部分真实卡片未展示思考档位；待追踪实际请求信封。配置档位、发送参数、服务端确认也须分开。
+- 原始设计图及与现状的差异，见[视觉审查与下一阶段验收](docs/FOOTER-DESIGN-AUDIT.md)。不要通过更换 SDK 掩盖尚未完成的布局工作。
 
-## 卡片展示
+[查看合成 Card JSON](docs/assets/footer-example.json) · [重建示意资产](scripts/build_readme_assets.py)
 
-插件按事件到达顺序在卡片内动态渲染思考、工具调用、回答元素，多轮对话内容按实际顺序展示。
+## 快速开始
 
-当长对话或工具调用步骤过多导致卡片元素接近飞书 200 上限时，自动拆分为多张卡片：旧卡片封存（数据完整），新卡片继续输出，仅最后一张卡片带页脚。单个工具面板步骤过多时也会按步骤边界拆分。
+### 运行要求
 
-CardKit 流式模式约十分钟后自动关闭。长任务会在每张卡创建八分钟后主动续卡；遇到提前关闭（`300309`）也会切换到新卡，旧卡封存，后续输出继续显示。
+- 已配置飞书平台的 Hermes；持续兼容矩阵为 `v2026.9.11`、`v2026.9.14`、`v2026.9.21` 和测试时的 `main`，详见[兼容表](docs/COMPATIBILITY.md)。
+- Python ≥ 3.11；项目 CI 为 3.11 / 3.12 / 3.13。
+- Hermes PM 管理 `lark-oapi >= 1.7.3`、`PyYAML >= 6.0.3` 等声明依赖。
+- 飞书应用具备当前功能所需的 CardKit、消息收发/回复及图片权限；凭据保留在 Hermes 现有配置中。
+- Node SDK、独立 Channel 服务和 `lark-cli` 均不是运行时必装项。
 
-![](assets/streaming.jpg)
+### 托管安装
 
----
+先阅读 [INSTALL.md](INSTALL.md) 的来源扫描与依赖同意说明。维护版安装示例：
 
-## 运行要求
-
-- Hermes `>= 0.21.3`（本 fork 的固定兼容矩阵为 `v2026.9.11`、`v2026.9.14` 与当前 `main`）并已配置飞书平台；旧版单文件布局仅保留兼容代码，不列入当前发布门禁
-- `Python >= 3.11`
-- `lark-oapi >= 1.7.3` — 飞书/Lark 官方 Python SDK
-- `PyYAML >= 6.0` — YAML 解析库
-- 飞书应用权限：消息卡片（CardKit）读写、消息发送与回复、图片上传
-
----
-
-## 安装
-
-完整安装步骤见 [INSTALL.md](INSTALL.md)。
-
-### AI Agent 安装
-
-让 Hermes 对接的 AI agent 读取安装指南后自动执行：
-
-```
-curl https://raw.githubusercontent.com/wzgrx/hermes-lark-streaming/main/INSTALL.md
+```bash
+hermes plugins install wzgrx/hermes-lark-streaming --enable --force
+hermes pm install
+hermes plugins doctor hermes-lark-streaming --ci
+hermes --run-module hermes_lark_streaming verify
+hermes --run-module hermes_lark_streaming install
 ```
 
----
+`--force` 用于明确审核过的来源提示，不是关闭扫描。使用 Hermes 托管 launcher；只往旧 venv 安装包，不代表运行中的 Gateway 已加载。
+启用/更新代码后，在空闲窗口按安装指南平稳重启 Gateway。不要中断正在执行的用户任务。
 
-## 配置
+### 配置示例
 
-在 `~/.hermes/config.yaml` 中添加：
+将下列字段**合并**到现有 `config.yaml`，不要覆盖模型、凭据或其他插件配置：
 
 ```yaml
 streaming:
   enabled: true
-```
-
-### 凭据
-
-凭据按以下顺序解析：
-
-| 优先级 | 来源 | 变量 |
-|--------|------|------|
-| 1 | 环境变量 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET`（或 `LARK_APP_ID` / `LARK_APP_SECRET`） |
-| 2 | 配置文件 | `~/.hermes/config.yaml` 中的 `feishu` 或 `lark` 区段 |
-
-```env
-FEISHU_APP_ID=cli_xxxxx
-FEISHU_APP_SECRET=xxxxx
-```
-
-### 卡片样式
-
-通过以下配置项自定义流式卡片和完成态卡片的外观：
-
-```yaml
-streaming:
-  enabled: true
-  width_mode: default   # 卡片宽度模式：default / compact / fill，默认 default
-  header:
-    enabled: true      # 卡片 header，默认 false
-  body:
-    text_size: normal_v2  # 回答正文文字大小，默认 normal_v2
+  width_mode: default
   footer:
-    enabled: true         # 卡片 footer，默认 true
-    text_size: notation   # Footer 文字大小，默认 notation
-    fields:
-      - [status, elapsed, context, model]
-    show_label: false
-  panel_expanded: false   # 完成态面板保持展开，默认 false
-  adaptive_backpressure:
     enabled: true
-    min_ms: 100
-    max_ms: 1500
-  history_compaction:
-    compact_after: 48
-    keep_recent: 24
-display:
-  platforms:
-    feishu:
-      show_tool_use: true   # 展示流式和完成态卡片中的工具调用面板，默认 true
+    mode: enhanced
+    details: true
+    text_size: normal
+    history:
+      enabled: true
+      provider_labels:
+        opencode-go: "OpenCode Go 订阅"
+        siliconflow: "SiliconFlow 按量服务"
 ```
 
-**Header**（`streaming.header.enabled`）：控制卡片是否显示顶部状态栏。开启后根据状态自动着色 — 流式中蓝色、完成绿色、中断/错误红色。默认关闭。
+仓库默认是 `classic`；历史账本默认关闭。上面的配置显式开启 enhanced 和历史统计。`mode: classic` 恢复经典显示，`enabled: false` 隐藏 Footer；账本采集是独立开关。旧 `fields` / `show_label` 仅作用于经典模式。
 
-**Footer**（`streaming.footer.enabled`）：控制完成态卡片是否显示底部元数据栏。默认开启。
+## 历史用量：几个月以后仍然可查
 
-**文字大小**（`body.text_size` / `footer.text_size`）：有效值包括 `heading`、`normal`、`normal_v2`、`notation` 等。详见[飞书文档](https://open.feishu.cn/document/feishu-cards/card-json-v2-components/content-components/plain-text)。
-
-**Footer 字段**（`footer.fields`）：二维数组，每个子数组为一行，字段间用 `·` 连接。
-
-| 字段 | 说明 | 有标签 | 无标签 |
-|------|------|--------|--------|
-| `status` | 完成状态 | `✅ Completed` | `✅ Completed` |
-| `elapsed` | 耗时 | `Elapsed 12.3s` | `12.3s` |
-| `model` | 模型名称 | `deepseek-v4-flash` | `deepseek-v4-flash` |
-| `tokens` | Token 用量 | `↑ 1.2K ↓ 500` | `↑ 1.2K ↓ 500` |
-| `context` | 上下文窗口用量 | `Context 50K/200K (25%)` | `50K/200K (25%)` |
-
-**显示标签**（`footer.show_label`）：是否展示字段标签（如 "Elapsed"、"Context"）。默认：`false`。
-
-**面板展开**（`panel_expanded`）：完成态卡片中推理面板和工具面板默认折叠，设为 `true` 保持展开。
-
-**卡片宽度**（`streaming.width_mode`）：控制卡片宽度模式，可选 `default`、`compact`、`fill`。默认：`default`。
-
-**工具调用面板**（`display.platforms.feishu.show_tool_use`）：控制是否展示工具调用面板。平台级配置优先于全局 `display.show_tool_use`，默认：`true`。该配置会在运行时重新读取。
-
----
-
-## CLI 命令
+账本位于 `$HERMES_HOME/state/card-usage.sqlite3`。按请求尝试去重，主请求与辅助调用分开；不保存提示词、回复正文、API key 或原始会话 ID。
 
 ```bash
-HERMES_LAUNCHER="$HOME/.local/bin/hermes"
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming verify     # 只读兼容检查
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming install    # 注入 hook
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall  # 移除 hook
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming restore    # 恢复备份
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming status
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming doctor --json
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming metrics --json
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming metrics --sidecar
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming smoke      # 默认离线
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming smoke --execute --entity-only
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming smoke --execute --closed-stream-probe
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming lark-cli-smoke
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming repair-sdk # 仅 SDK 诊断异常时
+# 已记录的全部用量：服务商、订阅标签、请求模型、返回模型
+hermes --run-module hermes_lark_streaming history --timezone Asia/Shanghai
+
+# 月报与 AI 可读取的 JSON
+hermes --run-module hermes_lark_streaming history --month 2026-10 --timezone Asia/Shanghai --json
+
+# 自定义范围；起点包含、终点不包含
+hermes --run-module hermes_lark_streaming history \
+  --from 2026-10-01 --to 2027-01-01 --group-by month --timezone Asia/Shanghai
+
+# 按模型聚合，或区分主/辅助调用
+hermes --run-module hermes_lark_streaming history --group-by model --json
+hermes --run-module hermes_lark_streaming history --scope auxiliary --json
 ```
 
-`doctor` 优先显示 Hermes 的运行源码身份，旧宿主才回退到包元数据。
-`warnings` 与硬失败分开：旧指标、未核验指标或缺少指标，不等于空闲 Gateway 故障；
-`delivery_unknown` 提醒核查投递回执，不会自动重发或伪造成功。
-`metrics.activity` 只汇总已核验的当前 Gateway 指标，显示 API 错误次数、完成卡片数、
-收尾失败和纯文本降级次数；错误码桶不重复计数。它们是进程启动以来的累计值，
-包含重试后恢复的错误，不等于当前仍在故障。旧或损坏的指标显示未核验，而不是零错误。
-`delivery_pending_expired` 表示待确认回执超过重试窗口，需先核查；诊断不会改动或重发它。
-默认 `smoke` 是离线检查，不代表真实飞书端到端验收。
+查询只读、不请求模型。账户轮换若缺少可靠账号 ID，按服务商/标签汇总；不通过 API key 猜账户。
+历史数据从启用后积累；旧月份没有可信用量来源就不补算。在线备份请使用 SQLite backup API，应避免只复制正在写入的主文件。详见[历史用量文档](docs/USAGE-HISTORY.md)。
 
----
-
-## 更新
-
-先确认 Gateway 空闲，再停止。扫描提示、依赖同意及维护版审核参数见
-[INSTALL.md](INSTALL.md)。任何一步失败时，先修复或回滚，再启动。
+## 检查与更新
 
 ```bash
-set -e
-HERMES_LAUNCHER="$HOME/.local/bin/hermes"
-"$HERMES_LAUNCHER" gateway stop
-"$HERMES_LAUNCHER" plugins update hermes-lark-streaming
-"$HERMES_LAUNCHER" pm install
-"$HERMES_LAUNCHER" plugins doctor hermes-lark-streaming --ci
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming verify
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming install
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming status
-"$HERMES_LAUNCHER" gateway start
+hermes --run-module hermes_lark_streaming doctor --json
+hermes --run-module hermes_lark_streaming status
+hermes --run-module hermes_lark_streaming metrics --json
+hermes --run-module hermes_lark_streaming smoke
 ```
 
----
+默认 smoke 是离线检查。显式的 `smoke --execute --closed-stream-probe` 会调用飞书 API 创建未发送到聊天的实体并测试终态更新，仍不等于客户端截图验收。
+指标须检查是否属于当前 Gateway 进程；重启后的旧快照不等于实时错误率。
 
-## 卸载
+更新顺序：**确认空闲 → 保存回滚信息 → 平稳停止 → 托管更新/PM 同步 → doctor/verify/install/status → 启动 → 检查连接、日志、投递与客户端**。来源 pin、精确 SHA、审核提示与回滚命令统一以 [INSTALL.md](INSTALL.md) 为准。
 
-同样先确认空闲；移除钩子后再移除托管插件，保留飞书凭据。
+## 已完成与未完成
+
+| 里程碑 | 状态 |
+|---|---|
+| 协议归一化、按轮采集、缺失/部分统计 | 已实现、自动测试通过 |
+| SQLite 历史账本和 CLI/JSON 报表 | 已实现；线上开始积累，并已纳入维护者本机备份 |
+| 0.17.1 托管部署、服务端创建/关闭/终态更新 | 已验证 |
+| 桌面真实卡片读取、展开检查 | 已执行；发现视觉差异，验收未通过 |
+| 设计稿三列对齐、配色/间距精修 | 待实现及复验 |
+| 思考档位在真实请求中的稳定展示 | 待诊断；当前部分卡片显示未提供 |
+| 手机窄屏、深浅色、长任务完整视觉矩阵 | 待验收 |
+| LCM 压缩提交前后值、账户额度、真实费用 | 待可靠事件/API；当前不推算 |
+| 飞书内历史报表按钮或网页 Dashboard | 尚未实现，CLI 已可查询 |
+| 226 家提供商真实账号逐家端到端 | 未做；目录和协议测试不等于账号认证 |
+
+**整个计划尚未全部完成。** 详细证据见[验证记录](docs/FOOTER-V2-VALIDATION.md)，逐阶段见[任务计划](docs/FOOTER-V2-PLAN.md)。
+
+## 为什么不直接安装 Node SDK 实现设计图
+
+[官方 Node SDK](https://github.com/larksuite/node-sdk) 是接口/事件/发送层；[官方 CLI](https://github.com/larksuite/cli) 是操作与规范工具。
+现有 Python SDK 同样向 CardKit 提交 JSON。**外观修复应发生在 JSON 布局和真实客户端验收，不是给 Gateway 多装一个发送端。**
+
+推荐使用[飞书官方卡片搭建工具](https://open.feishu.cn/tool/cardbuilder)核对原生组件布局。
+固定图片可保留画布构图，但图片内没有原生折叠/可复制字段；网页面板可自由排版，但需要独立托管与访问控制。完整比较及相关 Issue/PR 见[专项审查](docs/FOOTER-DESIGN-AUDIT.md)。
+
+## 开发与文档
+
+在独立开发环境运行，不把测试依赖装入 Gateway 的 PM 环境：
 
 ```bash
-set -e
-HERMES_LAUNCHER="$HOME/.local/bin/hermes"
-"$HERMES_LAUNCHER" gateway stop
-"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall
-"$HERMES_LAUNCHER" plugins remove hermes-lark-streaming
-"$HERMES_LAUNCHER" pm install
-"$HERMES_LAUNCHER" gateway start
+python -m pip install -e ".[dev]"
+python -m ruff check hermes_lark_streaming tests
+python -m mypy --explicit-package-bases hermes_lark_streaming
+python -m pytest tests -q
+python scripts/build_readme_assets.py
 ```
 
----
+| 文档 | 内容 |
+|---|---|
+| [Footer V2](docs/FOOTER-V2.md) | 开关、字段口径、缺失语义 |
+| [历史用量](docs/USAGE-HISTORY.md) | 数据持久化、时间范围、报表与备份 |
+| [覆盖清单](docs/PROVIDER-COVERAGE.md) | 226 个目录入口及协议证据分级 |
+| [运维](docs/OPERATIONS.md) | 指标、投递三态、续卡、可选 sidecar |
+| [视觉审查](docs/FOOTER-DESIGN-AUDIT.md) | 设计差异、SDK/CLI 能力与下一阶段 gate |
+| [Roadmap](docs/ROADMAP.md) | 已实现能力与未验证目标分开列示 |
+| [更新记录](CHANGELOG.md) | 版本变更 |
 
-## 工作原理
-
-插件通过 AST 注入在 模块化 `gateway/run_*.py` / `cron/scheduler_delivery.py`（旧布局为 `gateway/run.py` / `cron/scheduler.py`） 插入 hook 调用，所有业务逻辑在 `hermes_lark_streaming` 包内完成。
-
-**消息处理流程：**
-
-```
-用户发送消息
-  → 创建卡片会话
-  → 流式更新（工具状态、文本增量 — 节流调度）
-  → 图片 URL 异步解析替换
-  → 终态卡片（token/耗时/上下文）
-```
-
-若消息被删除/撤回，自动终止后续更新。多 bot、sidecar、E2E 与监控详见 [运维指南](docs/OPERATIONS.md)，Bailey 项目借鉴项见 [对比审计](docs/BAILEY-AUDIT.md)。上游 Issue/PR 覆盖状态见 [维护审计](docs/UPSTREAM-AUDIT-2026-09-20.md)，后续规划见 [Roadmap](docs/ROADMAP.md)。
-
-**中断处理：**
-
-- `/stop` 终止 — 用户主动停止，卡片展示中断状态：
-
-![](assets/abort.jpg)
-
-- 消息打断 — 用户发送新消息打断正在处理的回复，旧卡片展示中断状态，并自动为新消息创建新的流式卡片：
-
-![](assets/interrupt.jpg)
-
----
-
-## 注意事项
-
-- `install` 会修改 `~/.hermes/hermes-agent/gateway/run.py` 和 `cron/scheduler.py`，自动创建 `.hermes_lark.bak` 备份
-- Hermes 更新后需重新运行 `verify` + `install`
-- 插件与 Hermes 内置飞书适配器互补工作：插件负责流式卡片，内置适配器负责消息收发
-- 仅对飞书平台生效，其他平台不受影响
+灵感与上游参考：[Cheerwhy/hermes-lark-streaming](https://github.com/Cheerwhy/hermes-lark-streaming)、[openclaw-lark](https://github.com/larksuite/openclaw-lark)、[hermes-feishu-streaming-card](https://github.com/baileyh8/hermes-feishu-streaming-card)。
 
 ## 贡献者
 

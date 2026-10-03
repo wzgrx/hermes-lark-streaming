@@ -1,0 +1,293 @@
+{
+  "schema": "2.0",
+  "body": {
+    "elements": [
+      {
+        "tag": "hr",
+        "element_id": "footer_separator"
+      },
+      {
+        "tag": "markdown",
+        "content": "Completed · 18.6s · example-model · max (requested)",
+        "i18n_content": {
+          "en_us": "Completed · 18.6s · example-model · max (requested)",
+          "zh_cn": "完成 · 18.6s · example-model · max（请求）"
+        },
+        "text_size": "normal",
+        "element_id": "footer_status",
+        "icon": {
+          "tag": "standard_icon",
+          "token": "done_outlined",
+          "color": "green"
+        }
+      },
+      {
+        "tag": "markdown",
+        "content": "Turn ↑12k ↓420 · Last context 8k/128k (6.2%) · Cache 75%",
+        "i18n_content": {
+          "en_us": "Turn ↑12k ↓420 · Last context 8k/128k (6.2%) · Cache 75%",
+          "zh_cn": "本轮 ↑12k ↓420 · 末次上下文 8k/128k (6.2%) · 缓存 75%"
+        },
+        "text_size": "normal",
+        "element_id": "footer_usage",
+        "icon": {
+          "tag": "standard_icon",
+          "token": "info_outlined",
+          "color": "blue"
+        }
+      },
+      {
+        "tag": "collapsible_panel",
+        "element_id": "footer_details",
+        "expanded": false,
+        "header": {
+          "title": {
+            "tag": "markdown",
+            "content": "<font color='blue'>**Turn details**</font>",
+            "i18n_content": {
+              "en_us": "<font color='blue'>**Turn details**</font>",
+              "zh_cn": "<font color='blue'>**本轮详情**</font>"
+            }
+          },
+          "icon": {
+            "tag": "standard_icon",
+            "token": "down-small-ccm_outlined",
+            "size": "16px 16px"
+          },
+          "icon_position": "left",
+          "icon_expanded_angle": -180,
+          "vertical_align": "center"
+        },
+        "padding": "8px 8px 8px 8px",
+        "elements": [
+          {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "horizontal_spacing": "12px",
+            "columns": [
+              {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 1,
+                "vertical_align": "top",
+                "elements": [
+                  {
+                    "tag": "markdown",
+                    "content": "**A · Model & provider**",
+                    "i18n_content": {
+                      "en_us": "**A · Model & provider**",
+                      "zh_cn": "**A · 这次用了谁**"
+                    },
+                    "text_size": "normal"
+                  }
+                ]
+              },
+              {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 3,
+                "vertical_align": "top",
+                "elements": [
+                  {
+                    "tag": "markdown",
+                    "content": "**Provider**: example-provider\n**Requested model**: example-model\n**Reported model**: example-model\n**API**: chat\\_completions\n**Reasoning**: max (requested)",
+                    "i18n_content": {
+                      "en_us": "**Provider**: example-provider\n**Requested model**: example-model\n**Reported model**: example-model\n**API**: chat\\_completions\n**Reasoning**: max (requested)",
+                      "zh_cn": "**服务商**：example-provider\n**请求模型**：example-model\n**返回模型**：example-model\n**接口协议**：chat\\_completions\n**思考档位**：max（请求参数）"
+                    },
+                    "text_size": "normal"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "tag": "hr"
+          },
+          {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "horizontal_spacing": "12px",
+            "columns": [
+              {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 1,
+                "vertical_align": "top",
+                "elements": [
+                  {
+                    "tag": "markdown",
+                    "content": "**B · Timing**",
+                    "i18n_content": {
+                      "en_us": "**B · Timing**",
+                      "zh_cn": "**B · 时间花在哪里**"
+                    },
+                    "text_size": "normal"
+                  }
+                ]
+              },
+              {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 3,
+                "vertical_align": "top",
+                "elements": [
+                  {
+                    "tag": "markdown",
+                    "content": "**Wall time**: 18.6s\n**First response**: 1.20s\n**Observed attempts**: 2\n**Tool calls**: 1",
+                    "i18n_content": {
+                      "en_us": "**Wall time**: 18.6s\n**First response**: 1.20s\n**Observed attempts**: 2\n**Tool calls**: 1",
+                      "zh_cn": "**本轮总耗时**：18.6s\n**首次收到响应**：1.20s\n**已观测请求尝试**：2\n**工具调用**：1"
+                    },
+                    "text_size": "normal"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "tag": "hr"
+          },
+          {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "horizontal_spacing": "12px",
+            "columns": [
+              {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 1,
+                "vertical_align": "top",
+                "elements": [
+                  {
+                    "tag": "markdown",
+                    "content": "**C · Turn usage**",
+                    "i18n_content": {
+                      "en_us": "**C · Turn usage**",
+                      "zh_cn": "**C · 本轮累计用了多少**"
+                    },
+                    "text_size": "normal"
+                  }
+                ]
+              },
+              {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 3,
+                "vertical_align": "top",
+                "elements": [
+                  {
+                    "tag": "markdown",
+                    "content": "**Input including cache**: 12,000\n**Output**: 420\n**Cache read**: 9,000\n**Cache hit rate**: 75.0%",
+                    "i18n_content": {
+                      "en_us": "**Input including cache**: 12,000\n**Output**: 420\n**Cache read**: 9,000\n**Cache hit rate**: 75.0%",
+                      "zh_cn": "**输入（含缓存）**：12,000\n**输出**：420\n**缓存读取**：9,000\n**缓存命中率**：75.0%"
+                    },
+                    "text_size": "normal"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "tag": "hr"
+          },
+          {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "horizontal_spacing": "12px",
+            "columns": [
+              {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 1,
+                "vertical_align": "top",
+                "elements": [
+                  {
+                    "tag": "markdown",
+                    "content": "**D · Context**",
+                    "i18n_content": {
+                      "en_us": "**D · Context**",
+                      "zh_cn": "**D · 对话有多长**"
+                    },
+                    "text_size": "normal"
+                  }
+                ]
+              },
+              {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 3,
+                "vertical_align": "top",
+                "elements": [
+                  {
+                    "tag": "markdown",
+                    "content": "**Last request context**: 8,000 / 128,000\n**Context occupancy**: 6.2%\n**Compression**: Not observed by this footer",
+                    "i18n_content": {
+                      "en_us": "**Last request context**: 8,000 / 128,000\n**Context occupancy**: 6.2%\n**Compression**: Not observed by this footer",
+                      "zh_cn": "**末次请求上下文**：8,000 / 128,000\n**占用比例**：6.2%\n**本轮压缩**：此页脚尚未观测"
+                    },
+                    "text_size": "normal"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "tag": "hr"
+          },
+          {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "horizontal_spacing": "12px",
+            "columns": [
+              {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 1,
+                "vertical_align": "top",
+                "elements": [
+                  {
+                    "tag": "markdown",
+                    "content": "**E · Routing & billing**",
+                    "i18n_content": {
+                      "en_us": "**E · Routing & billing**",
+                      "zh_cn": "**E · 切换与计费**"
+                    },
+                    "text_size": "normal"
+                  }
+                ]
+              },
+              {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 3,
+                "vertical_align": "top",
+                "elements": [
+                  {
+                    "tag": "markdown",
+                    "content": "**Route history**: example-provider\n**Observed errors**: 0\n**Billing**: Per-request cost not reported",
+                    "i18n_content": {
+                      "en_us": "**Route history**: example-provider\n**Observed errors**: 0\n**Billing**: Per-request cost not reported",
+                      "zh_cn": "**服务商路径**：example-provider\n**已观测请求错误**：0\n**计费**：单次费用未提供"
+                    },
+                    "text_size": "normal"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "tag": "markdown",
+            "content": "Measured main requests in this turn; input includes cache. Missing fields are not estimated.",
+            "i18n_content": {
+              "en_us": "Measured main requests in this turn; input includes cache. Missing fields are not estimated.",
+              "zh_cn": "本轮主请求累计；输入含缓存；缺失字段不推算。"
+            },
+            "text_size": "notation"
+          }
+        ]
+      }
+    ]
+  }
+}

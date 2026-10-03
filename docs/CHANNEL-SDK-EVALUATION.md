@@ -5,7 +5,7 @@ Evaluated on 2026-09-20 against
 
 ## Current decision
 
-Keep `lark-oapi>=1.7.3` as the active runtime transport in 0.16.x. It exposes the precise CardKit
+Keep `lark-oapi>=1.7.3` as the active runtime transport in 0.17.x. It exposes the precise CardKit
 entity creation, batch update, close, IM reply and upload APIs already covered by this project's
 recovery state machine. Do not run a second Channel connection beside Hermes' existing Feishu
 adapter, because two event consumers/delivery owners would create duplicate replies and conflicting
@@ -32,3 +32,10 @@ hermes-lark-streaming doctor --json
 ```
 
 Inspect `sdk.channel_sdk`; `available: false` is expected and healthy for the current transport.
+
+## 2026-10-03 visual-design review
+
+The official Node SDK and CLI were reviewed separately for the footer design mismatch.
+They are transport/operation tools, not replacement client renderers. Keep the current
+single owner; prioritize Card JSON layout and real-device acceptance instead of adding
+a second connection. See the [source-linked audit](FOOTER-DESIGN-AUDIT.md).
