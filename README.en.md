@@ -8,7 +8,7 @@
 
 [中文](README.md) · [Install](INSTALL.md) · [Footer](docs/FOOTER-V2.md) · [History](docs/USAGE-HISTORY.md) · [Design audit](docs/FOOTER-DESIGN-AUDIT.md)
 
-> **2026-10-03 status:** source 0.19.0 includes compact details, structured reasoning capture and event-driven runtime footers. Compact details passed a synthetic desktop preview; seven live-phase updates passed real CardKit API checks. The live Gateway remains 0.17.1; no restart or managed deployment occurred this round. Managed deployment and runtime/cross-device acceptance remain open. Code version is not a published-package claim.
+> **2026-10-03 status:** 0.19.0 includes compact details, structured reasoning capture and event-driven runtime footers. CI and 1139 full tests pass. The maintainer's idle Gateway was updated/restarted; service, Feishu connection, managed launcher version and database health passed. Runtime/client acceptance remains open: API success is not a visual result. Code version is not a published-package claim.
 
 ![Runtime architecture](docs/assets/runtime-overview.svg)
 
@@ -109,9 +109,9 @@ hermes pm install
 | Normalization, isolated turn collection, ledger, CLI reports | Implemented, automated tests pass |
 | Managed 0.17.1 deployment and CardKit final update | Verified |
 | Real desktop inspection | Old 0.17.1 mismatch confirmed; new compact synthetic preview inspected |
-| Revised compact details | Implemented; synthetic desktop preview inspected; managed deployment pending |
-| Reliable reasoning-setting display in real requests | 0.18.1 scalar capture passed real-Hermes offline contracts; production verification pending deployment |
-| Live answer/tool/approval/summary/provider/error phases | 0.19.0 implemented; real CardKit partial updates pass; managed/client acceptance pending |
+| Revised compact details | Implemented; synthetic desktop preview inspected; 0.19.0 deployed |
+| Reliable reasoning-setting display in real requests | Deployed; real-Hermes offline contracts pass; new production-turn verification pending |
+| Live answer/tool/approval/summary/provider/error phases | 0.19.0 deployed; real CardKit partial updates pass; client acceptance pending |
 | Mobile/dark-mode/long-running visual matrix | Pending |
 | Committed LCM compression telemetry, account quotas and billing | Pending reliable data sources |
 | Historical-report buttons or web dashboard | Not implemented; CLI is available |

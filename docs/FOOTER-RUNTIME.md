@@ -52,4 +52,15 @@ streaming:
 - Ruff / mypy（44 源文件）通过；**1139 项全量测试通过**，仅 2 条既有 SDK 弃用警告。GitHub CI 与本地证据分别核对。
 - **真实 CardKit API**：创建未附加聊天的合成卡片，七次阶段局部更新均被接受，正文仍可插入 `loading_icon` 前，关闭流与最终失败卡更新均被接受。初始卡 31 元素 / 6787 JSON 字节。
 - 探针没有聊天投递、模型 API 调用或 Gateway 重启；探针指标使用隔离临时文件，不覆盖生产指标。
-- 此证据证明真实 API 接受，不代替真实 Gateway 事件到飞书端的视觉/交互验收。线上 0.17.1 尚未加载这些源码；部署、运行态桌面检查及窄屏/主题验收继续单列。
+- 此证据证明真实 API 接受，不代替真实 Gateway 事件到飞书端的视觉/交互验收。后续已完成以下托管部署，运行态桌面检查及窄屏/主题验收继续单列。
+
+## 托管部署：已完成健康检查
+
+2026-10-03，部署代码提交 [`ef936587`](https://github.com/wzgrx/hermes-lark-streaming/commit/ef936587da3ed5b10753954540b4e747e53b542d)。[Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37102301766) 与 [CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37102301756) 成功后，连续复查 Gateway 空闲，保存受限访问回滚副本，使用 `--expected-revision` 发布、PM 同步、doctor/verify/install/status，再启动 Gateway 并恢复维护定时器。
+
+- Gateway `running`、飞书 `connected`、当前活跃任务 0。
+- durable launcher 的模块导入确认 **0.19.0** 来自新的 PM `workspace/plugin-sources` 快照，而非开发目录；44 个 Python 源文件逐字节匹配已测试源码。直接执行裸进程 Python 未建立 PM 作用域，该方式不构成版本验收证据。
+- 9 项 doctor 检查通过；使用账本只读 `quick_check=ok`。原配置哈希未变化，Hermes 核心与 LCM 提交及核心工作区未变化。
+- 当前进程日志没有 Python traceback、模块导入异常或 Footer 适配失败标记。
+- 仍保留 `metrics_stale` 与 `delivery_unknown` 两条已知提示：新进程尚无实发轮次，旧指标待刷新；此前不确定投递记录不自动重发。没有将这两项清零伪装成功。
+- 尚待真实 Gateway 新轮次与客户端运行态/展开保持验证；不得据以上健康检查宣称完整视觉验收通过。
