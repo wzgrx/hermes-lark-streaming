@@ -77,31 +77,29 @@ def main() -> None:
     (ASSETS / "footer-example.json").write_text(
         json.dumps(card, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    drawing = text(32, 47, "0.17.1 FOOTER STRUCTURE", 27, bold=True)
+    drawing = text(32, 47, "COMPACT TURN DETAILS", 27, bold=True)
     drawing += text(32, 77, "Code-derived schematic • synthetic values • NOT a Feishu screenshot", 17, "#536781")
-    drawing += box(24, 104, 1072, 1080)
+    drawing += box(24, 104, 1072, 456)
     drawing += text(48, 142, "正文保持原样 / Answer stays unchanged", 23, bold=True)
     for i, element in enumerate(elements[1:3]):
-        line = plain(element["i18n_content"]["zh_cn"])
-        drawing += text(52, 187 + i * 32, line, 19)
-    drawing += text(52, 271, "▼ 本轮详情（此图展开展示结构；运行默认折叠）", 21, "#2464d2", True)
-    y = 307
-    for group in elements[-1]["elements"]:
-        if group["tag"] != "column_set":
+        drawing += text(52, 182 + i * 32, plain(element["i18n_content"]["zh_cn"]), 18)
+    drawing += text(52, 262, "▼ 本轮详情（默认折叠 / Collapsed by default）", 20, "#2464d2", True)
+    y = 293
+    for element in elements[-1]["elements"]:
+        if element["tag"] == "column_set":
+            for i, cell in enumerate(element["columns"]):
+                label = plain(cell["elements"][0]["i18n_content"]["zh_cn"])
+                drawing += text(52 + i * 510, y, label, 18)
+        else:
+            label = plain(element["i18n_content"]["zh_cn"])
+            for line in label.splitlines():
+                drawing += text(52, y, line, 17, "#536781")
+                y += 27
             continue
-        columns = group["columns"]
-        heading = plain(columns[0]["elements"][0]["i18n_content"]["zh_cn"])
-        rows = plain(columns[1]["elements"][0]["i18n_content"]["zh_cn"]).splitlines()
-        height = max(105, 30 * len(rows) + 30)
-        drawing += box(48, y, 1024, height, "#f8faff")
-        drawing += text(68, y + 34, heading, 20, bold=True)
-        for i, row in enumerate(rows):
-            drawing += text(365, y + 34 + i * 30, row, 19)
-        y += height + 12
-    drawing += text(52, y + 28, "当前：两列结构。目标三列及客户端视觉验收仍待完成。", 19, "#9a4b11", True)
-    drawing += text(52, y + 59, "Illustration of data grouping, not a pixel-accurate card renderer.", 17, "#536781")
+        y += 27
+    drawing += text(32, 602, "Four two-cell metric rows. Same model ID appears once; differences remain explicit.", 17)
     (ASSETS / "footer-current-structure.svg").write_text(
-        svg(1120, 1220, drawing, "Current footer schematic, not a client screenshot"), encoding="utf-8"
+        svg(1120, 632, drawing, "Compact footer schematic, not a client screenshot"), encoding="utf-8"
     )
     print("Built 2 SVG diagrams and 1 synthetic Card JSON fixture; no live config read.")
 

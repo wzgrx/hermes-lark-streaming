@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-03
+
+### Changed
+- Redesign expanded details for the user's compact-density requirement: two metadata lines, four two-cell metric rows, context, and a short note instead of five tall groups. Keep exact values, wrap-safe row containers and native collapsed interaction.
+- Collapse requested/reported model IDs only on exact equality; retain separate identities when different or missing. Render provider paths only when multiple routes were observed.
+- Humanize known bare DeepSeek model IDs in the summary while preserving exact requested/reported IDs in details.
+
+### Fixed
+- Explain missing reasoning when Hermes marks request metadata as truncated; do not parse truncated message previews or fill with a guessed max setting.
+- Restore managed update/removal instructions in both READMEs and scope editable-install checks to production guidance, retaining isolated development instructions.
+
+### Validation
+- Real CardKit create/send accepted a synthetic preview; desktop expanded interaction and compact layout were directly inspected without restarting the live Gateway. This is preview validation, not production deployment or a mobile/dark-mode/full-runtime-state certification.
+
 ## [0.17.1] - 2026-10-03
 
 ### Fixed
@@ -648,7 +662,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Highlights
 
 - 线性模式：按事件顺序动态渲染思考、工具调用、回答内容（推理、工具调用不再收纳置顶）
-  ![linear](assets/linear.jpg)
+  ![linear](https://github.com/wzgrx/hermes-lark-streaming/blob/a4aee9f11895417949638ecff3c59155f04b814d/assets/linear.jpg)
 - 开启方式：在 `~/.hermes/config.yaml` 中添加：
   ```yaml
   streaming:
@@ -666,7 +680,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Highlights
 
 - Linear single-card mode: dynamically renders reasoning / answer / tool elements within one CardKit v2.0 card in event arrival order, supporting multi-round conversations with typewriter effect throughout.
-  ![linear](assets/linear.jpg)
+  ![linear](https://github.com/wzgrx/hermes-lark-streaming/blob/a4aee9f11895417949638ecff3c59155f04b814d/assets/linear.jpg)
 - Enable by adding to `~/.hermes/config.yaml`:
   ```yaml
   streaming:

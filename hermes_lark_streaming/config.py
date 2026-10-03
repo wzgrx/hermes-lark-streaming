@@ -145,7 +145,9 @@ class Config:
     @property
     def footer_element_reserve(self) -> int:
         if self.footer_mode == "enhanced":
-            return 40 if self.footer_details else 5
+            from .footer.layout import DETAIL_ELEMENT_RESERVE, SUMMARY_ELEMENT_RESERVE
+
+            return DETAIL_ELEMENT_RESERVE if self.footer_details else SUMMARY_ELEMENT_RESERVE
         return 2
 
     @property

@@ -105,5 +105,7 @@ def test_readme_uses_managed_runtime_and_update(name):
     assert "plugins update hermes-lark-streaming" in text
     assert "plugins remove hermes-lark-streaming" in text
     assert "hermes-agent/venv/bin/python" not in text
-    assert "pip install -e" not in text
+    # Editable installs are supported for isolated development, never deployment.
+    production = text.split("## Development")[0].split("## 开发与文档")[0]
+    assert "pip install -e" not in production
     assert "pip uninstall hermes-lark-streaming" not in text

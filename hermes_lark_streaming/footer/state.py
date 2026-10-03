@@ -69,6 +69,7 @@ class Request:
     response_model: str = ""
     api_mode: str = ""
     reasoning: str = ""
+    request_truncated: bool = False
     started: float | None = None
     first_response: float | None = None
     ended: float | None = None
@@ -129,6 +130,7 @@ class TurnFooter:
             request.api_mode = label(payload.get("api_mode")) or request.api_mode
             if event == "pre_api_request":
                 request.reasoning = requested_reasoning(payload) or request.reasoning
+                request.request_truncated = mapping(payload.get("request")).get("_truncated") is True
             elif event == "api_request_error":
                 request.failed = True  # do not retain the error message/body
             elif event == "post_api_request":
@@ -176,6 +178,8 @@ class TurnFooter:
             retries=sum(r.failed for r in requests),
             usage_partial=self._overflow or len(measured) != len(requests),
         )
+        if not last.reasoning and last.request_truncated:
+            data["reasoning_missing_reason"] = "request_truncated"
         if measured:
             data["input_tokens"] = sum(r.usage.prompt or 0 for r in measured)
             data["output_tokens"] = sum(r.usage.output or 0 for r in measured)

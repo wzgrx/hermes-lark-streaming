@@ -14,6 +14,8 @@
           "zh_cn": "完成 · 18.6s · example-model · max（请求）"
         },
         "text_size": "normal",
+        "margin": "0px",
+        "text_align": "left",
         "element_id": "footer_status",
         "icon": {
           "tag": "standard_icon",
@@ -29,12 +31,18 @@
           "zh_cn": "本轮 ↑12k ↓420 · 末次上下文 8k/128k (6.2%) · 缓存 75%"
         },
         "text_size": "normal",
+        "margin": "0px",
+        "text_align": "left",
         "element_id": "footer_usage",
         "icon": {
           "tag": "standard_icon",
           "token": "info_outlined",
           "color": "blue"
         }
+      },
+      {
+        "tag": "hr",
+        "element_id": "footer_detail_rule"
       },
       {
         "tag": "collapsible_panel",
@@ -58,9 +66,32 @@
           "icon_expanded_angle": -180,
           "vertical_align": "center"
         },
-        "padding": "8px 8px 8px 8px",
+        "padding": "4px 0px 0px 0px",
+        "vertical_spacing": "4px",
         "elements": [
           {
+            "tag": "markdown",
+            "content": "<font color='blue'>Provider</font> example-provider · chat\\_completions · Reasoning max (requested)",
+            "i18n_content": {
+              "en_us": "<font color='blue'>Provider</font> example-provider · chat\\_completions · Reasoning max (requested)",
+              "zh_cn": "<font color='blue'>服务</font> example-provider · chat\\_completions · 思考 max（请求）"
+            },
+            "text_size": "normal",
+            "margin": "0px",
+            "text_align": "left"
+          },
+          {
+            "tag": "markdown",
+            "content": "<font color='grey'>Requested = reported</font> example-model",
+            "i18n_content": {
+              "en_us": "<font color='grey'>Requested = reported</font> example-model",
+              "zh_cn": "<font color='grey'>请求＝返回</font> example-model"
+            },
+            "text_size": "normal",
+            "margin": "0px",
+            "text_align": "left"
+          },
+          {
             "tag": "column_set",
             "flex_mode": "none",
             "horizontal_spacing": "12px",
@@ -70,41 +101,44 @@
                 "width": "weighted",
                 "weight": 1,
                 "vertical_align": "top",
+                "vertical_spacing": "4px",
                 "elements": [
                   {
                     "tag": "markdown",
-                    "content": "**A · Model & provider**",
+                    "content": "<font color='grey'>Wall time</font>  **18.6s**",
                     "i18n_content": {
-                      "en_us": "**A · Model & provider**",
-                      "zh_cn": "**A · 这次用了谁**"
+                      "en_us": "<font color='grey'>Wall time</font>  **18.6s**",
+                      "zh_cn": "<font color='grey'>总耗时</font>  **18.6s**"
                     },
-                    "text_size": "normal"
+                    "text_size": "normal",
+                    "margin": "0px",
+                    "text_align": "left"
                   }
                 ]
               },
               {
                 "tag": "column",
                 "width": "weighted",
-                "weight": 3,
+                "weight": 1,
                 "vertical_align": "top",
+                "vertical_spacing": "4px",
                 "elements": [
                   {
                     "tag": "markdown",
-                    "content": "**Provider**: example-provider\n**Requested model**: example-model\n**Reported model**: example-model\n**API**: chat\\_completions\n**Reasoning**: max (requested)",
+                    "content": "<font color='grey'>First response</font>  **1.20s**",
                     "i18n_content": {
-                      "en_us": "**Provider**: example-provider\n**Requested model**: example-model\n**Reported model**: example-model\n**API**: chat\\_completions\n**Reasoning**: max (requested)",
-                      "zh_cn": "**服务商**：example-provider\n**请求模型**：example-model\n**返回模型**：example-model\n**接口协议**：chat\\_completions\n**思考档位**：max（请求参数）"
+                      "en_us": "<font color='grey'>First response</font>  **1.20s**",
+                      "zh_cn": "<font color='grey'>首响应</font>  **1.20s**"
                     },
-                    "text_size": "normal"
+                    "text_size": "normal",
+                    "margin": "0px",
+                    "text_align": "left"
                   }
                 ]
               }
             ]
           },
           {
-            "tag": "hr"
-          },
-          {
             "tag": "column_set",
             "flex_mode": "none",
             "horizontal_spacing": "12px",
@@ -114,41 +148,44 @@
                 "width": "weighted",
                 "weight": 1,
                 "vertical_align": "top",
+                "vertical_spacing": "4px",
                 "elements": [
                   {
                     "tag": "markdown",
-                    "content": "**B · Timing**",
+                    "content": "<font color='grey'>Input incl. cache</font>  **12,000**",
                     "i18n_content": {
-                      "en_us": "**B · Timing**",
-                      "zh_cn": "**B · 时间花在哪里**"
+                      "en_us": "<font color='grey'>Input incl. cache</font>  **12,000**",
+                      "zh_cn": "<font color='grey'>输入（含缓存）</font>  **12,000**"
                     },
-                    "text_size": "normal"
+                    "text_size": "normal",
+                    "margin": "0px",
+                    "text_align": "left"
                   }
                 ]
               },
               {
                 "tag": "column",
                 "width": "weighted",
-                "weight": 3,
+                "weight": 1,
                 "vertical_align": "top",
+                "vertical_spacing": "4px",
                 "elements": [
                   {
                     "tag": "markdown",
-                    "content": "**Wall time**: 18.6s\n**First response**: 1.20s\n**Observed attempts**: 2\n**Tool calls**: 1",
+                    "content": "<font color='grey'>Output</font>  **420**",
                     "i18n_content": {
-                      "en_us": "**Wall time**: 18.6s\n**First response**: 1.20s\n**Observed attempts**: 2\n**Tool calls**: 1",
-                      "zh_cn": "**本轮总耗时**：18.6s\n**首次收到响应**：1.20s\n**已观测请求尝试**：2\n**工具调用**：1"
+                      "en_us": "<font color='grey'>Output</font>  **420**",
+                      "zh_cn": "<font color='grey'>输出</font>  **420**"
                     },
-                    "text_size": "normal"
+                    "text_size": "normal",
+                    "margin": "0px",
+                    "text_align": "left"
                   }
                 ]
               }
             ]
           },
           {
-            "tag": "hr"
-          },
-          {
             "tag": "column_set",
             "flex_mode": "none",
             "horizontal_spacing": "12px",
@@ -158,41 +195,44 @@
                 "width": "weighted",
                 "weight": 1,
                 "vertical_align": "top",
+                "vertical_spacing": "4px",
                 "elements": [
                   {
                     "tag": "markdown",
-                    "content": "**C · Turn usage**",
+                    "content": "<font color='grey'>Cache read</font>  **9,000**",
                     "i18n_content": {
-                      "en_us": "**C · Turn usage**",
-                      "zh_cn": "**C · 本轮累计用了多少**"
+                      "en_us": "<font color='grey'>Cache read</font>  **9,000**",
+                      "zh_cn": "<font color='grey'>缓存读取</font>  **9,000**"
                     },
-                    "text_size": "normal"
+                    "text_size": "normal",
+                    "margin": "0px",
+                    "text_align": "left"
                   }
                 ]
               },
               {
                 "tag": "column",
                 "width": "weighted",
-                "weight": 3,
+                "weight": 1,
                 "vertical_align": "top",
+                "vertical_spacing": "4px",
                 "elements": [
                   {
                     "tag": "markdown",
-                    "content": "**Input including cache**: 12,000\n**Output**: 420\n**Cache read**: 9,000\n**Cache hit rate**: 75.0%",
+                    "content": "<font color='grey'>Cache hit</font>  **75.0%**",
                     "i18n_content": {
-                      "en_us": "**Input including cache**: 12,000\n**Output**: 420\n**Cache read**: 9,000\n**Cache hit rate**: 75.0%",
-                      "zh_cn": "**输入（含缓存）**：12,000\n**输出**：420\n**缓存读取**：9,000\n**缓存命中率**：75.0%"
+                      "en_us": "<font color='grey'>Cache hit</font>  **75.0%**",
+                      "zh_cn": "<font color='grey'>命中率</font>  **75.0%**"
                     },
-                    "text_size": "normal"
+                    "text_size": "normal",
+                    "margin": "0px",
+                    "text_align": "left"
                   }
                 ]
               }
             ]
           },
           {
-            "tag": "hr"
-          },
-          {
             "tag": "column_set",
             "flex_mode": "none",
             "horizontal_spacing": "12px",
@@ -202,76 +242,38 @@
                 "width": "weighted",
                 "weight": 1,
                 "vertical_align": "top",
+                "vertical_spacing": "4px",
                 "elements": [
                   {
                     "tag": "markdown",
-                    "content": "**D · Context**",
+                    "content": "<font color='grey'>Attempts</font>  **2 · 0 errors**",
                     "i18n_content": {
-                      "en_us": "**D · Context**",
-                      "zh_cn": "**D · 对话有多长**"
+                      "en_us": "<font color='grey'>Attempts</font>  **2 · 0 errors**",
+                      "zh_cn": "<font color='grey'>请求尝试</font>  **2 · 错误 0**"
                     },
-                    "text_size": "normal"
+                    "text_size": "normal",
+                    "margin": "0px",
+                    "text_align": "left"
                   }
                 ]
               },
-              {
-                "tag": "column",
-                "width": "weighted",
-                "weight": 3,
-                "vertical_align": "top",
-                "elements": [
-                  {
-                    "tag": "markdown",
-                    "content": "**Last request context**: 8,000 / 128,000\n**Context occupancy**: 6.2%\n**Compression**: Not observed by this footer",
-                    "i18n_content": {
-                      "en_us": "**Last request context**: 8,000 / 128,000\n**Context occupancy**: 6.2%\n**Compression**: Not observed by this footer",
-                      "zh_cn": "**末次请求上下文**：8,000 / 128,000\n**占用比例**：6.2%\n**本轮压缩**：此页脚尚未观测"
-                    },
-                    "text_size": "normal"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "tag": "hr"
-          },
-          {
-            "tag": "column_set",
-            "flex_mode": "none",
-            "horizontal_spacing": "12px",
-            "columns": [
               {
                 "tag": "column",
                 "width": "weighted",
                 "weight": 1,
                 "vertical_align": "top",
+                "vertical_spacing": "4px",
                 "elements": [
                   {
                     "tag": "markdown",
-                    "content": "**E · Routing & billing**",
+                    "content": "<font color='grey'>Tools</font>  **1**",
                     "i18n_content": {
-                      "en_us": "**E · Routing & billing**",
-                      "zh_cn": "**E · 切换与计费**"
+                      "en_us": "<font color='grey'>Tools</font>  **1**",
+                      "zh_cn": "<font color='grey'>工具</font>  **1**"
                     },
-                    "text_size": "normal"
-                  }
-                ]
-              },
-              {
-                "tag": "column",
-                "width": "weighted",
-                "weight": 3,
-                "vertical_align": "top",
-                "elements": [
-                  {
-                    "tag": "markdown",
-                    "content": "**Route history**: example-provider\n**Observed errors**: 0\n**Billing**: Per-request cost not reported",
-                    "i18n_content": {
-                      "en_us": "**Route history**: example-provider\n**Observed errors**: 0\n**Billing**: Per-request cost not reported",
-                      "zh_cn": "**服务商路径**：example-provider\n**已观测请求错误**：0\n**计费**：单次费用未提供"
-                    },
-                    "text_size": "normal"
+                    "text_size": "normal",
+                    "margin": "0px",
+                    "text_align": "left"
                   }
                 ]
               }
@@ -279,12 +281,25 @@
           },
           {
             "tag": "markdown",
-            "content": "Measured main requests in this turn; input includes cache. Missing fields are not estimated.",
+            "content": "<font color='blue'>Last context</font> 8,000 / 128,000 · 6.2%",
             "i18n_content": {
-              "en_us": "Measured main requests in this turn; input includes cache. Missing fields are not estimated.",
-              "zh_cn": "本轮主请求累计；输入含缓存；缺失字段不推算。"
+              "en_us": "<font color='blue'>Last context</font> 8,000 / 128,000 · 6.2%",
+              "zh_cn": "<font color='blue'>末次上下文</font> 8,000 / 128,000 · 6.2%"
             },
-            "text_size": "notation"
+            "text_size": "normal",
+            "margin": "0px",
+            "text_align": "left"
+          },
+          {
+            "tag": "markdown",
+            "content": "<font color='grey'>Main requests only; cost not reported · compression not observed</font>",
+            "i18n_content": {
+              "en_us": "<font color='grey'>Main requests only; cost not reported · compression not observed</font>",
+              "zh_cn": "<font color='grey'>主请求累计；费用未提供 · 压缩尚未观测</font>"
+            },
+            "text_size": "notation",
+            "margin": "0px",
+            "text_align": "left"
           }
         ]
       }

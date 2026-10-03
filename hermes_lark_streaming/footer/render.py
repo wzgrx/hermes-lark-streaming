@@ -8,6 +8,7 @@ import html
 import re
 from typing import Any
 
+from .layout import markdown, metric_row
 from .state import label, seconds
 from .usage import count
 
@@ -24,8 +25,13 @@ def compact(value: int) -> str:
     return str(value)
 
 
-def markdown(en: str, zh: str, text_size: str) -> dict[str, Any]:
-    return {"tag": "markdown", "content": en, "i18n_content": {"en_us": en, "zh_cn": zh}, "text_size": text_size}
+def model_display(value: Any) -> str:
+    """Humanize a known bare ID only; keep provider prefixes and fine-tunes intact."""
+    raw = label(value)
+    match = re.fullmatch(r"deepseek-v(\d+(?:\.\d+)?)-(flash|pro)", raw, re.I)
+    if match:
+        return f"DeepSeek V{match[1]} {match[2].title()}"
+    return safe(raw)
 
 
 def build_footer(
@@ -42,7 +48,7 @@ def build_footer(
     if duration is not None:
         first_en.append(f"{duration:.1f}s")
         first_zh.append(f"{duration:.1f}s")
-    model = safe(data.get("model"))
+    model = model_display(data.get("model"))
     if model:
         first_en.append(model)
         first_zh.append(model)
@@ -87,76 +93,89 @@ def build_footer(
         elements.append(usage)
     if not details:
         return elements
-    groups: list[dict[str, Any]] = []
-    rows: list[tuple[str, str, str, str]] = []
     unknown_en, unknown_zh = "Not reported", "未提供"
 
-    def row(en_key: str, zh_key: str, value: str, zh_value: str | None = None) -> None:
-        rows.append((en_key, zh_key, value or unknown_en, (zh_value if zh_value is not None else value) or unknown_zh))
+    def display_value(raw: Any) -> tuple[str, str]:
+        text = safe(raw)
+        return (text, text) if text else (unknown_en, unknown_zh)
 
-    def group(en_title: str, zh_title: str) -> None:
-        # Each label/value pair shares a line inside one column, so long model
-        # IDs wrap together instead of shifting all subsequent label rows.
-        if groups:
-            groups.append({"tag": "hr"})
-        groups.append({
-            "tag": "column_set", "flex_mode": "none", "horizontal_spacing": "12px",
-            "columns": [
-                {"tag": "column", "width": "weighted", "weight": 1, "vertical_align": "top",
-                 "elements": [markdown(f"**{en_title}**", f"**{zh_title}**", text_size)]},
-                {"tag": "column", "width": "weighted", "weight": 3, "vertical_align": "top",
-                 "elements": [markdown(
-                     "\n".join(f"**{e}**: {v}" for e, _, v, _ in rows),
-                     "\n".join(f"**{z}**：{v}" for _, z, _, v in rows), text_size)]},
-            ],
-        })
-        rows.clear()
+    def number(key: str) -> tuple[str, str]:
+        n = count(data.get(key))
+        return (f"{n:,}", f"{n:,}") if n is not None else (unknown_en, unknown_zh)
 
-    for key, en_key, zh_key in (
-        ("provider", "Provider", "服务商"),
-        ("requested_model", "Requested model", "请求模型"),
-        ("response_model", "Reported model", "返回模型"),
-        ("api_mode", "API", "接口协议"),
-    ):
-        row(en_key, zh_key, safe(data.get(key)))
-    row("Reasoning", "思考档位", reasoning + " (requested)" if reasoning else "",
-        reasoning + "（请求参数）" if reasoning else "")
-    group("A · Model & provider", "A · 这次用了谁")
-    row("Wall time", "本轮总耗时", f"{duration:.1f}s" if duration is not None else "")
+    def metric(en: str, zh: str, values: tuple[str, str]) -> tuple[str, str, str, str]:
+        return en, zh, *values
+
+    provider_en, provider_zh = display_value(data.get("provider"))
+    api_en, api_zh = display_value(data.get("api_mode"))
+    effort_en, effort_zh = (
+        (f"{reasoning} (requested)", f"{reasoning}（请求）") if reasoning
+        else ("Not reported", "未提供")
+    )
+    if data.get("reasoning_missing_reason") == "request_truncated" and not reasoning:
+        effort_en, effort_zh = "Request metadata truncated", "请求字段已裁剪"
+    identity = markdown(
+        f"<font color='blue'>Provider</font> {provider_en} · {api_en} · Reasoning {effort_en}",
+        f"<font color='blue'>服务</font> {provider_zh} · {api_zh} · 思考 {effort_zh}", text_size,
+    )
+    requested, returned = safe(data.get("requested_model")), safe(data.get("response_model"))
+    # The collector bounds labels at 160 characters. Equal bounded prefixes do
+    # not prove equal IDs; retain both rows at that boundary or after escaping.
+    same_model = (
+        isinstance(data.get("requested_model"), str)
+        and 0 < len(data["requested_model"]) < 160
+        and data["requested_model"] == data.get("response_model")
+    )
+    if same_model:
+        model_line = markdown(
+            f"<font color='grey'>Requested = reported</font> {requested}",
+            f"<font color='grey'>请求＝返回</font> {requested}", text_size,
+        )
+    else:
+        model_line = markdown(
+            f"<font color='grey'>Requested</font> {requested or unknown_en}\n"
+            f"<font color='grey'>Reported</font> {returned or unknown_en}",
+            f"<font color='grey'>请求</font> {requested or unknown_zh}\n"
+            f"<font color='grey'>返回</font> {returned or unknown_zh}", text_size,
+        )
     first = seconds(data.get("first_response"))
-    row("First response", "首次收到响应", f"{first:.2f}s" if first is not None else "")
-    for key, en_key, zh_key in (
-        ("api_calls", "Observed attempts", "已观测请求尝试"),
-        ("tool_calls", "Tool calls", "工具调用"),
-    ):
-        n = count(data.get(key))
-        row(en_key, zh_key, f"{n:,}" if n is not None else "")
-    group("B · Timing", "B · 时间花在哪里")
-    for key, en_key, zh_key in (
-        ("input_tokens", "Input including cache", "输入（含缓存）"),
-        ("output_tokens", "Output", "输出"),
-        ("cache_read_tokens", "Cache read", "缓存读取"),
-    ):
-        n = count(data.get(key))
-        row(en_key, zh_key, f"{n:,}" if n is not None else "")
+    elapsed_value = (f"{duration:.1f}s", f"{duration:.1f}s") if duration is not None else (unknown_en, unknown_zh)
+    first_value = (f"{first:.2f}s", f"{first:.2f}s") if first is not None else (unknown_en, unknown_zh)
     ratio = (f"{cached / inp:.1%}"
              if cached is not None and inp and cached <= inp and not data.get("usage_partial") else "")
-    row("Cache hit rate", "缓存命中率", ratio)
-    group("C · Turn usage", "C · 本轮累计用了多少")
-    row("Last request context", "末次请求上下文", f"{used:,} / {maximum:,}" if used is not None and maximum else "")
-    row("Context occupancy", "占用比例", f"{used / maximum:.1%}" if used is not None and maximum else "")
-    row("Compression", "本轮压缩", "Not observed by this footer", "此页脚尚未观测")
-    group("D · Context", "D · 对话有多长")
-    routes = data.get("routes")
-    if isinstance(routes, list) and routes:
-        row("Route history", "服务商路径", " → ".join(safe(r) for r in routes[:12]))
+    attempts_en, attempts_zh = number("api_calls")
     errors = count(data.get("retries"))
-    row("Observed errors", "已观测请求错误", str(errors) if errors is not None else "")
-    row("Billing", "计费", "Per-request cost not reported", "单次费用未提供")
-    group("E · Routing & billing", "E · 切换与计费")
+    if errors is not None:
+        attempts_en += f" · {errors} errors"
+        attempts_zh += f" · 错误 {errors}"
+    groups = [
+        identity, model_line,
+        metric_row(metric("Wall time", "总耗时", elapsed_value),
+                   metric("First response", "首响应", first_value), text_size),
+        metric_row(metric("Input incl. cache", "输入（含缓存）", number("input_tokens")),
+                   metric("Output", "输出", number("output_tokens")), text_size),
+        metric_row(metric("Cache read", "缓存读取", number("cache_read_tokens")),
+                   metric("Cache hit", "命中率", (ratio, ratio) if ratio else (unknown_en, unknown_zh)), text_size),
+        metric_row(metric("Attempts", "请求尝试", (attempts_en, attempts_zh)),
+                   metric("Tools", "工具", number("tool_calls")), text_size),
+    ]
+    context = f"{used:,} / {maximum:,} · {used / maximum:.1%}" if used is not None and maximum else ""
     groups.append(markdown(
-        "Measured main requests in this turn; input includes cache. Missing fields are not estimated.",
-        "本轮主请求累计；输入含缓存；缺失字段不推算。", "notation"))
+        f"<font color='blue'>Last context</font> {context or unknown_en}",
+        f"<font color='blue'>末次上下文</font> {context or unknown_zh}", text_size,
+    ))
+    routes = data.get("routes")
+    if isinstance(routes, list) and len(routes) > 1:
+        route_text = " → ".join(safe(r) for r in routes[:12])
+        groups.append(markdown(
+            f"<font color='orange'>Provider path</font> {route_text}",
+            f"<font color='orange'>服务商路径</font> {route_text}", text_size,
+        ))
+    note_en = "Main requests only; cost not reported · compression not observed"
+    note_zh = "主请求累计；费用未提供 · 压缩尚未观测"
+    if data.get("usage_partial"):
+        note_en, note_zh = "Partial usage · " + note_en, "统计不完整 · " + note_zh
+    groups.append(markdown(f"<font color='grey'>{note_en}</font>", f"<font color='grey'>{note_zh}</font>", "notation"))
     panel = {
         "tag": "collapsible_panel",
         "element_id": "footer_details",
@@ -175,8 +194,10 @@ def build_footer(
             "icon_expanded_angle": -180,
             "vertical_align": "center",
         },
-        "padding": "8px 8px 8px 8px",
+        "padding": "4px 0px 0px 0px",
+        "vertical_spacing": "4px",
         "elements": groups,
     }
+    elements.append({"tag": "hr", "element_id": "footer_detail_rule"})
     elements.append(panel)
     return elements

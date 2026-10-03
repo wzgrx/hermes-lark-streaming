@@ -19,7 +19,9 @@ def test_smoke_final_exercises_configured_footer_without_fake_usage(monkeypatch)
     ))
     final = e2e._configured_final(Segment(SegmentType.ANSWER, "probe"))
     text = json.dumps(final, ensure_ascii=False)
-    assert "A · 这次用了谁" in text and "本轮统计待采集" in text
+    assert "缓存读取" in text and "本轮统计待采集" in text
+    panel = next(e for e in final["body"]["elements"] if e.get("element_id") == "footer_details")
+    assert len([e for e in panel["elements"] if e["tag"] == "column_set"]) == 4
     assert "↑0" not in text
 
 

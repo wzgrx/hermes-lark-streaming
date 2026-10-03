@@ -15,6 +15,7 @@ from hermes_lark_streaming.card_limits import _footer_indexes, _last_answer_inde
 from hermes_lark_streaming.cardkit.builder import build_complete_card
 from hermes_lark_streaming.config import Config
 from hermes_lark_streaming.footer.hooks import observe
+from hermes_lark_streaming.footer.layout import DETAIL_ELEMENT_RESERVE
 from hermes_lark_streaming.footer.render import build_footer
 from hermes_lark_streaming.footer.state import TurnFooter, requested_reasoning
 from hermes_lark_streaming.footer.usage import normalize_usage
@@ -26,7 +27,7 @@ from hermes_lark_streaming.streaming.tooluse import ToolUseTracker
 def test_enhanced_footer_reserves_nested_elements():
     cfg = Config()
     cfg._raw = {"streaming": {"footer": {"mode": "enhanced"}}}
-    assert cfg.footer_element_reserve == 40
+    assert cfg.footer_element_reserve == DETAIL_ELEMENT_RESERVE
     tracker = ToolUseTracker()
     for _ in range(128):
         tracker.record_start("check")
@@ -34,7 +35,9 @@ def test_enhanced_footer_reserves_nested_elements():
     state = SegmentState()
     state.on_tool_event(1)
     state.on_tool_event(len(steps))
-    assert find_tool_split_offset(base_count=1, seg=state.segments[0], all_steps=steps, footer_reserve=40) < 56
+    assert find_tool_split_offset(
+        base_count=1, seg=state.segments[0], all_steps=steps, footer_reserve=cfg.footer_element_reserve
+    ) < 56
     cfg._raw = {}
     assert cfg.footer_element_reserve == 2
     assert find_tool_split_offset(base_count=1, seg=state.segments[0], all_steps=steps) == 58
@@ -241,7 +244,7 @@ def test_completion_builder_and_config_modes():
     assert any(e["tag"] == "collapsible_panel" for e in card["body"]["elements"])
 
 
-def test_footer_design_groups_icons_and_conservative_element_budget():
+def test_compact_footer_metrics_icons_and_conservative_element_budget():
     data = {"input_tokens": 100, "output_tokens": 3, "cache_read_tokens": 90,
             "context_used": 100, "context_max": 1000, "model": "deepseek-v4.1-flash"}
     elements = build_footer(data, text_size="normal")
@@ -252,18 +255,68 @@ def test_footer_design_groups_icons_and_conservative_element_budget():
     panel = elements[-1]
     assert panel["header"]["icon_position"] == "left" and panel["expanded"] is False
     groups = [e for e in panel["elements"] if e["tag"] == "column_set"]
-    assert len(groups) == 5
+    assert len(groups) == 4
     assert all(len(g["columns"]) == 2 for g in groups)
+    assert panel["vertical_spacing"] == "4px"
+    assert not any(e["tag"] == "hr" for e in panel["elements"])
+    for group in groups:
+        assert [c["weight"] for c in group["columns"]] == [1, 1]
+        assert all(len(c["elements"]) == 1 for c in group["columns"])
     text = json.dumps(panel, ensure_ascii=False)
-    for label in ("A · 这次用了谁", "B · 时间花在哪里", "C · 本轮累计用了多少", "D · 对话有多长", "E · 切换与计费"):
+    for label in ("总耗时", "首响应", "输入（含缓存）", "缓存读取", "末次上下文", "请求尝试", "工具"):  # noqa: RUF001
         assert label in text
-    assert "单次费用未提供" in text and "此页脚尚未观测" in text
+    assert "费用未提供" in text and "压缩尚未观测" in text
     cfg = Config()
     cfg._raw = {"streaming": {"footer": {"mode": "enhanced"}}}
     assert inspect_card({"body": {"elements": elements}}).elements <= cfg.footer_element_reserve
     cfg._raw["streaming"]["footer"]["details"] = False
     summary = inspect_card({"body": {"elements": build_footer(data, details=False)}})
     assert summary.elements <= cfg.footer_element_reserve
+
+
+def test_compact_model_identity_collapses_only_exact_equal_ids():
+    data = {"model": "deepseek-v4.1-flash", "requested_model": "deepseek-v4.1-flash",
+            "response_model": "deepseek-v4.1-flash", "reasoning": "max"}
+    rendered = build_footer(data)
+    assert "DeepSeek V4.1 Flash" in rendered[1]["content"]
+    identity = rendered[-1]["elements"][1]
+    assert "请求＝返回" in identity["i18n_content"]["zh_cn"]  # noqa: RUF001
+    assert identity["content"].count("deepseek-v4.1-flash") == 1
+    different = build_footer({**data, "response_model": "served-model"})[-1]["elements"][1]
+    assert "deepseek-v4.1-flash" in different["content"] and "served-model" in different["content"]
+    assert "Requested = reported" not in different["content"]
+    missing = build_footer({**data, "response_model": ""})[-1]["elements"][1]
+    assert "Not reported" in missing["content"]
+    bounded = build_footer({**data, "requested_model": "m" * 160, "response_model": "m" * 160})
+    assert "Requested = reported" not in bounded[-1]["elements"][1]["content"]
+    prefix_collision = build_footer({**data, "requested_model": "m" * 160 + "a", "response_model": "m" * 160 + "b"})
+    assert "Requested = reported" not in prefix_collision[-1]["elements"][1]["content"]
+
+
+@pytest.mark.parametrize("routes", [[], ["a"], ["a", "b"]])
+def test_compact_layout_fits_with_long_fields_and_conditional_route(routes):
+    data = {key: "x" * 160 for key in ("provider", "api_mode", "requested_model", "response_model", "model")}
+    data.update(routes=routes, input_tokens=10**15, output_tokens=10**15, usage_partial=True)
+    card = {"schema": "2.0", "body": {"elements": build_footer(data)}}
+    inspection = inspect_card(card)
+    assert inspection.safe and inspection.elements <= DETAIL_ELEMENT_RESERVE
+    panel = card["body"]["elements"][-1]
+    assert len(panel["elements"]) == 8 + (len(routes) > 1)
+    rendered = json.dumps(panel, ensure_ascii=False)
+    assert ("服务商路径" in rendered) == (len(routes) > 1)
+    assert "统计不完整" in rendered
+
+
+def test_truncated_hook_explains_missing_reasoning_without_reading_preview():
+    state = TurnFooter()
+    p = event(request={"_truncated": True, "preview": '"reasoning_effort":"max" secret content'})
+    state.observe("pre_api_request", p)
+    complete(state, p)
+    result = state.finish()
+    assert result["reasoning"] == "" and result["reasoning_missing_reason"] == "request_truncated"
+    rendered = json.dumps(build_footer(result), ensure_ascii=False)
+    assert "请求字段已裁剪" in rendered
+    assert "max" not in rendered and "secret content" not in rendered
 
 
 def test_compaction_never_treats_second_footer_row_as_answer():

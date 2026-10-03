@@ -3,12 +3,12 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.17.1-blue)
+![Code version](https://img.shields.io/badge/code-0.18.0-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [Footer](docs/FOOTER-V2.md) · [History](docs/USAGE-HISTORY.md) · [Design audit](docs/FOOTER-DESIGN-AUDIT.md)
 
-> **2026-10-03 status:** code 0.17.1 is deployed; 1058 offline tests and CardKit server probes passed. **Visual acceptance is still open and has failed the reviewed design comparison.** The current details use two columns rather than the original three-column field grid. Code version does not imply a same-version PyPI or GitHub Release publication.
+> **2026-10-03 status:** source 0.18.0 implements the user's revised compact-details requirement. A synthetic card was accepted by CardKit and directly inspected expanded on desktop. The live Gateway remains 0.17.1; no restart or managed deployment occurred this round. Runtime states and cross-device acceptance remain open. See the [compact design and evidence](docs/FOOTER-COMPACT.md). Code version is not a published-package claim.
 
 ![Runtime architecture](docs/assets/runtime-overview.svg)
 
@@ -28,7 +28,7 @@ Hermes owns credentials, inference, routing, tools, and conversations. This plug
 ![Code-derived footer schematic](docs/assets/footer-current-structure.svg)
 
 **This is a code-derived schematic with synthetic data, not a screenshot or a pixel-accurate Feishu renderer.**
-The deployed implementation has two summary rows and five detail groups. Unknown cost/compression stays unknown. Some real cards currently lack a displayed reasoning setting; that is an open collection/display investigation, not evidence that model reasoning is disabled.
+Source 0.18.0 has two summary rows and about eight lines of compact details: metadata, four paired metric rows, context and notes. Different model IDs and multi-provider paths remain explicit. Unknown cost/compression stays unknown. Real Hermes sanitizer tests reproduce structured reasoning metadata loss on long requests; the new UI explains marked truncation instead of guessing an effort setting.
 
 [Synthetic Card JSON](docs/assets/footer-example.json) · [Rebuild assets](scripts/build_readme_assets.py)
 
@@ -86,13 +86,27 @@ hermes --run-module hermes_lark_streaming smoke
 
 Default smoke is offline. Explicit `smoke --execute --closed-stream-probe` tests a real unattached CardKit entity; it is not a screenshot test.
 
+Within an idle maintenance window, stop the Gateway gracefully before updating, then verify and start it:
+
+```bash
+hermes plugins update hermes-lark-streaming
+hermes pm install
+hermes --run-module hermes_lark_streaming verify
+hermes --run-module hermes_lark_streaming install
+
+# Only for an intentional uninstall, remove hooks before the managed plugin.
+hermes --run-module hermes_lark_streaming uninstall
+hermes plugins remove hermes-lark-streaming
+hermes pm install
+```
+
 | Milestone | Status |
 |---|---|
 | Normalization, isolated turn collection, ledger, CLI reports | Implemented, automated tests pass |
 | Managed 0.17.1 deployment and CardKit final update | Verified |
-| Real desktop inspection of collapsed/expanded cards | Performed; design mismatch confirmed |
-| Original three-column layout, title styling and spacing | Pending implementation and acceptance |
-| Reliable reasoning-setting display in real requests | Open investigation |
+| Real desktop inspection | Old 0.17.1 mismatch confirmed; new compact synthetic preview inspected |
+| Revised compact details | Implemented; synthetic desktop preview inspected; managed deployment pending |
+| Reliable reasoning-setting display in real requests | Truncation reproduced and explained; compact scalar capture remains open |
 | Mobile/dark-mode/long-running visual matrix | Pending |
 | Committed LCM compression telemetry, account quotas and billing | Pending reliable data sources |
 | Historical-report buttons or web dashboard | Not implemented; CLI is available |

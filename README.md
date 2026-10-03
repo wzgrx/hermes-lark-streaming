@@ -4,13 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.17.1-blue)
+![Code version](https://img.shields.io/badge/code-0.18.0-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [Footer](docs/FOOTER-V2.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md) · [视觉审查](docs/FOOTER-DESIGN-AUDIT.md)
 
-> **当前状态 · 2026-10-03**：代码 0.17.1 已部署并通过服务端卡片测试；1058 项离线测试通过。**设计图的视觉验收尚未通过**：当前是两列详情，三列对齐、标题样式和部分字段仍待完善。原计划没有全部完成。此处版本指源码，不等于已发布同名 PyPI/Release 包。
+> **当前状态 · 2026-10-03**：源码 0.18.0 已按用户最新要求改成紧凑详情；合成预览通过 CardKit API，桌面实际展开检查通过。运行中的 Gateway 仍为 0.17.1，本轮未重启或替换。新布局不是旧三列长表，见[紧凑布局设计与证据](docs/FOOTER-COMPACT.md)。整体计划仍有运行态及跨端验收待完成。源码版本不等于同名 PyPI/Release 发布。
 
 ![运行架构：Hermes、Card 插件、飞书客户端及独立用量账本](docs/assets/runtime-overview.svg)
 
@@ -28,7 +28,7 @@ Hermes 负责提供商认证、模型调用、工具执行和会话；本插件�
 | 可靠投递 | 成功后提交 sequence、稳定 UUID、投递三态台账 | `unknown` 不冒充成功，不自动重复发送答案 |
 | 长任务续卡 | 时间/元素预算续卡，旧片封存 | 卡片历史收缩不等于 LCM 上下文压缩 |
 | 打断与审批 | `/stop`、排队、后台/Cron、审批边界适配 | 原生审批 resolver 仍由 Hermes 持有 |
-| Footer V2 | 两行摘要、A–E 分组折叠详情 | 按需开启；视觉设计还在收敛 |
+| Footer V2 | 两行摘要、紧凑双列指标与折叠详情 | 按需开启；运行态与跨端矩阵继续验收 |
 | 历史用量 | SQLite 持久化，按月/日/模型/服务商/订阅标签查询 | 从启用后开始收集；不是账户全局账单 |
 | 多提供商口径 | Hermes canonical + 6 类协议字段解析测试 | 226 个目录入口不等于 226 家真实账号验收 |
 | 运维 | doctor、metrics、只读检查、显式 API smoke | 测试通过、服务端通过、客户端验收分别记录 |
@@ -38,14 +38,14 @@ Hermes 负责提供商认证、模型调用、工具执行和会话；本插件�
 下面的图从**实际 `build_footer` 生成的字段与分组**绘制，使用合成数据。
 **它是结构示意，不是飞书客户端截图，也不承诺像素一致。**
 
-![0.17.1 当前 Footer 两列结构；示例数据，非客户端截图](docs/assets/footer-current-structure.svg)
+![0.18.0 紧凑 Footer 结构；示例数据，非客户端截图](docs/assets/footer-current-structure.svg)
 
-五组详情：**A 这次用了谁 · B 时间花在哪里 · C 本轮累计用了多少 · D 对话有多长 · E 切换与计费**。
+**约八行常规详情**：服务/接口/思考、模型、四行双列指标、末次上下文、统计说明。长字段自动换行；模型差异或服务商切换时增加对应信息，不删掉真实差异。
 
 - 默认折叠；展开后查看 provider、请求/返回模型、时间、token、缓存、末次上下文和路由。
 - 输入包含缓存，缓存不重复加总。多次请求累计 token 与末次上下文是不同指标。
 - 缺失值明确显示“未提供”，不编造费用、账户额度或压缩完成状态。
-- 本轮实机观察到部分真实卡片未展示思考档位；待追踪实际请求信封。配置档位、发送参数、服务端确认也须分开。
+- 已用真实 Hermes sanitizer 复现：长请求被裁剪后，结构化思考参数可能丢失。0.18.0 会注明该原因；不从截断预览或全局配置猜测本次实际请求参数。
 - 原始设计图及与现状的差异，见[视觉审查与下一阶段验收](docs/FOOTER-DESIGN-AUDIT.md)。不要通过更换 SDK 掩盖尚未完成的布局工作。
 
 [查看合成 Card JSON](docs/assets/footer-example.json) · [重建示意资产](scripts/build_readme_assets.py)
@@ -134,6 +134,19 @@ hermes --run-module hermes_lark_streaming smoke
 
 更新顺序：**确认空闲 → 保存回滚信息 → 平稳停止 → 托管更新/PM 同步 → doctor/verify/install/status → 启动 → 检查连接、日志、投递与客户端**。来源 pin、精确 SHA、审核提示与回滚命令统一以 [INSTALL.md](INSTALL.md) 为准。
 
+```bash
+# 在上述空闲维护流程内执行；更新源码后同步 PM，再安装钩子。
+hermes plugins update hermes-lark-streaming
+hermes pm install
+hermes --run-module hermes_lark_streaming verify
+hermes --run-module hermes_lark_streaming install
+
+# 仅当明确要卸载时：先撤回钩子，再移除托管插件。
+hermes --run-module hermes_lark_streaming uninstall
+hermes plugins remove hermes-lark-streaming
+hermes pm install
+```
+
 ## 已完成与未完成
 
 | 里程碑 | 状态 |
@@ -141,9 +154,9 @@ hermes --run-module hermes_lark_streaming smoke
 | 协议归一化、按轮采集、缺失/部分统计 | 已实现、自动测试通过 |
 | SQLite 历史账本和 CLI/JSON 报表 | 已实现；线上开始积累，并已纳入维护者本机备份 |
 | 0.17.1 托管部署、服务端创建/关闭/终态更新 | 已验证 |
-| 桌面真实卡片读取、展开检查 | 已执行；发现视觉差异，验收未通过 |
-| 设计稿三列对齐、配色/间距精修 | 待实现及复验 |
-| 思考档位在真实请求中的稳定展示 | 待诊断；当前部分卡片显示未提供 |
+| 桌面展开检查 | 0.17.1 旧设计失败；0.18.0 紧凑合成预览已直接检查 |
+| 用户新要求：高密度紧凑详情 | 0.18.0 已实现；合成卡片桌面检查通过，待托管部署 |
+| 思考档位在真实请求中的稳定展示 | 长请求裁剪机制已复现并可解释；稳定标量采集仍待完善 |
 | 手机窄屏、深浅色、长任务完整视觉矩阵 | 待验收 |
 | LCM 压缩提交前后值、账户额度、真实费用 | 待可靠事件/API；当前不推算 |
 | 飞书内历史报表按钮或网页 Dashboard | 尚未实现，CLI 已可查询 |
@@ -177,6 +190,7 @@ python scripts/build_readme_assets.py
 | [历史用量](docs/USAGE-HISTORY.md) | 数据持久化、时间范围、报表与备份 |
 | [覆盖清单](docs/PROVIDER-COVERAGE.md) | 226 个目录入口及协议证据分级 |
 | [运维](docs/OPERATIONS.md) | 指标、投递三态、续卡、可选 sidecar |
+| [紧凑设计](docs/FOOTER-COMPACT.md) | 用户新要求、字段密度、实际验证与剩余工作 |
 | [视觉审查](docs/FOOTER-DESIGN-AUDIT.md) | 设计差异、SDK/CLI 能力与下一阶段 gate |
 | [Roadmap](docs/ROADMAP.md) | 已实现能力与未验证目标分开列示 |
 | [更新记录](CHANGELOG.md) | 版本变更 |
