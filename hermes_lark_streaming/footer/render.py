@@ -8,6 +8,7 @@ import html
 import re
 from typing import Any
 
+from ..cardkit.panels import collapsible_panel
 from .layout import markdown, metric_row
 from .state import label, seconds
 from .usage import count
@@ -115,8 +116,8 @@ def build_footer(
     if data.get("reasoning_missing_reason") == "request_truncated" and not reasoning:
         effort_en, effort_zh = "Request metadata truncated", "请求字段已裁剪"
     identity = markdown(
-        f"<font color='blue'>Provider</font> {provider_en} · {api_en} · Reasoning {effort_en}",
-        f"<font color='blue'>服务</font> {provider_zh} · {api_zh} · 思考 {effort_zh}", text_size,
+        f"<font color='grey'>Provider</font> {provider_en} · {api_en} · Reasoning {effort_en}",
+        f"<font color='grey'>服务</font> {provider_zh} · {api_zh} · 思考 {effort_zh}", text_size,
     )
     requested, returned = safe(data.get("requested_model")), safe(data.get("response_model"))
     # The collector bounds labels at 160 characters. Equal bounded prefixes do
@@ -161,8 +162,8 @@ def build_footer(
     ]
     context = f"{used:,} / {maximum:,} · {used / maximum:.1%}" if used is not None and maximum else ""
     groups.append(markdown(
-        f"<font color='blue'>Last context</font> {context or unknown_en}",
-        f"<font color='blue'>末次上下文</font> {context or unknown_zh}", text_size,
+        f"<font color='grey'>Last context</font> {context or unknown_en}",
+        f"<font color='grey'>末次上下文</font> {context or unknown_zh}", text_size,
     ))
     routes = data.get("routes")
     if isinstance(routes, list) and len(routes) > 1:
@@ -185,28 +186,19 @@ def build_footer(
     if data.get("usage_partial"):
         note_en, note_zh = "Partial usage · " + note_en, "统计不完整 · " + note_zh
     groups.append(markdown(f"<font color='grey'>{note_en}</font>", f"<font color='grey'>{note_zh}</font>", "notation"))
-    panel = {
-        "tag": "collapsible_panel",
-        "element_id": "footer_details",
-        "expanded": False,
-        "header": {
-            "title": {
-                "tag": "markdown",
-                "content": "<font color='blue'>**Turn details**</font>",
-                "i18n_content": {
-                    "en_us": "<font color='blue'>**Turn details**</font>",
-                    "zh_cn": "<font color='blue'>**本轮详情**</font>",
-                },
-            },
-            "icon": {"tag": "standard_icon", "token": "down-small-ccm_outlined", "size": "16px 16px"},
-            "icon_position": "left",
-            "icon_expanded_angle": -180,
-            "vertical_align": "center",
+    # Use the same native chrome as background review, not a second UI system.
+    panel = collapsible_panel(
+        expanded=False,
+        title_el={
+            "tag": "plain_text",
+            "content": "📊 Turn details",
+            "i18n_content": {"en_us": "📊 Turn details", "zh_cn": "📊 本轮详情"},
+            "text_color": "grey",
+            "text_size": "notation",
         },
-        "padding": "4px 0px 0px 0px",
-        "vertical_spacing": "4px",
-        "elements": groups,
-    }
-    elements.append({"tag": "hr", "element_id": "footer_detail_rule"})
+        elements=groups,
+        vertical_spacing="8px",
+    )
+    panel["element_id"] = "footer_details"
     elements.append(panel)
     return elements

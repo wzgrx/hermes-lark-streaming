@@ -10,6 +10,12 @@
 
 > **2026-10-03 status:** 0.19.1 includes compact details, structured reasoning capture and event-driven runtime footers. CI and 1144 full tests pass. The maintainer's idle Gateway was updated/restarted; service, Feishu connection, managed launcher version and database health passed. Runtime/client acceptance remains open: API success is not a visual result. Code version is not a published-package claim.
 
+### 0.19.2 panel-style revision
+
+Turn details now reuse the **same native panel chrome as background review**, rather than a blue left-hand heading. Compact metrics and default collapse remain. Code/tests and the collapsed desktop preview pass; managed deployment is recorded separately below.
+
+![Actual Windows Feishu synthetic preview; cropped, collapsed panels](docs/assets/footer-panel-client.png)
+
 ![Runtime architecture](docs/assets/runtime-overview.svg)
 
 ## Scope

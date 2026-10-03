@@ -167,7 +167,7 @@ def build_runtime_footer(
             "Live values cover completed API attempts; not the final turn total.",
             "运行中统计仅含已返回请求，尚非本轮最终总量。", "notation",
         ))
-        elements.extend([{"tag": "hr", "element_id": "footer_detail_rule"}, panel])
+        elements.append(panel)
     return elements
 
 

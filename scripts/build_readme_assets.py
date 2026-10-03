@@ -80,27 +80,33 @@ def main() -> None:
     )
     drawing = text(32, 47, "COMPACT TURN DETAILS", 27, bold=True)
     drawing += text(32, 77, "Code-derived schematic • synthetic values • NOT a Feishu screenshot", 17, "#536781")
-    drawing += box(24, 104, 1072, 456)
+    drawing += box(24, 104, 1072, 515)
     drawing += text(48, 142, "正文保持原样 / Answer stays unchanged", 23, bold=True)
     for i, element in enumerate(elements[1:3]):
         drawing += text(52, 182 + i * 32, plain(element["i18n_content"]["zh_cn"]), 18)
-    drawing += text(52, 262, "▼ 本轮详情（默认折叠 / Collapsed by default）", 20, "#2464d2", True)
-    y = 293
+    drawing += box(48, 235, 1024, 44, stroke="#b8bdc5")
+    drawing += text(60, 263, "💾 后台复盘", 16, "#646a73")
+    drawing += text(1044, 263, "⌄", 18, "#646a73")
+    drawing += box(48, 291, 1024, 306, stroke="#b8bdc5")
+    title = elements[-1]["header"]["title"]["i18n_content"]["zh_cn"]
+    drawing += text(60, 319, title, 16, "#646a73")
+    drawing += text(1044, 319, "⌃", 18, "#646a73")
+    y = 351
     for element in elements[-1]["elements"]:
         if element["tag"] == "column_set":
             for i, cell in enumerate(element["columns"]):
                 label = plain(cell["elements"][0]["i18n_content"]["zh_cn"])
-                drawing += text(52 + i * 510, y, label, 18)
+                drawing += text(60 + i * 505, y, label, 18)
         else:
             label = plain(element["i18n_content"]["zh_cn"])
             for line in label.splitlines():
-                drawing += text(52, y, line, 17, "#536781")
+                drawing += text(60, y, line, 17, "#536781")
                 y += 27
             continue
         y += 27
-    drawing += text(32, 602, "Four two-cell metric rows. Same model ID appears once; differences remain explicit.", 17)
+    drawing += text(32, 656, "Same native panel chrome as background review; both collapsed by default.", 17)
     (ASSETS / "footer-current-structure.svg").write_text(
-        svg(1120, 632, drawing, "Compact footer schematic, not a client screenshot"), encoding="utf-8"
+        svg(1120, 686, drawing, "Shared native panel schematic, not a client screenshot"), encoding="utf-8"
     )
     live = text(32, 47, "运行中的 Footer · 原生紧凑布局", 28, bold=True)
     live += text(32, 78, "代码对应结构示意 / 合成数据 / 非飞书客户端截图", 17, "#536781")
@@ -123,8 +129,9 @@ def main() -> None:
         color = "#d92d20" if phase == "failed" else "#bb7400" if i > 1 else "#2464d2"
         live += text(x + 20, y + 57, lines[0], 20, color, True)
         live += text(x + 20, y + 91, lines[1], 17, "#536781")
-        live += f'<path d="M{x + 20} {y + 123}h492" stroke="#d5e0ec"/>'
-        live += text(x + 20, y + 158, "▸ 本轮详情", 18, "#2464d2", True)
+        live += box(x + 16, y + 122, 500, 48, stroke="#b8bdc5")
+        live += text(x + 24, y + 153, "📊 本轮详情", 16, "#646a73")
+        live += text(x + 490, y + 153, "⌄", 18, "#646a73")
     live += text(32, 817, "真实事件驱动；摘要返回不等于压缩提交，单次请求错误不等于本轮最终失败。", 18)
     (ASSETS / "footer-runtime-states.svg").write_text(
         svg(1120, 850, live, "Native runtime footer states, synthetic code-derived schematic"), encoding="utf-8"

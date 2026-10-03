@@ -253,11 +253,11 @@ def test_compact_footer_metrics_icons_and_conservative_element_budget():
     ]
     assert elements[1]["icon"]["token"] == "done_outlined"
     panel = elements[-1]
-    assert panel["header"]["icon_position"] == "left" and panel["expanded"] is False
+    assert panel["header"]["icon_position"] == "right" and panel["expanded"] is False
     groups = [e for e in panel["elements"] if e["tag"] == "column_set"]
     assert len(groups) == 4
     assert all(len(g["columns"]) == 2 for g in groups)
-    assert panel["vertical_spacing"] == "4px"
+    assert panel["vertical_spacing"] == "8px"
     assert not any(e["tag"] == "hr" for e in panel["elements"])
     for group in groups:
         assert [c["weight"] for c in group["columns"]] == [1, 1]

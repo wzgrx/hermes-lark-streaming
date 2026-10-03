@@ -41,40 +41,42 @@
         }
       },
       {
-        "tag": "hr",
-        "element_id": "footer_detail_rule"
-      },
-      {
         "tag": "collapsible_panel",
-        "element_id": "footer_details",
         "expanded": false,
         "header": {
           "title": {
-            "tag": "markdown",
-            "content": "<font color='blue'>**Turn details**</font>",
+            "tag": "plain_text",
+            "content": "📊 Turn details",
             "i18n_content": {
-              "en_us": "<font color='blue'>**Turn details**</font>",
-              "zh_cn": "<font color='blue'>**本轮详情**</font>"
-            }
+              "en_us": "📊 Turn details",
+              "zh_cn": "📊 本轮详情"
+            },
+            "text_color": "grey",
+            "text_size": "notation"
           },
+          "vertical_align": "center",
           "icon": {
             "tag": "standard_icon",
             "token": "down-small-ccm_outlined",
-            "size": "16px 16px"
+            "size": "16px 16px",
+            "color": "grey"
           },
-          "icon_position": "left",
-          "icon_expanded_angle": -180,
-          "vertical_align": "center"
+          "icon_position": "right",
+          "icon_expanded_angle": -180
         },
-        "padding": "4px 0px 0px 0px",
-        "vertical_spacing": "4px",
+        "border": {
+          "color": "grey",
+          "corner_radius": "5px"
+        },
+        "vertical_spacing": "8px",
+        "padding": "8px 8px 8px 8px",
         "elements": [
           {
             "tag": "markdown",
-            "content": "<font color='blue'>Provider</font> example-provider · chat\\_completions · Reasoning max (requested)",
+            "content": "<font color='grey'>Provider</font> example-provider · chat\\_completions · Reasoning max (requested)",
             "i18n_content": {
-              "en_us": "<font color='blue'>Provider</font> example-provider · chat\\_completions · Reasoning max (requested)",
-              "zh_cn": "<font color='blue'>服务</font> example-provider · chat\\_completions · 思考 max（请求）"
+              "en_us": "<font color='grey'>Provider</font> example-provider · chat\\_completions · Reasoning max (requested)",
+              "zh_cn": "<font color='grey'>服务</font> example-provider · chat\\_completions · 思考 max（请求）"
             },
             "text_size": "normal",
             "margin": "0px",
@@ -281,10 +283,10 @@
           },
           {
             "tag": "markdown",
-            "content": "<font color='blue'>Last context</font> 8,000 / 128,000 · 6.2%",
+            "content": "<font color='grey'>Last context</font> 8,000 / 128,000 · 6.2%",
             "i18n_content": {
-              "en_us": "<font color='blue'>Last context</font> 8,000 / 128,000 · 6.2%",
-              "zh_cn": "<font color='blue'>末次上下文</font> 8,000 / 128,000 · 6.2%"
+              "en_us": "<font color='grey'>Last context</font> 8,000 / 128,000 · 6.2%",
+              "zh_cn": "<font color='grey'>末次上下文</font> 8,000 / 128,000 · 6.2%"
             },
             "text_size": "normal",
             "margin": "0px",
@@ -301,7 +303,8 @@
             "margin": "0px",
             "text_align": "left"
           }
-        ]
+        ],
+        "element_id": "footer_details"
       }
     ]
   }
