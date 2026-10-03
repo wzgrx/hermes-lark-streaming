@@ -4,13 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.0-blue)
+![Code version](https://img.shields.io/badge/code-0.20.1-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
-> **当前状态 · 2026-10-03**：V1 整卡 0.20.0 已托管部署并在空闲时重启 Gateway；1406 项全量测试、Ruff、mypy 和 GitHub CI 通过。合成卡片通过真实 CardKit 创建/投递/流式/局部更新/终态更新，Windows 展开布局及原始记录保持展开已实测。启动、doctor、钩子、配置边界和只读账本检查通过；真实 Gateway 新轮次、手机/主题/缩放及像素级对照仍分开验收。详见[部署检查](docs/assets/reference-v1-deployment-checks.json)。代码版本不等于同名 PyPI/Release 发布。
+> **当前状态 · 2026-10-03**：V1 整卡 0.20.1 已托管部署并空闲重启；1435 项全量测试、Ruff、mypy、GitHub Tests / CodeQL / Hermes Compat Check 通过。真实 Gateway 成功与预期非零退出两轮均投递成功；Windows 已核对 stdout、失败浅红底、max（请求）和账本统计一致。doctor、钩子及只读账本健康通过，配置/凭据/会话/模型未迁移。手机端现有登录验证过期，跨端字号/主题/缩放及像素级一致性仍单独待验。详见[部署检查](docs/assets/reference-v1-deployment-checks.json)与[真实轮次记录](docs/assets/reference-v1-real-gateway-checks.json)。代码版本不等于同名 PyPI/Release 发布。
 
 ### 0.20.0：V1 整卡布局
 
@@ -25,6 +25,16 @@
 ![V1 Footer：模型上下文标题、紧凑本轮统计和历史摘要](docs/assets/reference-v1-client-footer.png)
 
 [冻结设计图、配置、代码契约及剩余验收](docs/REFERENCE-V1.md) · [真实 builder 合成 JSON](docs/assets/reference-v1-completed.json)
+
+### 0.20.1：真实工具结果与失败状态
+
+实测发现 Hermes 完成回调的 `preview` 为空，结果和错误标志位于 `result` / `is_error`。已修复旧钩子的遗漏，并补齐非零退出判定、输出预算与脱敏回归。以下是**真实 Gateway 测试命令**的桌面局部截图，不含生产用量、聊天列表或消息 ID；不是手写假回执。回答完成和工具失败保持独立。
+
+![真实成功命令：原始记录保留 stdout 测试标记](docs/assets/reference-v1-real-success-tool.png)
+
+![真实预期失败：退出码 7、失败数和浅红底](docs/assets/reference-v1-real-failed-tool.png)
+
+升级本版需在 Gateway 空闲/停止时重新安装生成钩子，见 [安装与更新](INSTALL.md)。旧卡片保留原历史，不自动重发或补造旧输出。
 
 ### 历史阶段 0.19.2：与后台复盘统一样式
 
@@ -48,7 +58,7 @@ Hermes 负责提供商认证、模型调用、工具执行和会话；本插件�
 | 可靠投递 | 成功后提交 sequence、稳定 UUID、投递三态台账 | `unknown` 不冒充成功，不自动重复发送答案 |
 | 长任务续卡 | 时间/元素预算续卡，旧片封存 | 卡片历史收缩不等于 LCM 上下文压缩 |
 | 打断与审批 | `/stop`、排队、后台/Cron、审批边界适配 | 原生审批 resolver 仍由 Hermes 持有 |
-| V1 整卡 / Footer V2 | 工具、资源、正文、模型和历史；旧紧凑布局保留 | 新布局按需开启；0.20.0 已部署，真实新轮次及跨端矩阵待验 |
+| V1 整卡 / Footer V2 | 工具、资源、正文、模型和历史；旧紧凑布局保留 | 0.20.1 已部署且真实轮次通过；跨端像素矩阵待验 |
 | 历史用量 | SQLite 持久化，按月/日/模型/服务商/订阅标签查询 | 从启用后开始收集；不是账户全局账单 |
 | 多提供商口径 | Hermes canonical + 6 类协议字段解析测试 | 226 个目录入口不等于 226 家真实账号验收 |
 | 运维 | doctor、metrics、只读检查、显式 API smoke | 测试通过、服务端通过、客户端验收分别记录 |
@@ -183,12 +193,12 @@ hermes pm install
 |---|---|
 | 协议归一化、按轮采集、缺失/部分统计 | 已实现、自动测试通过 |
 | SQLite 历史账本和 CLI/JSON 报表 | 已实现；线上开始积累，并已纳入维护者本机备份 |
-| V1 整卡 0.20.0 托管部署 | 完成；空闲重启、doctor/钩子/配置边界/只读账本健康通过；新轮次待验 |
+| V1 整卡 0.20.1 托管部署 | 完成；空闲重启、doctor/新钩子/配置不变/只读账本健康通过；真实成功与预期失败两轮通过 |
 | 0.17.1 托管部署、服务端创建/关闭/终态更新 | 已验证 |
 | 桌面展开检查 | 0.17.1 旧设计失败；0.18.0 紧凑合成预览已直接检查 |
 | 用户新要求：高密度紧凑详情 | 已实现，合成卡片桌面检查通过；0.19.2 已托管部署 |
-| 思考档位在真实请求中的稳定展示 | 标量采集修复已部署，通过真实 Hermes 离线契约验证；新生产轮次复验仍待完成 |
-| 回答/工具/确认/摘要/切换/错误运行态 | 0.19.2 已部署；真实桌面合成预览与局部更新展开保持通过；真实模型新轮次待验收 |
+| 思考档位在真实请求中的稳定展示 | 离线契约及真实 Gateway max（请求）显示通过；不是服务端采纳证明 |
+| 回答/工具/确认/摘要/切换/错误运行态 | 回答及成功/失败工具真实轮次通过；审批/摘要/切换保留契约与合成验证，不冒充本次真实覆盖 |
 | 客户端视觉矩阵 | 桌面不同宽度、深浅色及真实时钟 8 分钟续卡场景通过；手机待验收 |
 | LCM 压缩提交前后值、账户额度、真实费用 | 待可靠事件/API；当前不推算 |
 | 飞书内历史报表按钮或网页 Dashboard | 尚未实现，CLI 已可查询 |

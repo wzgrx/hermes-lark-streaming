@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Validation
 - Two real Gateway turns on managed 0.20.0 validated delivery, requested max, main/auxiliary usage separation and one terminal invocation, and exposed the missing completion metadata fixed here. The post-fix runtime acceptance is tracked separately in the deployment record.
 - 1435 full tests, Ruff and mypy (49 source files) pass, including 29 added completion/redaction/resource regressions. GitHub CI and managed runtime evidence are recorded independently.
+- Exact-revision Tests, CodeQL and Hermes Compat Check pass. Managed 0.20.1 and refreshed hooks were deployed with an idle restart and unchanged configuration. Two real Gateway terminal turns verify stdout and expected exit 7, separate answer/tool states, interactive readback in the independent topic, requested max and footer/ledger agreement. Current-process CardKit API errors and tracebacks are zero; one historical unknown receipt remains. Mobile authentication is expired; no mobile/pixel certification is claimed.
 
 ## [0.20.0] - 2026-10-03
 

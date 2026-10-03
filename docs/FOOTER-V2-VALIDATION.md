@@ -1,6 +1,6 @@
 # Footer V2 / 历史用量：交付与未完成项
 
-> **最新 V1 验收（0.20.0）**：1406 全量测试、Ruff/mypy、CI 通过；真实合成 CardKit 链路、Windows 工具/资源/Footer 展开与二级面板更新保持展开通过。已托管部署并空闲重启，启动/doctor/钩子/配置边界/只读账本检查通过；真实 Gateway 新轮次与像素级、手机/主题/缩放另验。下面为历史版本证据，当前入口见 [REFERENCE-V1.md](REFERENCE-V1.md)。
+> **最新 V1 验收（0.20.1）**：1435 全量测试、Ruff/mypy、Tests / CodeQL / Hermes Compat Check 通过；托管部署和刷新钩子后空闲重启。真实 Gateway 成功 stdout 与预期退出 7 两轮、Windows 失败高亮与完成状态分离、max（请求）、账本统计核对和独立话题 interactive 读取通过。doctor 健康，当前进程 API 错误/traceback 为 0；历史 unknown 回执保留。手机登录验证过期，跨端/像素级不冒充通过。下面为历史版本证据，当前入口见 [REFERENCE-V1.md](REFERENCE-V1.md) 和 [真实新轮次记录](assets/reference-v1-real-gateway-checks.json)。
 
 > **后续进展：0.19.0 已部署** 紧凑详情、结构化思考标量与运行态。运行态的七阶段局部更新、正文插入、关流及失败终态通过真实 CardKit API；托管更新与空闲重启后 Gateway/飞书/版本/数据库健康检查通过。下面保留的是 0.17.1 部署基线记录，不代表最新源码或运行版。真实新轮次与跨端验收继续单列，当前证据见 [紧凑布局](FOOTER-COMPACT.md) 与 [运行态](FOOTER-RUNTIME.md)。
 

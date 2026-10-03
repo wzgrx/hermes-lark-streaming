@@ -102,9 +102,25 @@ hermes plugins doctor hermes-lark-streaming --ci
 hermes pm install
 ```
 
-Re-run `verify` and `status` using the durable launcher. If a Hermes source
-update changed hook anchors, run `uninstall` then `install` with that launcher
-before the Gateway restart. Preserve the `.hermes_lark.bak` files for rollback.
+Re-run `verify` and `status` using the durable launcher. If Hermes changed hook
+anchors **or the plugin changed generated hook content**, run `uninstall` then
+`install` while Gateway is idle/stopped before restarting. Idempotent `install`
+alone retains existing markers; it does not upgrade their content. **0.20.1
+requires this refresh** to forward completion `result` / `is_error`.
+Preserve the `.hermes_lark.bak` files and the old managed plugin for rollback.
+
+```bash
+hermes gateway stop  # first confirm no active task
+hermes --run-module hermes_lark_streaming uninstall
+hermes --run-module hermes_lark_streaming install
+hermes --run-module hermes_lark_streaming status
+hermes gateway start
+```
+
+On a maintenance checkout whose updater requires a clean tree, review and record
+only the generated hook diff in a **local maintenance commit**, not an upstream
+core push. Preserve the previous commit for rollback. Do not mix unrelated local
+edits into that commit or delete historical cards/receipts to produce a clean report.
 
 ## Rollback
 

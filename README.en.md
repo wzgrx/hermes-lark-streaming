@@ -3,12 +3,12 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.0-blue)
+![Code version](https://img.shields.io/badge/code-0.20.1-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **2026-10-03 status:** V1 0.20.0 is managed-deployed and Gateway was restarted while idle. 1406 full tests, Ruff, mypy and GitHub CI pass. Synthetic native-card create/attach/stream/partial/close/final-update APIs and direct Windows layout inspection pass, including nested expansion surviving an update. Startup, doctor, hooks, configuration boundaries and read-only ledger health pass. A new real Gateway turn, mobile/theme/scale and pixel-level acceptance remain separate gates. See the [deployment record](docs/assets/reference-v1-deployment-checks.json). Source version is not a published-package claim.
+> **2026-10-03 status:** V1 0.20.1 is managed-deployed after exact-revision CI and an idle restart. 1435 full tests, Ruff, mypy, Tests / CodeQL / Hermes Compat Check pass. Two real Gateway turns verify successful stdout and expected nonzero exit, delivery, failure highlighting, requested max and footer/ledger agreement. Doctor/hooks/read-only ledger health pass; configuration, credentials, sessions and models were not migrated. The existing mobile login has expired; mobile/theme/scale and pixel-identical acceptance remain separate. See [deployment](docs/assets/reference-v1-deployment-checks.json) and [real-turn evidence](docs/assets/reference-v1-real-gateway-checks.json). Source version is not a published-package claim.
 
 ### V1 whole-card layout
 
@@ -21,6 +21,15 @@ These are **actual Windows Feishu screenshots of synthetic card content**, not p
 ![Model, turn and history footer](docs/assets/reference-v1-client-footer.png)
 
 [Frozen design, configuration and remaining gates](docs/REFERENCE-V1.md) · [Actual-builder synthetic JSON](docs/assets/reference-v1-completed.json)
+
+### 0.20.1 real tool completion fix
+
+Hermes supplies completion results and errors through `result` / `is_error`, with an empty `preview`. The existing hook now consumes that metadata, preserves bounded terminal stdout, detects nonzero exit and removes sensitive values rather than merely appending a marker. These native client crops contain only real test-command markers, not private usage or chat identifiers.
+
+![Real successful terminal output](docs/assets/reference-v1-real-success-tool.png)
+![Real expected exit-7 failure](docs/assets/reference-v1-real-failed-tool.png)
+
+Refresh generated hooks while Gateway is idle/stopped; see [INSTALL.md](INSTALL.md). Existing historical cards are not replayed or retroactively populated.
 
 ### Historical 0.19.2 panel-style revision
 
@@ -133,12 +142,12 @@ hermes pm install
 | Milestone | Status |
 |---|---|
 | Normalization, isolated turn collection, ledger, CLI reports | Implemented, automated tests pass |
-| V1 0.20.0 managed deployment | Complete; idle restart, doctor/hooks/configuration boundaries/read-only ledger pass; new real turn pending |
+| V1 0.20.1 managed deployment | Complete; idle restart, refreshed hooks/doctor/unchanged config/read-only ledger; real success and expected-failure turns pass |
 | Managed 0.17.1 deployment and CardKit final update | Verified |
 | Real desktop inspection | Old 0.17.1 mismatch confirmed; new compact synthetic preview inspected |
 | Revised compact details | Implemented; synthetic desktop preview inspected; 0.19.2 deployed |
-| Reliable reasoning-setting display in real requests | Deployed; real-Hermes offline contracts pass; new production-turn verification pending |
-| Live answer/tool/approval/summary/provider/error phases | 0.19.2 deployed; synthetic desktop phase updates retain expanded details; real model/Gateway turn still pending |
+| Reliable reasoning-setting display in real requests | Offline contracts and real Gateway requested-max display pass; not proof of server acceptance |
+| Live answer/tool/approval/summary/provider/error phases | Real answer/tool success/failure pass; approval/summary/provider-switch evidence remains contract/synthetic, not this probe's live coverage |
 | Client visual matrix | Desktop widths, light/dark views and a real-clock eight-minute rollover inspected; mobile pending |
 | Committed LCM compression telemetry, account quotas and billing | Pending reliable data sources |
 | Historical-report buttons or web dashboard | Not implemented; CLI is available |
