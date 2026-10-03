@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-10-03
+
+### Fixed
+- Restore requested reasoning controls from Hermes's public `llm_execution` middleware when the ordinary pre-request body is truncated. Bind to one active nonfailed attempt with exact session, turn, request and route identity; ignore ambiguous or late events.
+- Preserve downstream execution exactly once with unchanged request/result/exception semantics. Observe only whitelisted scalar controls, never persist raw kwargs or forward them to the usage ledger. Capability-gate registration on older Hermes.
+- Keep requested effort distinct from server acceptance; downstream middleware may still rewrite it. An execution with no effort clears stale pre-request effort instead of inventing a configured default.
+
+### Validation
+- Added 20 regression cases, including real Hermes middleware-chain success/failure contracts. An isolated probe using local Hermes `fa6e6815d4b2` reproduced whole-request truncation and recovered `max` from structured execution kwargs without an inference call or Gateway restart.
+
 ## [0.18.0] - 2026-10-03
 
 ### Changed

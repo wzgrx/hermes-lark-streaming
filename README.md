@@ -4,13 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.18.0-blue)
+![Code version](https://img.shields.io/badge/code-0.18.1-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [Footer](docs/FOOTER-V2.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md) · [视觉审查](docs/FOOTER-DESIGN-AUDIT.md)
 
-> **当前状态 · 2026-10-03**：源码 0.18.0 已按用户最新要求改成紧凑详情；合成预览通过 CardKit API，桌面实际展开检查通过。运行中的 Gateway 仍为 0.17.1，本轮未重启或替换。新布局不是旧三列长表，见[紧凑布局设计与证据](docs/FOOTER-COMPACT.md)。整体计划仍有运行态及跨端验收待完成。源码版本不等于同名 PyPI/Release 发布。
+> **当前状态 · 2026-10-03**：源码 0.18.1 包含紧凑详情与思考标量采集修复；布局合成预览通过 CardKit API，桌面实际展开检查通过。运行中的 Gateway 仍为 0.17.1，本轮未重启或替换。新布局不是旧三列长表，见[紧凑布局设计与证据](docs/FOOTER-COMPACT.md)。整体计划仍有运行态及跨端验收待完成。源码版本不等于同名 PyPI/Release 发布。
 
 ![运行架构：Hermes、Card 插件、飞书客户端及独立用量账本](docs/assets/runtime-overview.svg)
 
@@ -45,7 +45,7 @@ Hermes 负责提供商认证、模型调用、工具执行和会话；本插件�
 - 默认折叠；展开后查看 provider、请求/返回模型、时间、token、缓存、末次上下文和路由。
 - 输入包含缓存，缓存不重复加总。多次请求累计 token 与末次上下文是不同指标。
 - 缺失值明确显示“未提供”，不编造费用、账户额度或压缩完成状态。
-- 已用真实 Hermes sanitizer 复现：长请求被裁剪后，结构化思考参数可能丢失。0.18.0 会注明该原因；不从截断预览或全局配置猜测本次实际请求参数。
+- 已用真实 Hermes sanitizer 复现长请求思考字段丢失；0.18.1 通过官方执行中间件读取白名单标量，精确匹配当前请求。缺少接口或身份有歧义时仍显示缺失原因，不解析对话预览或猜测配置值；“请求”不代表服务端确认。
 - 原始设计图及与现状的差异，见[视觉审查与下一阶段验收](docs/FOOTER-DESIGN-AUDIT.md)。不要通过更换 SDK 掩盖尚未完成的布局工作。
 
 [查看合成 Card JSON](docs/assets/footer-example.json) · [重建示意资产](scripts/build_readme_assets.py)
@@ -156,7 +156,7 @@ hermes pm install
 | 0.17.1 托管部署、服务端创建/关闭/终态更新 | 已验证 |
 | 桌面展开检查 | 0.17.1 旧设计失败；0.18.0 紧凑合成预览已直接检查 |
 | 用户新要求：高密度紧凑详情 | 0.18.0 已实现；合成卡片桌面检查通过，待托管部署 |
-| 思考档位在真实请求中的稳定展示 | 长请求裁剪机制已复现并可解释；稳定标量采集仍待完善 |
+| 思考档位在真实请求中的稳定展示 | 0.18.1 标量采集修复通过真实 Hermes 离线契约验证；生产部署后复验仍待完成 |
 | 手机窄屏、深浅色、长任务完整视觉矩阵 | 待验收 |
 | LCM 压缩提交前后值、账户额度、真实费用 | 待可靠事件/API；当前不推算 |
 | 飞书内历史报表按钮或网页 Dashboard | 尚未实现，CLI 已可查询 |

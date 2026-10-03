@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from contextvars import copy_context
 from typing import Any
 
@@ -14,6 +15,10 @@ def observe(event: str, payload: dict[str, Any]) -> None:
     from .history import observe_history
 
     observe_history(event, payload)
+    _observe_bound(event, payload)
+
+
+def _observe_bound(event: str, payload: dict[str, Any]) -> None:
     if payload.get("platform") not in {"feishu", "lark"} or payload.get("aux_task"):
         return
     try:
@@ -37,7 +42,10 @@ def observe(event: str, payload: dict[str, Any]) -> None:
             return
         session = ctrl._session_keys.get(key)
         if session is not None and not session.state.is_terminal:
-            accepted = session.footer_state.observe(event, payload)
+            accepted = (
+                session.footer_state.observe_execution(payload)
+                if event == "llm_execution" else session.footer_state.observe(event, payload)
+            )
             metrics.increment("footer.event.accepted" if accepted else "footer.event.rejected")
         else:
             metrics.increment("footer.skip.session")
@@ -46,7 +54,38 @@ def observe(event: str, payload: dict[str, Any]) -> None:
         _logger.debug("footer observer skipped an incompatible event")
 
 
+def execution_observer(*, next_call: Callable[[], Any], **payload: Any) -> Any:
+    """A transparent middleware frame; provider execution remains single-use.
+
+    Do not pass this raw request to history/logging or catch next_call failures.
+    Later middleware may still rewrite controls: this is requested effort at
+    this stage, not an assertion that the server accepted that effort.
+    """
+    try:
+        _observe_bound("llm_execution", payload)
+    except Exception:
+        _logger.debug("footer execution metadata skipped")
+    return next_call()
+
+
+def register_execution(context: object) -> bool:
+    register_middleware = getattr(context, "register_middleware", None)
+    if not callable(register_middleware):
+        return False
+    try:
+        from hermes_cli.middleware import VALID_MIDDLEWARE  # type: ignore[import-not-found]
+
+        if "llm_execution" not in VALID_MIDDLEWARE:
+            return False
+        register_middleware("llm_execution", execution_observer)
+        return True
+    except Exception:
+        _logger.debug("footer execution observer not registered")
+        return False
+
+
 def register(context: object) -> tuple[str, ...]:
+    register_execution(context)
     register_hook = getattr(context, "register_hook", None)
     if not callable(register_hook):
         return ()

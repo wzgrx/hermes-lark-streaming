@@ -69,6 +69,7 @@ class Request:
     response_model: str = ""
     api_mode: str = ""
     reasoning: str = ""
+    reasoning_source: str = ""
     request_truncated: bool = False
     started: float | None = None
     first_response: float | None = None
@@ -128,8 +129,10 @@ class TurnFooter:
             request.provider = label(payload.get("provider")) or request.provider
             request.model = label(payload.get("model")) or request.model
             request.api_mode = label(payload.get("api_mode")) or request.api_mode
-            if event == "pre_api_request":
+            if event == "pre_api_request" and request.reasoning_source != "llm_execution":
                 request.reasoning = requested_reasoning(payload) or request.reasoning
+                if request.reasoning:
+                    request.reasoning_source = "pre_api_request"
                 request.request_truncated = mapping(payload.get("request")).get("_truncated") is True
             elif event == "api_request_error":
                 request.failed = True  # do not retain the error message/body
@@ -148,8 +151,41 @@ class TurnFooter:
                 request.usage = replace(
                     usage, cache_read=usage.cache_read or None, cache_write=usage.cache_write or None
                 )
-            else:
+            elif event != "pre_api_request":
                 return False
+            return True
+
+    def observe_execution(self, payload: dict[str, Any]) -> bool:
+        """Read scalar controls from a uniquely matched, active execution attempt.
+
+        Hermes's pre-request observer may truncate the entire body. Execution
+        middleware still sees structured kwargs. Retain no body or preview, and
+        never synthesize a request when the earlier identity event is missing.
+        """
+        if payload.get("platform") not in {"feishu", "lark"} or payload.get("aux_task"):
+            return False
+        sid, tid, rid = (payload.get(k) for k in ("session_id", "turn_id", "api_request_id"))
+        if not all(isinstance(value, str) and 0 < len(value) <= 512 for value in (sid, tid, rid)):
+            return False
+        # Exact, unshortened route identity: equal redacted/truncated labels are
+        # not evidence that an execution belongs to the observed attempt.
+        route = [payload.get(k) for k in ("provider", "model", "api_mode")]
+        if not all(isinstance(v, str) and 0 < len(v) < 160 and label(v) == v for v in route):
+            return False
+        with self._lock:
+            if self._sealed is not None or self._identity != (sid, tid):
+                return False
+            matches = [
+                request for (request_id, _), request in self._requests.items()
+                if request_id == rid and not request.finished and not request.failed
+                and [request.provider, request.model, request.api_mode] == route
+            ]
+            if len(matches) != 1:
+                return False
+            request = matches[0]
+            request.reasoning = requested_reasoning(payload)
+            request.reasoning_source = "llm_execution"
+            request.request_truncated = False
             return True
 
     def finish(self) -> dict[str, Any]:
@@ -174,6 +210,7 @@ class TurnFooter:
             response_model=last.response_model,
             api_mode=last.api_mode,
             reasoning=last.reasoning,
+            reasoning_source=last.reasoning_source,
             api_calls=len(requests),
             retries=sum(r.failed for r in requests),
             usage_partial=self._overflow or len(measured) != len(requests),
