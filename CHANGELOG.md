@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 - 1152 full tests pass; Ruff and mypy (45 source files) pass. Eight new regressions cover chrome parity across six lifecycle states, preserved expanded state during updates, and details-disabled mode.
-- Existing synthetic preview updated through CardKit; the collapsed panels were directly inspected in Windows Feishu. The cropped real-client image contains only synthetic card content. This revision's expanded/mobile visual check and production deployment are tracked separately.
+- Existing synthetic preview updated through CardKit; the collapsed panels were directly inspected in Windows Feishu. The cropped real-client image contains only synthetic card content. Managed 0.19.2 is deployed with Gateway/Feishu/database health verified; this revision's expanded/mobile visual check remains separate.
 
 ## [0.19.1] - 2026-10-03
 

@@ -8,11 +8,11 @@
 
 [中文](README.md) · [Install](INSTALL.md) · [Footer](docs/FOOTER-V2.md) · [History](docs/USAGE-HISTORY.md) · [Design audit](docs/FOOTER-DESIGN-AUDIT.md)
 
-> **2026-10-03 status:** 0.19.1 includes compact details, structured reasoning capture and event-driven runtime footers. CI and 1144 full tests pass. The maintainer's idle Gateway was updated/restarted; service, Feishu connection, managed launcher version and database health passed. Runtime/client acceptance remains open: API success is not a visual result. Code version is not a published-package claim.
+> **2026-10-03 status:** 0.19.2 includes compact details, structured reasoning capture and event-driven runtime footers. CI and 1152 full tests pass. The maintainer's idle Gateway was updated/restarted; service, Feishu connection, managed launcher version and database health passed. Runtime/client acceptance remains open: API success is not a visual result. Code version is not a published-package claim.
 
 ### 0.19.2 panel-style revision
 
-Turn details now reuse the **same native panel chrome as background review**, rather than a blue left-hand heading. Compact metrics and default collapse remain. Code/tests and the collapsed desktop preview pass; managed deployment is recorded separately below.
+Turn details now reuse the **same native panel chrome as background review**, rather than a blue left-hand heading. Compact metrics and default collapse remain. Code/tests and the collapsed desktop preview pass. Managed 0.19.2 is deployed; Gateway and Feishu connection checks pass. Expanded/mobile acceptance remains separate.
 
 ![Actual Windows Feishu synthetic preview; cropped, collapsed panels](docs/assets/footer-panel-client.png)
 
@@ -115,9 +115,9 @@ hermes pm install
 | Normalization, isolated turn collection, ledger, CLI reports | Implemented, automated tests pass |
 | Managed 0.17.1 deployment and CardKit final update | Verified |
 | Real desktop inspection | Old 0.17.1 mismatch confirmed; new compact synthetic preview inspected |
-| Revised compact details | Implemented; synthetic desktop preview inspected; 0.19.1 deployed |
+| Revised compact details | Implemented; synthetic desktop preview inspected; 0.19.2 deployed |
 | Reliable reasoning-setting display in real requests | Deployed; real-Hermes offline contracts pass; new production-turn verification pending |
-| Live answer/tool/approval/summary/provider/error phases | 0.19.1 deployed; synthetic desktop phase updates retain expanded details; real model/Gateway turn still pending |
+| Live answer/tool/approval/summary/provider/error phases | 0.19.2 deployed; synthetic desktop phase updates retain expanded details; real model/Gateway turn still pending |
 | Client visual matrix | Desktop widths, light/dark views and a real-clock eight-minute rollover inspected; mobile pending |
 | Committed LCM compression telemetry, account quotas and billing | Pending reliable data sources |
 | Historical-report buttons or web dashboard | Not implemented; CLI is available |
