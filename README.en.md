@@ -8,6 +8,8 @@
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
+> **Runtime status:** managed 0.20.4 is deployed after idle checks and restart. 1482 local tests, exact-code CI, unattached server probe and runtime health checks pass. Configuration/data preserved; no new real-turn or pixel acceptance claimed. See [deployment summary](docs/assets/desktop-hardening-deployment-checks.json).
+
 > **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 
 > **Acceptance scope:** desktop Feishu only, per the operator. Mobile is out of scope, not a release blocker. Real-turn and desktop-theme evidence for 0.20.2 keeps its original version label; it is not pixel certification of this revision. See [V1 evidence](docs/REFERENCE-V1.md) and [changelog](CHANGELOG.md).

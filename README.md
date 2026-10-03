@@ -10,6 +10,8 @@
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
+> **运行状态**：0.20.4 已空闲部署并重启；1482 项本地测试、精确代码提交 CI、未投递的服务端探针及运行健康检查通过。配置和数据保留，未新增真实对话/像素验收。见 [部署摘要](docs/assets/desktop-hardening-deployment-checks.json)。
+
 > **0.20.4 桌面增强**：修复工具面板动态开关、缺失面板恢复、真实配置文件热更新及重试后的首响应统计；历史状态更紧凑，保留 V1 三面板与单写卡通道。代码与部署证据分别记录在 [本轮修复与验证](docs/DESKTOP-HARDENING.md)。
 
 > **验收范围**：按用户最新选择，只处理桌面飞书，手机不再是本轮门槛。0.20.2 真实轮次、桌面双主题展开证据保留原版本范围，不当作新版逐像素证明。见 [V1 设计和实测](docs/REFERENCE-V1.md)及 [变更记录](CHANGELOG.md)。

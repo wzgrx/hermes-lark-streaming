@@ -35,3 +35,19 @@
 5. 托管部署：仅 Gateway 空闲时，精确已审核 SHA、备份、PM 校验、重启与只读健康检查。实际状态见部署证据；代码提交本身不代表已部署。
 
 旧版真实轮次和桌面浅/深色截图继续保留原版号。冻结设计 SVG 不修改，不把新 JSON 测试说成逐像素实机通过。本轮不追加仪表盘、费用估算或全新移动端任务。
+
+## 本轮部署结果
+
+0.20.4 已托管部署到代码提交 847ba0f42e2905d6431f9d1b83b70f45fb978c15。
+该精确提交的 Tests（Python 3.11/3.12/3.13、四组 Hermes 兼容检查）和 CodeQL
+均通过。部署前连续三次确认 Gateway 空闲；保留回滚副本、PM 同步后平稳停止/启动。
+启动初期控制接口短暂返回 stopped，等就绪后复查 running，飞书 connected；
+doctor/hooks、只读 SQLite quick_check 及当前进程异常堆栈检查通过。
+
+配置、密钥、Hermes 核心、LCM 与数据结构未改。doctor 仍提示新进程指标待刷新
+及旧投递未知记录；不删除历史证据，不自动重发。未发送新版真实模型对话或做新版
+客户端像素验收。后续文档提交与该代码快照相同，不要求为文档再次重启。
+
+[公开部署摘要](assets/desktop-hardening-deployment-checks.json) ·
+[Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37133503584) ·
+[CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37133503585)

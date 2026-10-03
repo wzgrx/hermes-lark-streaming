@@ -450,9 +450,9 @@
             "header": {
               "title": {
                 "tag": "plain_text",
-                "content": "Raw records · latest 24/24 steps",
+                "content": "Step excerpts · latest 24/24 · bounded command/output",
                 "i18n_content": {
-                  "zh_cn": "原始记录 · 最近 24/24 步 · 命令与输出按序保留"
+                  "zh_cn": "步骤摘要 · 最近 24/24 步 · 命令与输出有长度限制"
                 },
                 "text_size": "notation",
                 "text_color": "grey"
@@ -568,7 +568,7 @@
                   },
                   {
                     "tag": "markdown",
-                    "content": "**10.5 / 24 GB · 44%**",
+                    "content": "**10.5 / 24 GiB · 44%**",
                     "text_size": "normal_v2",
                     "margin": "0px",
                     "text_align": "left"
@@ -627,7 +627,7 @@
                   },
                   {
                     "tag": "markdown",
-                    "content": "**15.5 / 126 GB · 12%**",
+                    "content": "**15.5 / 126 GiB · 12%**",
                     "text_size": "normal_v2",
                     "margin": "0px",
                     "text_align": "left"
@@ -872,9 +872,9 @@
                 "elements": [
                   {
                     "tag": "markdown",
-                    "content": "<font color='grey'>First response</font>",
+                    "content": "<font color='grey'>First response incl. retry</font>",
                     "i18n_content": {
-                      "zh_cn": "<font color='grey'>首响应</font>"
+                      "zh_cn": "<font color='grey'>首响应（含重试）</font>"
                     },
                     "text_size": "notation",
                     "margin": "0px",

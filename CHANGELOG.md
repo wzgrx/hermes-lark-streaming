@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Regression fixtures cover real-file reload, retry/first-response semantics, dynamic add/delete, rejected/concurrent toggles, card handoff and bounded missing-panel recovery. Full-suite, exact CI, server probe and deployment evidence are tracked separately in docs/DESKTOP-HARDENING.md.
 - 1482 full local tests pass (27 added), plus Ruff, mypy (49 source files) and an offline wheel. An unattached live CardKit entity accepts add/delete/re-add with continued body streaming and close; no chat message, model call or ledger write. CI/deployment and visual acceptance remain separate.
 
+- Exact-code Tests/CodeQL pass; managed idle deployment and Gateway/Feishu/doctor/hooks/read-only ledger checks pass. No new real model turn or pixel certification. Historical unknown receipts remain intact; see docs/assets/desktop-hardening-deployment-checks.json.
+
 ## [0.20.3] - 2026-10-03
 
 ### Fixed
