@@ -67,3 +67,25 @@ API 请求/错误及“首响应（含重试）”。缺失费用明确显示“
 
 [详细计划](FOOTER-V2-PLAN.md) · [提供商覆盖](PROVIDER-COVERAGE.md) ·
 [冻结 V1 与历史验收](REFERENCE-V1.md)
+
+## 原始目标逐项复核（2026-10-04 Asia/Shanghai）
+
+| 原始交付要求 | 当前权威证据 | 判定 |
+|---|---|---|
+| 网络/GitHub 研究、列出提供商与接口 | 两份日期快照、完整 226 行目录、45 个 Hermes 配置与官方协议链接 | 已交付快照；不是声称存在全球穷尽注册表 |
+| 提供商适配 | `test_every_catalog_id_uses_same_canonical_path` 覆盖目录与 Hermes 配置的并集；`test_all_catalog_ids_use_same_native_reference_path` 覆盖 226 个目录 ID | 统计/展示已覆盖；不代表逐账号联网认证 |
+| 协议口径 | `test_protocol_usage` 验证 canonical 和六类 raw usage；生产 `TurnFooter` 消费 Hermes 规范化 usage | 通过；raw parser 的 fixture 不冒充生产直接连接六套 SDK |
+| 详细计划、架构与设计图 | `FOOTER-V2-PLAN.md`、`runtime-overview.svg`、五张冻结 V1 SVG | 文件已交付，基准未替换 |
+| 新布局与运行态代码 | `cardkit/reference.py`、`footer/runtime.py`、`streaming/runtime_footer.py`；原生桌面实拍与 CardKit 回执 | 已实现并验证所列范围 |
+| 历史用量 | SQLite 账本、CLI 分组、时区/月界、部分字段、去重与主辅隔离回归；0.20.2 实际账本核对 | 已实现；未补造过去数月数据 |
+| 重构后保持 Hermes 单写卡链路 | `test_actual_hermes_execution_chain_does_not_repeat_or_mutate_calls`、controller/sequence 与兼容矩阵 | 自动检查通过，未增加独立推理或投递客户端 |
+| GitHub main 与文档同步 | 代码 `847ba0f`，桌面证据 `7d2d460`；二者 Tests / CodeQL 均成功 | 已发布；后续文档修正不改运行代码 |
+| 托管部署 | 独立部署清单、PM 导入版本、live Gateway socket、doctor、数据库只读检查 | 0.20.4 已部署，Gateway running / 飞书 connected |
+| 最新版本真实模型整轮 | 当前最近实测是 0.20.2；0.20.4 只有合成服务端及桌面验收 | **尚未验证**；待确认在原测试话题发送单条只读测试 |
+| 与设计图逐像素相同 | 冻结 SVG 和原生截图分别保留 | **尚未认证**；结构对应不等于像素证明 |
+
+本次专门重跑 7 个测试文件共 **674 项，通过**：`test_footer.py`、
+`test_reference_layout.py`、`test_usage_history.py`、`test_footer_execution.py`、
+`test_footer_runtime.py`、`test_desktop_audit_fixes.py`、`test_footer_cache_boundaries.py`。
+这组检查直接覆盖上述适配、口径、布局和账本要求，不代替最后两行的独立验收。
+因此代码交付和当前部署已经验证，但不将完整目标标为无条件验收完成。

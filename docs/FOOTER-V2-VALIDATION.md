@@ -1,6 +1,8 @@
 # Footer V2 / 历史用量：交付与未完成项
 
-> **最新 V1 验收（0.20.1）**：1435 全量测试、Ruff/mypy、Tests / CodeQL / Hermes Compat Check 通过；托管部署和刷新钩子后空闲重启。真实 Gateway 成功 stdout 与预期退出 7 两轮、Windows 失败高亮与完成状态分离、max（请求）、账本统计核对和独立话题 interactive 读取通过。doctor 健康，当前进程 API 错误/traceback 为 0；历史 unknown 回执保留。手机登录验证过期，跨端/像素级不冒充通过。下面为历史版本证据，当前入口见 [REFERENCE-V1.md](REFERENCE-V1.md) 和 [真实新轮次记录](assets/reference-v1-real-gateway-checks.json)。
+> **当前入口（0.20.4）**：代码、托管部署、服务端与 Windows 原生合成卡片已分别验证，见[当前交付审计](DESKTOP-0204-ACCEPTANCE.md)。1482 项完整测试通过；真实 Gateway 模型轮次证据最近为 0.20.2，0.20.4 新轮次尚未验证。手机已由用户排除；逐像素一致性没有认证。下文保留各历史版本的实际结果，不代表当前故障清单。
+
+> **历史 V1 验收（0.20.1）**：1435 全量测试、Ruff/mypy、Tests / CodeQL / Hermes Compat Check 通过；托管部署和刷新钩子后空闲重启。真实 Gateway 成功 stdout 与预期退出 7 两轮、Windows 失败高亮与完成状态分离、max（请求）、账本统计核对和独立话题 interactive 读取通过。doctor 健康，当前进程 API 错误/traceback 为 0；历史 unknown 回执保留。当时手机登录验证过期，跨端/像素级未验。下面为历史版本证据，参见 [REFERENCE-V1.md](REFERENCE-V1.md) 和 [0.20.1 真实新轮次记录](assets/reference-v1-real-gateway-checks.json)。
 
 > **后续进展：0.19.0 已部署** 紧凑详情、结构化思考标量与运行态。运行态的七阶段局部更新、正文插入、关流及失败终态通过真实 CardKit API；托管更新与空闲重启后 Gateway/飞书/版本/数据库健康检查通过。下面保留的是 0.17.1 部署基线记录，不代表最新源码或运行版。真实新轮次与跨端验收继续单列，当前证据见 [紧凑布局](FOOTER-COMPACT.md) 与 [运行态](FOOTER-RUNTIME.md)。
 
@@ -45,7 +47,9 @@
 
 因此**不以 1058 tests passed 覆盖失败的视觉 gate**。
 
-## 尚未交付
+## 0.17.1 当时尚未交付（历史清单）
+
+这不是当前待办：网格、思考采集、运行态、历史用量和真实轮次的后续证据已在当前入口关联；账户账单、独立 Dashboard 等仍未实现，不因旧清单存在而自动加入新一轮任务。
 
 1. 目标字段网格、配色/留白精修和跨端截图基线。
 2. 思考档位真实请求路径核查；配置 max、发送参数、服务端确认分开。
