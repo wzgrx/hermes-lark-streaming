@@ -12,19 +12,19 @@ streaming:
     enabled: true
     mode: enhanced
     details: true
-    text_size: notation
+    text_size: normal
 ```
 
 新模块默认仍为 `classic`，避免升级时改变现有字段布局；`mode: classic` 回退，`enabled: false` 隐藏。
-enhanced 使用两行语义摘要及默认折叠详情；旧 `fields` / `show_label` 仅在 classic 生效。
-插件代码更新需按 [INSTALL.md](../INSTALL.md) 使用托管安装与依赖同步；本次开发没有修改线上配置或重启服务。
+enhanced 使用带状态图标的两行摘要及左侧展开入口，详情分为 A 模型/服务商、B 时间、C 用量、D 上下文、E 切换/计费五组。正文不变。组标题与字段分栏，字段名和值始终在同一行流中，避免长模型名换行导致错位；旧 `fields` / `show_label` 仅在 classic 生效。
+插件代码更新需按 [INSTALL.md](../INSTALL.md) 使用托管安装与依赖同步，再重启 Gateway 加载 PM 新快照。仅修改源码 checkout 不会改变运行中的插件。
 
 ## 已实现
 
 - 本轮墙钟耗时、请求/返回模型、实际请求中的思考参数（标注“请求”，不是服务端采用确认）。
 - 主请求输入总量（含缓存）、输出、末次上下文与有效上限。
 - 有可靠证据的缓存率、首个响应块延迟、已观测请求次数、工具数、错误次数和服务商路径。
-- 中英文原生折叠详情；未知字段省略；统计缺损明确标注。
+- 中英文原生折叠详情；摘要省略未知数值，详情保留稳定字段位置并标注“未提供”；统计缺损明确标注。
 - public `pre_api_request` / `post_api_request` / `api_request_error` 采集，不新增核心 AST 注入点。
 - 226 个目录入口及自定义名称共用 canonical 路径。独立 usage parser 同时覆盖 Chat/Responses/Anthropic/Gemini/Bedrock/Ollama 语义；不创建新的推理客户端。
 
@@ -49,6 +49,9 @@ LCM 中途更换存储 session 的同轮事件若缺少明确身份映射，会�
 未知/旧 Hermes 缺少公开 hooks 时基础模型/耗时可显示，详细统计明确待采集。
 
 本轮协议与集成 fixture 是离线回归，不是 226 家账号实测。桌面/手机折叠、真实 provider 回包、连续多轮和长任务换卡应在部署后单独验收。
+
+`smoke --execute --closed-stream-probe` 现使用配置中的 footer 模式验证真实 CardKit 全量更新，不再只测经典样式。没有模型请求的 smoke 明确展示统计待采集，也不写入历史账本。
+运行指标包含 `footer.event.accepted/rejected`、`footer.skip.context/session`、`footer.turn.measured/missing`，便于区分历史账本成功与当前卡片采集成功；不存储对话正文或身份标签。
 
 ## 设计与来源
 

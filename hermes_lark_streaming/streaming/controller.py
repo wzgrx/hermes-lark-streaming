@@ -1191,6 +1191,7 @@ class StreamingController:
             snapshot.setdefault("model", session.footer.get("model", ""))
             snapshot["tool_calls"] = len(all_tool_steps)
             session.footer = snapshot
+            metrics.increment("footer.turn.missing" if snapshot.get("telemetry_missing") else "footer.turn.measured")
 
         if segment_state is not None:
             segment_state.finalize_segments(len(all_tool_steps))

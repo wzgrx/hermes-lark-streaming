@@ -144,7 +144,9 @@ class Config:
 
     @property
     def footer_element_reserve(self) -> int:
-        return 6 if self.footer_mode == "enhanced" and self.footer_details else 2
+        if self.footer_mode == "enhanced":
+            return 40 if self.footer_details else 5
+        return 2
 
     @property
     def footer_history(self) -> dict[str, Any]:

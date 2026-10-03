@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
+from hermes_lark_streaming.card_limits import _footer_indexes, _last_answer_index, inspect_card
 from hermes_lark_streaming.cardkit.builder import build_complete_card
 from hermes_lark_streaming.config import Config
 from hermes_lark_streaming.footer.hooks import observe
@@ -25,7 +26,7 @@ from hermes_lark_streaming.streaming.tooluse import ToolUseTracker
 def test_enhanced_footer_reserves_nested_elements():
     cfg = Config()
     cfg._raw = {"streaming": {"footer": {"mode": "enhanced"}}}
-    assert cfg.footer_element_reserve == 6
+    assert cfg.footer_element_reserve == 40
     tracker = ToolUseTracker()
     for _ in range(128):
         tracker.record_start("check")
@@ -33,7 +34,7 @@ def test_enhanced_footer_reserves_nested_elements():
     state = SegmentState()
     state.on_tool_event(1)
     state.on_tool_event(len(steps))
-    assert find_tool_split_offset(base_count=1, seg=state.segments[0], all_steps=steps, footer_reserve=6) == 56
+    assert find_tool_split_offset(base_count=1, seg=state.segments[0], all_steps=steps, footer_reserve=40) < 56
     cfg._raw = {}
     assert cfg.footer_element_reserve == 2
     assert find_tool_split_offset(base_count=1, seg=state.segments[0], all_steps=steps) == 58
@@ -238,6 +239,38 @@ def test_completion_builder_and_config_modes():
     assert config.footer_mode == "classic"
     card = build_complete_card(segments=[], all_tool_steps=[], footer_mode="enhanced", footer_data={"model": "local"})
     assert any(e["tag"] == "collapsible_panel" for e in card["body"]["elements"])
+
+
+def test_footer_design_groups_icons_and_conservative_element_budget():
+    data = {"input_tokens": 100, "output_tokens": 3, "cache_read_tokens": 90,
+            "context_used": 100, "context_max": 1000, "model": "deepseek-v4.1-flash"}
+    elements = build_footer(data, text_size="normal")
+    assert [e.get("element_id") for e in elements[:3]] == [
+        "footer_separator", "footer_status", "footer_usage",
+    ]
+    assert elements[1]["icon"]["token"] == "done_outlined"
+    panel = elements[-1]
+    assert panel["header"]["icon_position"] == "left" and panel["expanded"] is False
+    groups = [e for e in panel["elements"] if e["tag"] == "column_set"]
+    assert len(groups) == 5
+    assert all(len(g["columns"]) == 2 for g in groups)
+    text = json.dumps(panel, ensure_ascii=False)
+    for label in ("A · 这次用了谁", "B · 时间花在哪里", "C · 本轮累计用了多少", "D · 对话有多长", "E · 切换与计费"):
+        assert label in text
+    assert "单次费用未提供" in text and "此页脚尚未观测" in text
+    cfg = Config()
+    cfg._raw = {"streaming": {"footer": {"mode": "enhanced"}}}
+    assert inspect_card({"body": {"elements": elements}}).elements <= cfg.footer_element_reserve
+    cfg._raw["streaming"]["footer"]["details"] = False
+    summary = inspect_card({"body": {"elements": build_footer(data, details=False)}})
+    assert summary.elements <= cfg.footer_element_reserve
+
+
+def test_compaction_never_treats_second_footer_row_as_answer():
+    elements = [{"tag": "markdown", "content": "REAL ANSWER"}, *build_footer({"input_tokens": 1, "output_tokens": 2})]
+    footer = _footer_indexes(elements)
+    assert footer == set(range(1, len(elements)))
+    assert _last_answer_index(elements, footer) == 0
 
 
 def test_hook_context_binding_no_fallback(monkeypatch):

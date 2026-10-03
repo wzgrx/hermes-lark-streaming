@@ -18,6 +18,7 @@ def observe(event: str, payload: dict[str, Any]) -> None:
         return
     try:
         from hermes_lark_streaming.controller import get_controller
+        from hermes_lark_streaming.metrics import metrics
 
         # Hermes binds these named ContextVars in Gateway/tool worker threads.
         # Its legacy get_current_session_key() also falls back to process env;
@@ -28,6 +29,7 @@ def observe(event: str, payload: dict[str, Any]) -> None:
             if var.name in {"HERMES_SESSION_KEY", "approval_session_key"} and isinstance(value, str) and value
         }
         if len(keys) != 1:
+            metrics.increment("footer.skip.context")
             return
         key = next(iter(keys))
         ctrl = get_controller()
@@ -35,7 +37,10 @@ def observe(event: str, payload: dict[str, Any]) -> None:
             return
         session = ctrl._session_keys.get(key)
         if session is not None and not session.state.is_terminal:
-            session.footer_state.observe(event, payload)
+            accepted = session.footer_state.observe(event, payload)
+            metrics.increment("footer.event.accepted" if accepted else "footer.event.rejected")
+        else:
+            metrics.increment("footer.skip.session")
     except Exception:
         # Avoid logging provider payloads, URLs or exceptions which could contain secrets.
         _logger.debug("footer observer skipped an incompatible event")

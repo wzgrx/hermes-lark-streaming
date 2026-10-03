@@ -98,7 +98,10 @@ def _trim_verbose_text(card: dict[str, Any], max_bytes: int) -> bool:
 
 
 def _footer_indexes(elements: list[dict[str, Any]]) -> set[int]:
-    indexes: set[int] = set()
+    indexes: set[int] = {
+        index for index, element in enumerate(elements)
+        if str(element.get("element_id", "")).startswith("footer_")
+    }
     for index, element in enumerate(elements[:-1]):
         if element.get("tag") != "hr":
             continue

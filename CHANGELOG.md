@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-03
+
+### Fixed
+- Match the reviewed footer hierarchy: separate icon summary rows, a left-hand details toggle, and five labelled groups with wrap-safe field/value pairs. Preserve the existing answer body and truthfully label unreported cost/compression fields.
+- Reserve nested footer elements during streaming splits and protect both summary rows from being mistaken for the newest answer during compaction.
+- Exercise the configured footer in real CardKit smoke probes instead of silently testing only the classic layout. Add payload-free telemetry counters for per-turn collection diagnostics.
+
 ## [0.17.0] - 2026-10-03
 
 ### Added

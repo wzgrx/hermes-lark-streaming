@@ -35,6 +35,21 @@ def _configured_client() -> FeishuClient:
     return FeishuClient(FeishuClientConfig(app_id=app_id, app_secret=app_secret, base_url=cfg.feishu_base_url))
 
 
+def _configured_final(segment: Segment) -> dict[str, Any]:
+    """Exercise the deployed footer layout, not only the classic default.
+
+    Smoke tests do not make model calls: usage must remain explicitly missing
+    and never be inserted into the real historical ledger.
+    """
+    cfg = Config()
+    return build_complete_card(
+        segments=[segment], all_tool_steps=[], width_mode="compact",
+        footer_enabled=cfg.footer_enabled, footer_mode=cfg.footer_mode,
+        footer_details=cfg.footer_details, footer_text_size=cfg.footer_text_size,
+        footer_data={"telemetry_missing": True},
+    )
+
+
 async def live_run(chat_id: str) -> dict[str, Any]:
     """Create → attach → stream → close → final update in an explicit test chat."""
     client = _configured_client()
@@ -46,7 +61,7 @@ async def live_run(chat_id: str) -> dict[str, Any]:
     await client.cardkit_close_streaming(card_id, sequence=3)
     segment = Segment(SegmentType.ANSWER, "answer_e2e")
     segment.text = "E2E: completed ✓"
-    final = build_complete_card(segments=[segment], all_tool_steps=[], width_mode="compact")
+    final = _configured_final(segment)
     await client.cardkit_update(card_id, final, sequence=4)
     return {
         "ok": True,
@@ -149,7 +164,7 @@ async def live_closed_stream_probe() -> dict[str, Any]:
 
         segment = Segment(SegmentType.ANSWER, "closed_probe_answer")
         segment.text = "Closed-stream final update probe"
-        final = build_complete_card(segments=[segment], all_tool_steps=[])
+        final = _configured_final(segment)
         try:
             await client.cardkit_update(card_id, final, sequence=sequence + 1)
         except FeishuAPIError as exc:

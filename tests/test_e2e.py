@@ -12,6 +12,17 @@ from hermes_lark_streaming import e2e
 from hermes_lark_streaming.feishu import FeishuAPIError
 
 
+def test_smoke_final_exercises_configured_footer_without_fake_usage(monkeypatch):
+    from hermes_lark_streaming.streaming.segments import Segment, SegmentType
+    monkeypatch.setattr(e2e, "Config", lambda: SimpleNamespace(
+        footer_enabled=True, footer_mode="enhanced", footer_details=True, footer_text_size="normal",
+    ))
+    final = e2e._configured_final(Segment(SegmentType.ANSWER, "probe"))
+    text = json.dumps(final, ensure_ascii=False)
+    assert "A · 这次用了谁" in text and "本轮统计待采集" in text
+    assert "↑0" not in text
+
+
 def _entity_client(*, initial_code: int = 300313, retry_code: int = 0) -> SimpleNamespace:
     stream = AsyncMock(side_effect=[
         FeishuAPIError("missing", initial_code),
