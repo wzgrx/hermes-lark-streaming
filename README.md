@@ -181,6 +181,10 @@ HERMES_LAUNCHER="$HOME/.local/bin/hermes"
 `doctor` 优先显示 Hermes 的运行源码身份，旧宿主才回退到包元数据。
 `warnings` 与硬失败分开：旧指标、未核验指标或缺少指标，不等于空闲 Gateway 故障；
 `delivery_unknown` 提醒核查投递回执，不会自动重发或伪造成功。
+`metrics.activity` 只汇总已核验的当前 Gateway 指标，显示 API 错误次数、完成卡片数、
+收尾失败和纯文本降级次数；错误码桶不重复计数。它们是进程启动以来的累计值，
+包含重试后恢复的错误，不等于当前仍在故障。旧或损坏的指标显示未核验，而不是零错误。
+`delivery_pending_expired` 表示待确认回执超过重试窗口，需先核查；诊断不会改动或重发它。
 默认 `smoke` 是离线检查，不代表真实飞书端到端验收。
 
 ---

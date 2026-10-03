@@ -181,6 +181,12 @@ HERMES_LAUNCHER="$HOME/.local/bin/hermes"
 Additive `warnings` distinguish missing current-process metrics evidence from hard failures.
 A stale snapshot after an idle restart is not proof of a broken card. Unknown delivery
 receipts remain intact without resending. Default `smoke` is offline, not live Feishu E2E.
+`metrics.activity` exposes verified current-Gateway totals for API errors, completed
+cards, completion failures and text fallbacks, without double-counting error-code
+buckets. These are process-lifetime totals including recovered retries, not proof
+of a current outage. Historical or malformed counters remain unverified, not zero.
+`delivery_pending_expired` requests inspection of receipts outside the retry window;
+diagnosis never reclaims them or sends another message.
 
 ---
 

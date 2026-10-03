@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Surface current-process API errors, failed completions and plain-text fallbacks in `doctor`, while distinguishing lifetime counters from a current outage. Do not double-count error-code buckets or treat stale/malformed counters as zero-error success.
+- Warn about pending delivery receipts beyond the retry window without reclaiming them, resending or rewriting the ledger. Preserve the default diagnostic exit-code contract: operational evidence is reported as warnings, not invented fatal failures.
 - Resolve modern Hermes source/build identity in `doctor` instead of displaying the PM placeholder wheel version `0.0.0`; retain old-host metadata compatibility.
 - Expose stale/missing/unverified metrics and unknown-delivery warnings without rewriting snapshots or resending ambiguous messages. Invalid UTF-8 metrics remain intact and are reported unavailable.
 - Parse Linux process fingerprints when `/proc/<pid>/stat` command names contain spaces or parentheses, preserving PID-reuse checks.

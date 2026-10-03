@@ -39,6 +39,29 @@ def _runtime_identity() -> dict[str, Any]:
     }
 
 
+def _current_activity(snapshot: dict[str, Any] | None, status: str) -> dict[str, Any]:
+    """Process-lifetime totals, not an outage verdict or a per-message receipt."""
+    result: dict[str, Any] = {
+        "verified": False, "api_errors": None, "completed_cards": None,
+        "completion_failures": None, "text_fallbacks": None,
+    }
+    if status != "current" or snapshot is None:
+        return result
+    counters = snapshot.get("counters")
+    if not isinstance(counters, dict) or any(
+        not isinstance(k, str) or type(v) is not int or v < 0 for k, v in counters.items()
+    ):
+        return result
+    result.update(
+        verified=True,
+        api_errors=sum(v for k, v in counters.items() if k.startswith("api.") and k.endswith(".error")),
+        completed_cards=counters.get("card.completed", 0),
+        completion_failures=counters.get("card.completion_failed", 0),
+        text_fallbacks=counters.get("card.text_fallback", 0),
+    )
+    return result
+
+
 def build_report() -> dict[str, Any]:
     cfg = Config()
     checks: list[dict[str, Any]] = []
@@ -101,6 +124,7 @@ def build_report() -> dict[str, Any]:
     warnings: list[dict[str, str]] = []
     snapshot = metrics.load_persisted(role="gateway")
     snapshot_status = metrics_module.gateway_snapshot_status(snapshot) if snapshot is not None else "missing"
+    activity = _current_activity(snapshot, snapshot_status)
     if snapshot_status != "current":
         warnings.append({
             "code": "metrics_" + snapshot_status,
@@ -108,6 +132,21 @@ def build_report() -> dict[str, Any]:
                 "No verified metrics from the current Gateway; historical counters are not live delivery evidence."
             ),
         })
+    elif not activity["verified"]:
+        warnings.append({
+            "code": "metrics_counters_invalid",
+            "detail": "Current-process snapshot counters are malformed; activity is unverified, not zero errors.",
+        })
+    for key, code, label in (
+        ("api_errors", "api_errors_recorded", "API error attempt(s), including recovered retries"),
+        ("completion_failures", "card_completion_failures_recorded", "card completion failure(s)"),
+        ("text_fallbacks", "card_text_fallbacks_recorded", "plain-text fallback(s)"),
+    ):
+        if activity[key]:
+            warnings.append({
+                "code": code,
+                "detail": f"{activity[key]} {label} recorded since Gateway start; not proof of a current outage.",
+            })
     if runtime["version"] == "unknown":
         warnings.append({
             "code": "runtime_identity_unknown", "detail": "Hermes is installed but its source version is unverified.",
@@ -118,11 +157,21 @@ def build_report() -> dict[str, Any]:
             "code": "delivery_unknown",
             "detail": f"{unknown} delivery outcome(s) remain unconfirmed; inspect receipts before any resend.",
         })
+    expired_pending = delivery.get("expired_pending_count", 0)
+    if expired_pending:
+        warnings.append({
+            "code": "delivery_pending_expired",
+            "detail": f"{expired_pending} pending receipt(s) exceeded the retry window; inspect before any resend.",
+        })
     return {
         "schema": 1,
         "runtime": runtime,
         "warnings": warnings,
-        "metrics": {"snapshot_status": snapshot_status, "updated_at": snapshot.get("updated_at") if snapshot else None},
+        "metrics": {
+            "snapshot_status": snapshot_status,
+            "updated_at": snapshot.get("updated_at") if snapshot else None,
+            "activity": activity,
+        },
         "integration": {"strategy": "native-observer+ast" if native["available"] else "ast", **native},
         "sdk": {"lark_oapi": sdk, "channel_sdk": probe_channel_sdk()},
         "delivery": delivery,
