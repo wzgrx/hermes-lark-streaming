@@ -162,44 +162,61 @@ See [operations](docs/OPERATIONS.md), [compatibility](docs/COMPATIBILITY.md), an
 ## CLI Commands
 
 ```bash
-HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
-$HERMES_PYTHON -m hermes_lark_streaming verify     # Verify compatibility (no file changes)
-$HERMES_PYTHON -m hermes_lark_streaming install    # Inject hooks
-$HERMES_PYTHON -m hermes_lark_streaming uninstall  # Remove hooks
-$HERMES_PYTHON -m hermes_lark_streaming restore    # Restore original files from backup
-$HERMES_PYTHON -m hermes_lark_streaming status     # Show patch/runtime status
-$HERMES_PYTHON -m hermes_lark_streaming doctor     # Config, hook, routing and dependency checks
-$HERMES_PYTHON -m hermes_lark_streaming metrics --json
-$HERMES_PYTHON -m hermes_lark_streaming metrics --sidecar  # Optional sidecar metrics
-$HERMES_PYTHON -m hermes_lark_streaming smoke      # Offline unless --execute is explicit
-$HERMES_PYTHON -m hermes_lark_streaming smoke --execute --closed-stream-probe  # Unattached entity; verify final update after close
-$HERMES_PYTHON -m hermes_lark_streaming lark-cli-smoke
-$HERMES_PYTHON -m hermes_lark_streaming repair-sdk  # only when doctor reports broken SDK
+HERMES_LAUNCHER="$HOME/.local/bin/hermes"
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming verify     # Read-only compatibility check
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming install    # Inject hooks
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall  # Remove hooks
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming restore    # Restore backup
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming status
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming doctor --json
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming metrics --json
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming metrics --sidecar
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming smoke      # Offline by default
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming smoke --execute --closed-stream-probe
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming lark-cli-smoke
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming repair-sdk # Only on diagnosed SDK problems
 ```
+
+`doctor` uses Hermes's executing-source identity, retaining metadata fallback for old hosts.
+Additive `warnings` distinguish missing current-process metrics evidence from hard failures.
+A stale snapshot after an idle restart is not proof of a broken card. Unknown delivery
+receipts remain intact without resending. Default `smoke` is offline, not live Feishu E2E.
 
 ---
 
 ## Update
 
+Wait for Gateway to become idle before stopping it. Follow [INSTALL.md](INSTALL.md)
+for scan review and dependency consent. On any failure, repair or roll back before starting.
+
 ```bash
-cd hermes-lark-streaming
-git pull
-HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
-$HERMES_PYTHON -m pip install -e .
-$HERMES_PYTHON -m hermes_lark_streaming uninstall   # Remove old injection first
-$HERMES_PYTHON -m hermes_lark_streaming verify
-$HERMES_PYTHON -m hermes_lark_streaming install
-hermes gateway restart
+set -e
+HERMES_LAUNCHER="$HOME/.local/bin/hermes"
+"$HERMES_LAUNCHER" gateway stop
+"$HERMES_LAUNCHER" plugins update hermes-lark-streaming
+"$HERMES_LAUNCHER" pm install
+"$HERMES_LAUNCHER" plugins doctor hermes-lark-streaming --ci
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming verify
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming install
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming status
+"$HERMES_LAUNCHER" gateway start
 ```
 
 ---
 
 ## Uninstall
 
+Wait for idle first. Remove hooks before removing the managed plugin; preserve credentials.
+
 ```bash
-HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
-$HERMES_PYTHON -m hermes_lark_streaming uninstall
-$HERMES_PYTHON -m pip uninstall hermes-lark-streaming
+set -e
+HERMES_LAUNCHER="$HOME/.local/bin/hermes"
+"$HERMES_LAUNCHER" gateway stop
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall
+"$HERMES_LAUNCHER" plugins remove hermes-lark-streaming
+"$HERMES_LAUNCHER" pm install
+"$HERMES_LAUNCHER" gateway start
 ```
 
 ---

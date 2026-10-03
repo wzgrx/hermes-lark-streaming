@@ -162,45 +162,62 @@ display:
 ## CLI 命令
 
 ```bash
-HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
-$HERMES_PYTHON -m hermes_lark_streaming verify     # 验证兼容性（不修改文件）
-$HERMES_PYTHON -m hermes_lark_streaming install    # 注入 hook
-$HERMES_PYTHON -m hermes_lark_streaming uninstall  # 移除 hook
-$HERMES_PYTHON -m hermes_lark_streaming restore    # 从备份恢复原始文件
-$HERMES_PYTHON -m hermes_lark_streaming status     # 查看状态（含 Hermes Python/安装目录检测）
-$HERMES_PYTHON -m hermes_lark_streaming doctor     # 配置、hook、路由和依赖诊断
-$HERMES_PYTHON -m hermes_lark_streaming metrics --json
-$HERMES_PYTHON -m hermes_lark_streaming metrics --sidecar  # 可选 sidecar 的独立指标
-$HERMES_PYTHON -m hermes_lark_streaming smoke      # 默认离线，不访问飞书
-$HERMES_PYTHON -m hermes_lark_streaming smoke --execute --entity-only  # 飞书实体探针，不发群消息
-$HERMES_PYTHON -m hermes_lark_streaming smoke --execute --closed-stream-probe  # 关闭流式后验证终态全量更新；不发群消息
-$HERMES_PYTHON -m hermes_lark_streaming lark-cli-smoke
-$HERMES_PYTHON -m hermes_lark_streaming repair-sdk  # only when doctor reports broken SDK
+HERMES_LAUNCHER="$HOME/.local/bin/hermes"
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming verify     # 只读兼容检查
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming install    # 注入 hook
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall  # 移除 hook
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming restore    # 恢复备份
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming status
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming doctor --json
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming metrics --json
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming metrics --sidecar
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming smoke      # 默认离线
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming smoke --execute --entity-only
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming smoke --execute --closed-stream-probe
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming lark-cli-smoke
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming repair-sdk # 仅 SDK 诊断异常时
 ```
+
+`doctor` 优先显示 Hermes 的运行源码身份，旧宿主才回退到包元数据。
+`warnings` 与硬失败分开：旧指标、未核验指标或缺少指标，不等于空闲 Gateway 故障；
+`delivery_unknown` 提醒核查投递回执，不会自动重发或伪造成功。
+默认 `smoke` 是离线检查，不代表真实飞书端到端验收。
 
 ---
 
 ## 更新
 
+先确认 Gateway 空闲，再停止。扫描提示、依赖同意及维护版审核参数见
+[INSTALL.md](INSTALL.md)。任何一步失败时，先修复或回滚，再启动。
+
 ```bash
-cd hermes-lark-streaming
-git pull
-HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
-$HERMES_PYTHON -m pip install -e .
-$HERMES_PYTHON -m hermes_lark_streaming uninstall   # 先移除旧注入
-$HERMES_PYTHON -m hermes_lark_streaming verify
-$HERMES_PYTHON -m hermes_lark_streaming install
-hermes gateway restart
+set -e
+HERMES_LAUNCHER="$HOME/.local/bin/hermes"
+"$HERMES_LAUNCHER" gateway stop
+"$HERMES_LAUNCHER" plugins update hermes-lark-streaming
+"$HERMES_LAUNCHER" pm install
+"$HERMES_LAUNCHER" plugins doctor hermes-lark-streaming --ci
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming verify
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming install
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming status
+"$HERMES_LAUNCHER" gateway start
 ```
 
 ---
 
 ## 卸载
 
+同样先确认空闲；移除钩子后再移除托管插件，保留飞书凭据。
+
 ```bash
-HERMES_PYTHON=~/.hermes/hermes-agent/venv/bin/python3
-$HERMES_PYTHON -m hermes_lark_streaming uninstall
-$HERMES_PYTHON -m pip uninstall hermes-lark-streaming
+set -e
+HERMES_LAUNCHER="$HOME/.local/bin/hermes"
+"$HERMES_LAUNCHER" gateway stop
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall
+"$HERMES_LAUNCHER" plugins remove hermes-lark-streaming
+"$HERMES_LAUNCHER" pm install
+"$HERMES_LAUNCHER" gateway start
 ```
 
 ---

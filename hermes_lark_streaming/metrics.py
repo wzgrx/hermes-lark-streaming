@@ -18,7 +18,12 @@ _logger = logging.getLogger("hermes_lark_streaming")
 def _process_start_time(pid: int) -> int | None:
     """Linux process fingerprint, comparable with Hermes gateway_state.json."""
     try:
-        return int(Path(f"/proc/{pid}/stat").read_text(encoding="utf-8").split()[21])
+        # comm is parenthesized and may contain spaces or closing parentheses.
+        # Fields after the final ')' start at state (field 3); starttime is 22.
+        raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        if not raw.startswith(f"{pid} (") or ")" not in raw:
+            return None
+        return int(raw.rpartition(")")[2].split()[19])
     except (IndexError, OSError, ValueError):
         return None
 
@@ -26,7 +31,10 @@ def _process_start_time(pid: int) -> int | None:
 def _gateway_runtime_identity() -> tuple[int, int] | None:
     """Ask the host to verify the live Gateway, including its PID-reuse guard."""
     try:
-        from gateway.status import get_process_start_time, live_gateway_pid_for_home  # type: ignore[import-not-found]
+        from gateway.status import (  # type: ignore[import-not-found,import-untyped]
+            get_process_start_time,
+            live_gateway_pid_for_home,
+        )
 
         home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
         pid = live_gateway_pid_for_home(home)
@@ -131,7 +139,7 @@ class MetricsStore:
         selected_role = role or self._role
         try:
             payload = json.loads(self.path_for_role(selected_role).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, UnicodeError, json.JSONDecodeError):
             return None
         # Legacy snapshots had no owner, so a sidecar may have replaced a
         # gateway snapshot at the old shared path. Do not report it as a

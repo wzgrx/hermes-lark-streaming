@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Resolve modern Hermes source/build identity in `doctor` instead of displaying the PM placeholder wheel version `0.0.0`; retain old-host metadata compatibility.
+- Expose stale/missing/unverified metrics and unknown-delivery warnings without rewriting snapshots or resending ambiguous messages. Invalid UTF-8 metrics remain intact and are reported unavailable.
+- Parse Linux process fingerprints when `/proc/<pid>/stat` command names contain spaces or parentheses, preserving PID-reuse checks.
+- Replace obsolete runtime `venv/pip` commands in both READMEs with the durable launcher and managed plugin lifecycle.
 - Correct pin removal guidance: ordinary reinstall retains an existing pin; document backup, managed removal, interactive main install and provenance verification, plus the maintained update review flag.
 - Cache runtime display flags for one second instead of parsing `config.yaml` on every stream delta; recheck file metadata after expiry and serialize concurrent readers so `/reasoning` changes still appear promptly.
 - Mark Hermes' native stream consumer as intentionally unfed when CardKit owns a delta, eliminating the core's false "possible duplicate send" warning without suppressing the native fallback path.

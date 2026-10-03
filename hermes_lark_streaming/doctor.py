@@ -9,11 +9,34 @@ import subprocess
 import sys
 from typing import Any
 
+from . import metrics as metrics_module
 from .config import Config
 from .delivery import DeliveryLedgerError, delivery_ledger
 from .metrics import metrics
 from .native_hooks import runtime_capability
 from .sdk import probe_channel_sdk, probe_lark_oapi
+
+
+def _runtime_identity() -> dict[str, Any]:
+    """Use the host's executing-source identity, not a PM placeholder wheel."""
+    try:
+        from hermes_cli.version_info import get_version_info  # type: ignore[import-not-found,import-untyped]
+
+        info = get_version_info()
+        version = info.display_version
+        if isinstance(version, str) and version not in {"", "unknown", "0.0.0"}:
+            return {"available": True, "version": version, "source": info.source, "commit": info.commit}
+    except Exception:
+        # Older supported Hermes hosts predate canonical source identity.
+        pass
+    try:
+        version = importlib.metadata.version("hermes-agent")
+    except importlib.metadata.PackageNotFoundError:
+        return {"available": False, "version": "not installed in this interpreter", "source": "missing", "commit": None}
+    return {
+        "available": True, "version": version if version != "0.0.0" else "unknown",
+        "source": "package" if version != "0.0.0" else "package-placeholder", "commit": None,
+    }
 
 
 def build_report() -> dict[str, Any]:
@@ -27,11 +50,8 @@ def build_report() -> dict[str, Any]:
     add("streaming.enabled", cfg.enabled, "enabled" if cfg.enabled else "disabled")
     add("credentials", credentials, "configured" if credentials else "missing")
     add("python", sys.version_info >= (3, 11), sys.version.split()[0])
-    try:
-        runtime = importlib.metadata.version("hermes-agent")
-    except importlib.metadata.PackageNotFoundError:
-        runtime = "not installed in this interpreter"
-    add("hermes-runtime", runtime != "not installed in this interpreter", runtime)
+    runtime = _runtime_identity()
+    add("hermes-runtime", runtime["available"], runtime["version"])
     lark_cli = shutil.which("lark-cli")
     add("lark-cli", bool(lark_cli), lark_cli or "optional; not installed")
     sdk = probe_lark_oapi()
@@ -76,8 +96,33 @@ def build_report() -> dict[str, Any]:
             False,
             "unresolved delivery evidence fills the ledger; inspect receipts before new sends",
         )
+    # Warnings describe evidence gaps, not necessarily a broken idle Gateway.
+    # Reading diagnostics must not create a fresh empty snapshot or resend data.
+    warnings: list[dict[str, str]] = []
+    snapshot = metrics.load_persisted(role="gateway")
+    snapshot_status = metrics_module.gateway_snapshot_status(snapshot) if snapshot is not None else "missing"
+    if snapshot_status != "current":
+        warnings.append({
+            "code": "metrics_" + snapshot_status,
+            "detail": (
+                "No verified metrics from the current Gateway; historical counters are not live delivery evidence."
+            ),
+        })
+    if runtime["version"] == "unknown":
+        warnings.append({
+            "code": "runtime_identity_unknown", "detail": "Hermes is installed but its source version is unverified.",
+        })
+    unknown = (delivery.get("counts") or {}).get("unknown", 0)
+    if unknown:
+        warnings.append({
+            "code": "delivery_unknown",
+            "detail": f"{unknown} delivery outcome(s) remain unconfirmed; inspect receipts before any resend.",
+        })
     return {
         "schema": 1,
+        "runtime": runtime,
+        "warnings": warnings,
+        "metrics": {"snapshot_status": snapshot_status, "updated_at": snapshot.get("updated_at") if snapshot else None},
         "integration": {"strategy": "native-observer+ast" if native["available"] else "ast", **native},
         "sdk": {"lark_oapi": sdk, "channel_sdk": probe_channel_sdk()},
         "delivery": delivery,
@@ -111,7 +156,9 @@ def print_report(*, as_json: bool = False) -> int:
                 f"({delivery['unresolved_capacity_remaining']} slots remaining) "
                 f"at {delivery['path']}"
             )
-        print(f"  metrics: {report['metrics_path']}")
+        print(f"  metrics: {report['metrics_path']} (snapshot={report['metrics']['snapshot_status']})")
+        for warning in report["warnings"]:
+            print(f"  WARN {warning['code']}: {warning['detail']}")
     return 0 if report["ok"] else 1
 
 
