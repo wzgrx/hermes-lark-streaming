@@ -229,8 +229,8 @@ def test_reference_native_ids_and_nested_expansion_updates_are_valid_and_immutab
     assert d == original and elements == before
 
 
-def test_config_opt_in_and_resources_are_independent_and_timezone_is_validated():
-    cfg = Config()
+def test_config_opt_in_and_resources_are_independent_and_timezone_is_validated(tmp_path):
+    cfg = Config(tmp_path)
     cfg._raw = {
         "streaming": {
             "layout": "reference",

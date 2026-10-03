@@ -1,6 +1,8 @@
 # 用户参考卡片 V1 — 设计基准与代码契约
 
-> 当前托管运行 0.20.3，布局与 0.20.2 相同；修复时区热更新和终态嵌套快照隔离。见[独立部署摘要](assets/footer-cache-boundaries-deployment-checks.json)。下文证据均保留生成时的版本范围，不把旧卡片复核冒充新版新轮次测试。
+> **当前范围 · 0.20.4**：桌面 V1 修复与验证见 [DESKTOP-HARDENING.md](DESKTOP-HARDENING.md)。手机已由用户排除，不是阻塞项；以下历史记录不代表新版实测。
+
+> 历史部署记录：0.20.3，布局与 0.20.2 相同；修复时区热更新和终态嵌套快照隔离。见[独立部署摘要](assets/footer-cache-boundaries-deployment-checks.json)。下文证据均保留生成时的版本范围，不把旧卡片复核冒充新版新轮次测试。
 
 > 0.20.2 增强账本与后台采样正确性，不改变本页冻结图、原生布局或钩子。1450 项本地测试及精确提交 Tests / CodeQL 通过，已空闲部署并通过运行健康检查。[本版真实新轮次](assets/history-resilience-real-gateway-checks.json)已验证工具退出 0 / 7、原话题投递、客户端字段和账本一致；下列旧轮次/截图仍明确归属 0.20.1，不冒充手机或展开逐像素验收。见 [历史与采样增强](HISTORY-RESILIENCE.md)和[独立部署记录](assets/history-resilience-deployment-checks.json)。
 
@@ -43,8 +45,8 @@ streaming:
 |---|---|---|
 | 工具摘要 | `cardkit/reference.py` | 结束/成功/失败分开；保留失败累计与原始序号 |
 | 重复进度 | `_tool_groups` | 只合并连续、同目标、无输出的成功 process poll；命令不自动合并 |
-| 失败突出 | 有界优先选失败/运行中，再填最近步骤；保持选择后的顺序 | 较早省略项有明确数量，失败不被后来成功覆盖 |
-| 原始记录 | 二级原生折叠面板 | 最近最多 24 步并限制文本字节；终端结果白名单投影与脱敏；不收集 read/browser/media 内容；超限明确显示 N/总数 |
+| 失败突出 | 有界优先选失败/运行中，再填最近步骤；保持选择后的顺序 | 未展示组有明确数量（可能位于中间，不仅是较早步骤），失败不被后来成功覆盖 |
+| 步骤摘要 | 二级原生折叠面板，有界摘录而非完整原始日志 | 最近最多 24 步并限制文本字节；终端结果白名单投影与脱敏；不收集 read/browser/media 内容；超限明确显示 N/总数 |
 | GPU/CPU/内存 | `footer/host.py` | GPU 0；CPU 相邻样本增量；MemTotal−MemAvailable；未知不是 0 |
 | 采样运行 | 单控制器合并后台任务，10 秒缓存 | 不 busy-spin，不在 renderer 执行 shell，不为每个 delta 启动进程 |
 | 模型/上下文标题 | `build_reference_footer` | 末次主请求上下文与本轮累计 Token 不混算 |

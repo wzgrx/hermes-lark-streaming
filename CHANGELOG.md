@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.4] - 2026-10-03
+
+### Fixed
+- Reconcile live V1 tool-panel visibility against the accepted CardKit tree: explicitly add/delete panels in the existing writer, keep prefix/body/footer order, and commit membership only after success. Missing tools/resources use the existing one-shot reseed and body replay instead of repeatedly updating a missing element.
+- Finish the 0.20.3 timezone fix at the configuration-file boundary. History/display use the TTL/stat-cached live snapshot; structural layout stays pinned until restart. Invalid YAML, wrong root/section types and temporary file disappearance retain the last valid snapshot, with bounded credential-free warnings.
+- Measure the first observed response from the earliest API attempt, including retries/backoff; retain the responding attempt latency separately. Unknown first-chunk timing stays unknown.
+
+### Changed
+- Preserve V1 layout while distinguishing loading/failed/empty history with one compact line, labelling bounded tool excerpts honestly, using GiB units and distinguishing WSL memory from ordinary host memory.
+- Extract shared model-identity and telemetry-note renderers; V1 no longer indexes a different layout's element positions.
+- Desktop is the current acceptance scope per the operator. Mobile validation is out of scope, not a release blocker; historical evidence retains its version and platform labels.
+
+### Validation
+- Regression fixtures cover real-file reload, retry/first-response semantics, dynamic add/delete, rejected/concurrent toggles, card handoff and bounded missing-panel recovery. Full-suite, exact CI, server probe and deployment evidence are tracked separately in docs/DESKTOP-HARDENING.md.
+- 1482 full local tests pass (27 added), plus Ruff, mypy (49 source files) and an offline wheel. An unattached live CardKit entity accepts add/delete/re-add with continued body streaming and close; no chat message, model call or ledger write. CI/deployment and visual acceptance remain separate.
+
 ## [0.20.3] - 2026-10-03
 
 ### Fixed

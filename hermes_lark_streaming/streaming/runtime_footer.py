@@ -8,7 +8,13 @@ from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..footer.runtime import build_runtime_footer, runtime_actions, runtime_signature
+from ..footer.runtime import (
+    PANEL_IDS,
+    build_runtime_footer,
+    reconcile_runtime_panels,
+    runtime_actions,
+    runtime_signature,
+)
 from ..footer.state import label
 from .session import SessionState
 
@@ -28,6 +34,14 @@ class RuntimeFooterController:
     _profile_home: Path
     _reference_host: HostSampler | None
     _reference_history: HistorySummary | None
+
+    @staticmethod
+    def _remember_runtime_panels(session: CardSession, card: dict[str, Any], card_id: str) -> None:
+        session.runtime_panel_card_id = card_id
+        session.runtime_panel_ids = {
+            str(el["element_id"]) for el in card.get("body", {}).get("elements", [])
+            if el.get("element_id") in PANEL_IDS
+        }
 
     def _runtime_enabled(self) -> bool:
         return self._cfg.card_layout == "reference" or (
@@ -147,6 +161,9 @@ class RuntimeFooterController:
         if now < max(session.runtime_retry_after, session.stream_retry_after):
             return True
         signature = runtime_signature(data)
+        # Display toggles must reconcile structure even inside the telemetry throttle.
+        if self._cfg.card_layout == "reference":
+            signature += (bool(data.get("reference", {}).get("show_tools")),)
         if signature == session.runtime_last_signature and now < session.runtime_next_update:
             return True
         elements = build_runtime_footer(data, text_size=self._cfg.footer_text_size, details=self._cfg.footer_details)
@@ -155,14 +172,30 @@ class RuntimeFooterController:
             from ..cardkit.reference import build_reference_prefix
 
             elements = build_reference_prefix(data) + elements
+        actions = runtime_actions(elements, reference=reference)
+        desired_panels = None
+        if reference:
+            if session.runtime_panel_ids is None:
+                # Compatibility for directly constructed/restored sessions. Normal
+                # creation, rollover and reseed record the accepted card explicitly.
+                self._remember_runtime_panels(session, {"body": {"elements": elements}}, session.card_id or "")
+            from .segments import SegmentType
+
+            prefix_anchor = next((seg.el_id for seg in session.active_segments()
+                                  if seg.created and seg.type != SegmentType.TOOL), "loading_icon")
+            actions, desired_panels = reconcile_runtime_panels(
+                elements, session.runtime_panel_ids or set(), prefix_anchor=prefix_anchor,
+            )
         try:
             # An empty segment list avoids marking body reasoning/tool segments
             # clean merely because footer metadata was updated.
-            ok = await self._do_batch_update(session, [], runtime_actions(elements, reference=reference), set(), {}, [])
+            ok = await self._do_batch_update(session, [], actions, set(), {}, [])
         except (Exception, asyncio.CancelledError):
             session.runtime_retry_after = time.monotonic() + 5.0
             raise
         if ok:
+            if desired_panels is not None:
+                session.runtime_panel_ids = desired_panels
             session.runtime_last_signature = signature
             session.runtime_next_update = time.monotonic() + 2.0
             session.runtime_retry_after = 0.0

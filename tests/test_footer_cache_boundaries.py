@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from hermes_lark_streaming.controller import StreamCardController
 from hermes_lark_streaming.footer.history import UsageLedger
@@ -31,7 +32,8 @@ def test_sealed_routes_are_owned_by_the_turn(method):
 
 
 @pytest.mark.asyncio
-async def test_timezone_reload_recomputes_day_and_month_without_restarting_controller(tmp_path):
+async def test_timezone_reload_recomputes_day_and_month_without_restarting_controller(tmp_path, monkeypatch):
+    monkeypatch.setattr("hermes_lark_streaming.config._CONFIG_RELOAD_TTL_S", 0)
     path = tmp_path / "state/card-usage.sqlite3"
     # It is Oct 1 in Shanghai, still Sep 30 in UTC. The old event belongs
     # to Sep 30 in both zones, so neither today's nor this month's total agrees.
@@ -40,10 +42,12 @@ async def test_timezone_reload_recomputes_day_and_month_without_restarting_contr
         "api_request_id": "r", "session_id": "s", "turn_id": "t",
         "started_at": now - 7200, "usage": {"prompt_tokens": 10, "output_tokens": 1},
     })
-    ctrl = StreamCardController(tmp_path)
     history_config = {"enabled": True, "timezone": "UTC"}
-    ctrl._cfg._raw = {"streaming": {"layout": "reference", "resources": {"enabled": False},
-                                   "footer": {"mode": "enhanced", "history": history_config}}}
+    config = {"streaming": {"layout": "reference", "resources": {"enabled": False},
+                           "footer": {"mode": "enhanced", "history": history_config}}}
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config))
+    ctrl = StreamCardController(tmp_path)
     session = CardSession("fixture", "fixture-chat", asyncio.get_running_loop())
     session.state = SessionState.COMPLETED
 
@@ -57,6 +61,7 @@ async def test_timezone_reload_recomputes_day_and_month_without_restarting_contr
         before = ctrl._reference_snapshot(session, {})["reference"]["history"]
         assert before["today"]["tokens"] == before["month"]["tokens"] == 11
         history_config["timezone"] = "Asia/Shanghai"
+        config_path.write_text(yaml.safe_dump(config))
         pending = ctrl._reference_snapshot(session, {})["reference"]["history"]
         assert pending["timezone"] == "Asia/Shanghai"
         assert pending["status"] == "pending" and "today" not in pending

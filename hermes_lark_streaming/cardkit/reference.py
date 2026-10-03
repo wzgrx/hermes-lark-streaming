@@ -185,8 +185,8 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any]) -> dict[str, An
     if omitted or prior:
         children.append(
             markdown(
-                f"{omitted} earlier groups hidden · {prior} steps on earlier cards · {failures} total failures",
-                f"较早 {omitted} 组未展示 · 前卡 {prior} 步 · 全轮失败 {failures} 次",
+                f"{omitted} groups omitted · {prior} steps on earlier cards · {failures} total failures",
+                f"{omitted} 组未展示 · 前卡 {prior} 步 · 全轮失败 {failures} 次",
                 "notation",
             )
         )
@@ -260,8 +260,8 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any]) -> dict[str, An
     if raw:
         children.append(
             _panel(
-                f"Raw records · latest {len(raw)}/{len(steps)} steps",
-                f"原始记录 · 最近 {len(raw)}/{len(steps)} 步 · 命令与输出按序保留",
+                f"Step excerpts · latest {len(raw)}/{len(steps)} · bounded command/output",
+                f"步骤摘要 · 最近 {len(raw)}/{len(steps)} 步 · 命令与输出有长度限制",
                 [{"tag": "markdown", "content": "\n\n".join(raw), "text_size": "notation"}],
                 "ref_tool_records",
             )
@@ -284,7 +284,7 @@ def build_resources(host: dict[str, Any]) -> dict[str, Any]:
         if used is None or not maximum:
             return "—"
         total = f"{maximum:.1f}".rstrip("0").rstrip(".")
-        return f"{used:.1f} / {total} GB · {used / maximum:.0%}"
+        return f"{used:.1f} / {total} GiB · {used / maximum:.0%}"
 
     gpu, temperature, vram, ram = (
         value("gpu_percent", "%"),
@@ -315,7 +315,8 @@ def build_resources(host: dict[str, Any]) -> dict[str, Any]:
         ),
         metric_row(
             _metric("CPU total", "CPU 总利用率", (value("cpu_percent", "%"),) * 2),
-            _metric("WSL memory", "WSL 内存使用", (ram,) * 2),
+            _metric("WSL memory" if host.get("scope") == "WSL" else "Host memory",
+                    "WSL 内存使用" if host.get("scope") == "WSL" else "主机内存使用", (ram,) * 2),
             "notation",
         ),
         {"tag": "hr"},
@@ -356,13 +357,12 @@ def build_reference_footer(
     live_status: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     # Reuse the audited requested/returned-ID equality and escaping contract.
-    from ..footer.render import build_footer
+    from ..footer.render import footer_annotations, model_identity_line
 
     bounded = dict(data)
     routes = data.get("routes")
     if isinstance(routes, list):
         bounded["routes"] = [label(r)[:60] for r in routes[:3]]
-    old = build_footer(bounded, text_size=text_size)[-1]["elements"]
     model = label(data.get("model")) or "Model pending / 模型待返回"
     used, maximum = count(data.get("context_used")), count(data.get("context_max"))
     maximum_label = f"{maximum / 1_000_000:.1f}M" if maximum and maximum % 1_000_000 == 0 else compact(maximum or 0)
@@ -433,7 +433,7 @@ def build_reference_footer(
         f"<font color='grey'>{provider or _UNKNOWN[1]} · {api or _UNKNOWN[1]} · {effort_zh}</font>",
         text_size,
     )
-    model_line = dict(old[1])
+    model_line = model_identity_line(bounded, text_size)
     model_line["content"] = "<font color='grey'>" + re.sub(r"</?font[^>]*>", "", model_line["content"]) + "</font>"
     model_line["i18n_content"] = {
         k: "<font color='grey'>" + re.sub(r"</?font[^>]*>", "", v) + "</font>"
@@ -457,7 +457,10 @@ def build_reference_footer(
                     text_size,
                 ),
                 metric_row(
-                    _metric("First response", "首响应", (f"{first:.2f}s",) * 2 if first is not None else _UNKNOWN),
+                    _metric(
+                        "First response incl. retry", "首响应（含重试）",
+                        (f"{first:.2f}s",) * 2 if first is not None else _UNKNOWN,
+                    ),
                     _metric(
                         "Cost", "费用", ("<font color='grey'>Not reported</font>", "<font color='grey'>未提供</font>")
                     ),
@@ -467,89 +470,99 @@ def build_reference_footer(
         )
         history = data.get("reference", {}).get("history")
         if isinstance(history, dict):
-            periods = []
-            for key, en_label, zh_label in (
-                ("today", "Today", "今日"),
-                ("month", "Month", "本月"),
-                ("total", "Total", "累计"),
-            ):
-                bucket = history.get(key, {})
-                n = count(bucket.get("tokens"))
-                v = compact(n) if n is not None else "—"
-                partial = "*" if bucket.get("partial") else ""
-                periods.append((f"{en_label} {v}{partial}", f"{zh_label} {v}{partial}"))
-            children.append({"tag": "hr"})
-            children.append(
-                markdown(
-                    "◷ History · <font color='grey'>" + " · ".join(p[0] for p in periods) + "</font>",
-                    "◷ 历史用量 · <font color='grey'>" + " · ".join(p[1] for p in periods) + "</font>",
-                    text_size,
+            history_status = history.get("status")
+            if history_status in {"pending", "unavailable", "no_history"}:
+                en_status, zh_status = {
+                    "pending": ("Loading local history…", "正在读取本机历史…"),
+                    "unavailable": ("History read failed or timed out; retrying later", "历史读取失败或超时，稍后重试"),
+                    "no_history": ("No recorded main requests yet", "尚无已记录的主请求"),
+                }[history_status]
+                children.append(markdown(f"◷ {en_status}", f"◷ {zh_status}", text_size))
+            if history_status not in {"pending", "unavailable", "no_history"}:
+                periods = []
+                for key, en_label, zh_label in (
+                    ("today", "Today", "今日"),
+                    ("month", "Month", "本月"),
+                    ("total", "Total", "累计"),
+                ):
+                    bucket = history.get(key, {})
+                    n = count(bucket.get("tokens"))
+                    v = compact(n) if n is not None else "—"
+                    partial = "*" if bucket.get("partial") else ""
+                    periods.append((f"{en_label} {v}{partial}", f"{zh_label} {v}{partial}"))
+                children.append({"tag": "hr"})
+                children.append(
+                    markdown(
+                        "◷ History · <font color='grey'>" + " · ".join(p[0] for p in periods) + "</font>",
+                        "◷ 历史用量 · <font color='grey'>" + " · ".join(p[1] for p in periods) + "</font>",
+                        text_size,
+                    )
                 )
-            )
-            history_partial = any(history.get(k, {}).get("partial") for k in ("today", "month", "total"))
-            partial_en, partial_zh = (" · * partial", " · * 不完整") if history_partial else ("", "")
-            children.append(
-                markdown(
-                    f"<font color='grey'>Main requests · input + output · since "
-                    f"{safe(history.get('since')) or 'not recorded'} · {safe(history.get('timezone')) or 'UTC'}"
-                    f"{partial_en}</font>",
-                    f"<font color='grey'>主请求 · 输入＋输出 · 自 {safe(history.get('since')) or '未记录'} 起 · "
-                    f"{safe(history.get('timezone')) or 'UTC'}{partial_zh}</font>",
-                    "notation",
+                history_partial = any(history.get(k, {}).get("partial") for k in ("today", "month", "total"))
+                partial_en, partial_zh = (" · * partial", " · * 不完整") if history_partial else ("", "")
+                children.append(
+                    markdown(
+                        f"<font color='grey'>Main requests · input + output · since "
+                        f"{safe(history.get('since')) or 'not recorded'} · {safe(history.get('timezone')) or 'UTC'}"
+                        f"{partial_en}</font>",
+                        f"<font color='grey'>主请求 · 输入＋输出 · 自 {safe(history.get('since')) or '未记录'} 起 · "
+                        f"{safe(history.get('timezone')) or 'UTC'}{partial_zh}</font>",
+                        "notation",
+                    )
                 )
-            )
-            if history.get("show_models") and history.get("models"):
-                rows = [markdown("By subscription / model", "按订阅商 / 模型复盘", text_size)]
-                for item in history["models"][:3]:
-                    subscription = label(item.get("subscription"))
-                    model_label = label(item.get("model"))
-                    name = safe(subscription[:32]) + ("…" if len(subscription) > 32 else "")
-                    model_value = safe(model_label[:48]) + ("…" if len(model_label) > 48 else "")
-                    tokens = compact(item["tokens"]) if count(item.get("tokens")) is not None else "—"
-                    if item.get("partial"):
-                        tokens += "*"
-                    total_text = markdown(tokens, tokens, text_size)
-                    total_text["text_align"] = "right"
-                    rows.append(
+                if history.get("show_models") and history.get("models"):
+                    rows = [markdown("By subscription / model", "按订阅商 / 模型复盘", text_size)]
+                    for item in history["models"][:3]:
+                        subscription = label(item.get("subscription"))
+                        model_label = label(item.get("model"))
+                        name = safe(subscription[:32]) + ("…" if len(subscription) > 32 else "")
+                        model_value = safe(model_label[:48]) + ("…" if len(model_label) > 48 else "")
+                        tokens = compact(item["tokens"]) if count(item.get("tokens")) is not None else "—"
+                        if item.get("partial"):
+                            tokens += "*"
+                        total_text = markdown(tokens, tokens, text_size)
+                        total_text["text_align"] = "right"
+                        rows.append(
+                            {
+                                "tag": "column_set",
+                                "flex_mode": "none",
+                                "horizontal_spacing": "8px",
+                                "columns": [
+                                    column(
+                                        2,
+                                        [
+                                            markdown(
+                                                f"<font color='grey'>{name}</font>",
+                                                f"<font color='grey'>{name}</font>",
+                                                text_size,
+                                            )
+                                        ],
+                                    ),
+                                    column(4, [markdown(model_value, model_value, text_size)]),
+                                    column(1, [total_text]),
+                                ],
+                            }
+                        )
+                    children.append(
                         {
                             "tag": "column_set",
-                            "flex_mode": "none",
-                            "horizontal_spacing": "8px",
-                            "columns": [
-                                column(
-                                    2,
-                                    [
-                                        markdown(
-                                            f"<font color='grey'>{name}</font>",
-                                            f"<font color='grey'>{name}</font>",
-                                            text_size,
-                                        )
-                                    ],
-                                ),
-                                column(4, [markdown(model_value, model_value, text_size)]),
-                                column(1, [total_text]),
-                            ],
+                            "background_style": "grey-50",
+                            "columns": [{**column(1, rows), "padding": "8px"}],
                         }
                     )
                 children.append(
-                    {
-                        "tag": "column_set",
-                        "background_style": "grey-50",
-                        "columns": [{**column(1, rows), "padding": "8px"}],
-                    }
+                    markdown(
+                        "<font color='grey'>Local observed usage, not a provider bill or account allowance.</font>",
+                        "<font color='grey'>累计是本机账本可观测用量，不等于服务商账单或账户额度。</font>",
+                        "notation",
+                    )
                 )
-            children.append(
-                markdown(
-                    "<font color='grey'>Local observed usage, not a provider bill or account allowance.</font>",
-                    "<font color='grey'>累计是本机账本可观测用量，不等于服务商账单或账户额度。</font>",
-                    "notation",
-                )
-            )
         # Route/error/partial/compression metadata stays visible, not erased to
-        # force a polished screenshot. The old last context row is in the header.
-        children.extend(old[7:-1])
+        # force a polished screenshot. Context belongs in the panel header.
+        annotations, note = footer_annotations(bounded, text_size)
+        children.extend(annotations)
         if data.get("usage_partial") or data.get("compression_observed"):
-            children.append(old[-1])
+            children.append(note)
         if isinstance(routes, list) and len(routes) > 3:
             children.append(
                 markdown(

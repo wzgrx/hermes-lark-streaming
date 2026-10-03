@@ -240,9 +240,16 @@ class TurnFooter:
             data["context_used"] = last.usage.prompt
         if last.context_max:
             data["context_max"] = last.context_max
-        first = requests[0].first_response
-        if first is not None:
-            data["first_response"] = first
+        responded = [r for r in requests if r.first_response is not None and r.started is not None]
+        if responded:
+            first = min(responded, key=lambda r: (r.started or 0) + (r.first_response or 0))
+            # First response is wall time since this turn's first API attempt,
+            # including failed attempts/backoff. Keep the responding attempt's
+            # own first-chunk latency separately; neither is a UI-render time.
+            data["first_response"] = max(
+                0.0, (first.started or 0) + (first.first_response or 0) - (requests[0].started or 0)
+            )
+            data["first_response_attempt"] = first.first_response
         routes: list[str] = []
         for request in requests:
             if request.provider and (not routes or routes[-1] != request.provider):

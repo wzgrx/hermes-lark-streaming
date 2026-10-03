@@ -35,6 +35,59 @@ def model_display(value: Any) -> str:
     return safe(raw)
 
 
+def model_identity_line(data: dict[str, Any], text_size: str) -> dict[str, Any]:
+    """Shared exact-ID comparison; reference layout does not index another layout."""
+    unknown_en, unknown_zh = "Not reported", "未提供"
+    requested, returned = safe(data.get("requested_model")), safe(data.get("response_model"))
+    # The collector bounds labels at 160 characters. Equal bounded prefixes do
+    # not prove equal IDs; retain both rows at that boundary or after escaping.
+    same_model = (
+        isinstance(data.get("requested_model"), str)
+        and 0 < len(data["requested_model"]) < 160
+        and data["requested_model"] == data.get("response_model")
+    )
+    if same_model:
+        model_line = markdown(
+            f"<font color='grey'>Requested = reported</font> {requested}",
+            f"<font color='grey'>请求＝返回</font> {requested}", text_size,
+        )
+    else:
+        model_line = markdown(
+            f"<font color='grey'>Requested</font> {requested or unknown_en}\n"
+            f"<font color='grey'>Reported</font> {returned or unknown_en}",
+            f"<font color='grey'>请求</font> {requested or unknown_zh}\n"
+            f"<font color='grey'>返回</font> {returned or unknown_zh}", text_size,
+        )
+    return model_line
+
+
+def footer_annotations(data: dict[str, Any], text_size: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Shared route/error annotations and an explicit measurement caveat."""
+    annotations: list[dict[str, Any]] = []
+    routes = data.get("routes")
+    if isinstance(routes, list) and len(routes) > 1:
+        route_text = " → ".join(safe(r) for r in routes[:12])
+        annotations.append(markdown(
+            f"<font color='orange'>Provider path</font> {route_text}",
+            f"<font color='orange'>服务商路径</font> {route_text}", text_size,
+        ))
+    error_type = safe(data.get("last_error_type"))
+    if error_type:
+        annotations.append(markdown(
+            f"<font color='orange'>Latest API error type</font> {error_type}",
+            f"<font color='orange'>最近 API 错误类型</font> {error_type}", text_size,
+        ))
+    note_en = "Main requests only; cost not reported · compression not observed"
+    note_zh = "主请求累计；费用未提供 · 压缩尚未观测"
+    if data.get("compression_observed"):
+        note_en = "Main requests only; cost not reported · summary observed; compression commit unverified"
+        note_zh = "主请求累计；费用未提供 · 已观测摘要请求，压缩提交待确认"
+    if data.get("usage_partial"):
+        note_en, note_zh = "Partial usage · " + note_en, "统计不完整 · " + note_zh
+    note = markdown(f"<font color='grey'>{note_en}</font>", f"<font color='grey'>{note_zh}</font>", "notation")
+    return annotations, note
+
+
 def build_footer(
     data: dict[str, Any],
     *,
@@ -119,26 +172,7 @@ def build_footer(
         f"<font color='grey'>Provider</font> {provider_en} · {api_en} · Reasoning {effort_en}",
         f"<font color='grey'>服务</font> {provider_zh} · {api_zh} · 思考 {effort_zh}", text_size,
     )
-    requested, returned = safe(data.get("requested_model")), safe(data.get("response_model"))
-    # The collector bounds labels at 160 characters. Equal bounded prefixes do
-    # not prove equal IDs; retain both rows at that boundary or after escaping.
-    same_model = (
-        isinstance(data.get("requested_model"), str)
-        and 0 < len(data["requested_model"]) < 160
-        and data["requested_model"] == data.get("response_model")
-    )
-    if same_model:
-        model_line = markdown(
-            f"<font color='grey'>Requested = reported</font> {requested}",
-            f"<font color='grey'>请求＝返回</font> {requested}", text_size,
-        )
-    else:
-        model_line = markdown(
-            f"<font color='grey'>Requested</font> {requested or unknown_en}\n"
-            f"<font color='grey'>Reported</font> {returned or unknown_en}",
-            f"<font color='grey'>请求</font> {requested or unknown_zh}\n"
-            f"<font color='grey'>返回</font> {returned or unknown_zh}", text_size,
-        )
+    model_line = model_identity_line(data, text_size)
     first = seconds(data.get("first_response"))
     elapsed_value = (f"{duration:.1f}s", f"{duration:.1f}s") if duration is not None else (unknown_en, unknown_zh)
     first_value = (f"{first:.2f}s", f"{first:.2f}s") if first is not None else (unknown_en, unknown_zh)
@@ -165,27 +199,9 @@ def build_footer(
         f"<font color='grey'>Last context</font> {context or unknown_en}",
         f"<font color='grey'>末次上下文</font> {context or unknown_zh}", text_size,
     ))
-    routes = data.get("routes")
-    if isinstance(routes, list) and len(routes) > 1:
-        route_text = " → ".join(safe(r) for r in routes[:12])
-        groups.append(markdown(
-            f"<font color='orange'>Provider path</font> {route_text}",
-            f"<font color='orange'>服务商路径</font> {route_text}", text_size,
-        ))
-    error_type = safe(data.get("last_error_type"))
-    if error_type:
-        groups.append(markdown(
-            f"<font color='orange'>Latest API error type</font> {error_type}",
-            f"<font color='orange'>最近 API 错误类型</font> {error_type}", text_size,
-        ))
-    note_en = "Main requests only; cost not reported · compression not observed"
-    note_zh = "主请求累计；费用未提供 · 压缩尚未观测"
-    if data.get("compression_observed"):
-        note_en = "Main requests only; cost not reported · summary observed; compression commit unverified"
-        note_zh = "主请求累计；费用未提供 · 已观测摘要请求，压缩提交待确认"
-    if data.get("usage_partial"):
-        note_en, note_zh = "Partial usage · " + note_en, "统计不完整 · " + note_zh
-    groups.append(markdown(f"<font color='grey'>{note_en}</font>", f"<font color='grey'>{note_zh}</font>", "notation"))
+    annotations, note = footer_annotations(data, text_size)
+    groups.extend(annotations)
+    groups.append(note)
     # Use the same native chrome as background review, not a second UI system.
     panel = collapsible_panel(
         expanded=False,

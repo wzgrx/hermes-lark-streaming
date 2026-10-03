@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
@@ -13,6 +14,7 @@ import yaml
 DEFAULT_DOMAIN = "https://open.feishu.cn"  # SDK 根域名，Larksuite 用 https://open.larksuite.com
 LARK_DOMAIN = "https://open.larksuite.com"
 _CONFIG_RELOAD_TTL_S = 1.0
+_logger = logging.getLogger("hermes_lark_streaming")
 
 
 def hermes_home() -> Path:
@@ -48,6 +50,7 @@ class Config:
         self._reload_cache_at = 0.0
         self._reload_cache_path: Path | None = None
         self._reload_cache_stat: tuple[int, int, int] | None = None
+        self._reload_error_at = float("-inf")
 
     @property
     def enabled(self) -> bool:
@@ -184,7 +187,10 @@ class Config:
 
     @property
     def footer_history(self) -> dict[str, Any]:
-        footer = self._streaming_sec().get("footer", {})
+        # Only history/display settings are live. Card layout, credentials and
+        # transport structure retain the controller's startup snapshot.
+        sec = self._reload().get("streaming", {})
+        footer = sec.get("footer", {}) if isinstance(sec, dict) else {}
         value = footer.get("history", {}) if isinstance(footer, dict) else {}
         return value if isinstance(value, dict) else {}
 
@@ -337,12 +343,7 @@ class Config:
     def _load(self) -> dict[str, Any]:
         if self._raw is not None:
             return self._raw
-        path = _config_path(self._home)
-        if path.exists():
-            text = path.read_text(encoding="utf-8")
-            self._raw = yaml.safe_load(text) or {}
-        else:
-            self._raw = {}
+        self._raw = self._reload()
         return self._raw
 
     def _reload(self) -> dict[str, Any]:
@@ -355,16 +356,40 @@ class Config:
                 and self._reload_cache_path == path
                 and now - self._reload_cache_at < _CONFIG_RELOAD_TTL_S
             ):
+                if self._reload_cache_stat is None and self._raw is not None:
+                    return self._raw  # Explicit in-memory baseline before any disk snapshot.
                 return self._reload_cache
             try:
-                stat = path.stat()
+                try:
+                    stat = path.stat()
+                except FileNotFoundError:
+                    if self._reload_cache_stat is not None:
+                        raise  # A transient replacement must not erase good settings.
+                    self._reload_cache = self._raw if self._raw is not None else {}
+                    self._reload_cache_path = path
+                    self._reload_cache_at = now
+                    return self._reload_cache
                 file_stat = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
-            except OSError:
-                file_stat = None
-            if self._reload_cache is None or self._reload_cache_path != path or self._reload_cache_stat != file_stat:
-                raw = yaml.safe_load(path.read_text(encoding="utf-8")) if file_stat is not None else {}
-                self._reload_cache = raw or {}
+                if (self._reload_cache is None or self._reload_cache_path != path
+                        or self._reload_cache_stat != file_stat):
+                    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+                    if raw is None:
+                        raw = {}
+                    if not isinstance(raw, dict) or any(
+                        raw.get(key) is not None and not isinstance(raw[key], dict)
+                        for key in ("display", "streaming")
+                    ):
+                        raise ValueError("Configuration sections must be mappings")
+                    self._reload_cache = raw
+                    self._reload_cache_path = path
+                    self._reload_cache_stat = file_stat
+            except (OSError, UnicodeError, yaml.YAMLError, ValueError):
+                # No YAML exception text: it can contain credentials or source lines.
+                if now - self._reload_error_at >= 60:
+                    _logger.warning("Card configuration reload failed; retaining last valid settings")
+                    self._reload_error_at = now
+                if self._reload_cache is None:
+                    self._reload_cache = self._raw if self._raw is not None else {}
                 self._reload_cache_path = path
-                self._reload_cache_stat = file_stat
             self._reload_cache_at = time.monotonic()
             return self._reload_cache

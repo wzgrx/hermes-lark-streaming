@@ -75,6 +75,8 @@ class CardSession:
         "rollover_retry_after",
         "runtime_last_signature",
         "runtime_next_update",
+        "runtime_panel_card_id",
+        "runtime_panel_ids",
         "runtime_retry_after",
         "runtime_status",
         "runtime_timer",
@@ -131,6 +133,8 @@ class CardSession:
         self.runtime_timer: asyncio.TimerHandle | None = None
         self.runtime_last_signature: tuple[Any, ...] | None = None
         self.runtime_next_update = 0.0
+        self.runtime_panel_ids: set[str] | None = None
+        self.runtime_panel_card_id = ""
         self.runtime_retry_after = 0.0
         self.sequence = 1
         self._loop = loop
@@ -167,6 +171,9 @@ class CardSession:
         # Recovery is bounded per CardKit card, not per Hermes turn. A split or
         # clarify replacement has a fresh server-side element tree.
         if card_id != self.card_id:
+            if self.runtime_panel_card_id != card_id:
+                self.runtime_panel_ids = None
+                self.runtime_panel_card_id = ""
             self.anchor_recovery_attempts = 0
             self.stream_failure_streak = 0
             self.streaming_closed = False

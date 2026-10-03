@@ -142,3 +142,18 @@ This guard aborts before publication if the remote moves beyond the reviewed
 commit. It applies to full custom Git checkouts; catalog and subdirectory
 installs use their own provenance workflow. `--force` accepts only CAUTION
 findings and does not grant new Python dependency or capability consent.
+
+## Configuration reload boundary (0.20.4)
+
+- display and streaming.footer.history are re-read through the one-second
+  TTL/stat cache. Editing the timezone invalidates the existing summary reader.
+- Malformed YAML, wrong root/display/streaming types, or a transient missing file
+  retain the last valid snapshot; later valid edits recover automatically. An
+  intentionally empty mapping is valid and resets live settings to defaults.
+- Layout, resource enablement, credentials and transport structure remain the
+  controller's startup snapshot. Changing them or upgrading Python code requires
+  an idle Gateway restart. Config hot reload is not Python hot deployment.
+- 0.20.4 does not change dependencies, generated hooks or the ledger schema.
+  Existing correctly installed 0.20.3 hooks can stay; run verify/status and PM
+  checks after updating. If status reports missing/older hooks, follow the normal
+  stopped uninstall/install process above instead of assuming compatibility.

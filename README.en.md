@@ -3,18 +3,14 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.3-blue)
+![Code version](https://img.shields.io/badge/code-0.20.4-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **Current source and managed runtime 0.20.3:** fix live history timezone updates and nested sealed-turn snapshot ownership. 1455 local tests, Ruff/mypy and exact-revision Tests/CodeQL pass. Deployed while idle; Gateway, Feishu, doctor, hooks and read-only ledger checks pass. V1 layout and dependencies are unchanged. No new real message was sent for this health check; the 0.20.2 real-turn evidence below keeps its original version scope. See the [changelog](CHANGELOG.md#0203---2026-10-03) and [deployment summary](docs/assets/footer-cache-boundaries-deployment-checks.json).
+> **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 
-> **Expanded desktop acceptance:** the existing real 0.20.2 test card was inspected in light and dark themes, including tools, resources and footer. Failure highlighting, paired metrics and history scope are readable; the original light theme was restored. No new message or restart. Mobile identity verification remains user-owned; this is not cross-client pixel certification. See the [version-scoped theme checks](docs/assets/reference-v1-real-desktop-theme-checks.json).
-
-> **Historical deployment and real turn, 0.20.2:** preserve known zero usage, use a consistent read-only history snapshot, keep slow-thread sampling coalesced and isolate nested cached data. 1450 local tests, Ruff, mypy and exact-revision GitHub Tests / CodeQL pass. Deployed with rollback copies and an idle restart; Gateway, Feishu connection, doctor, hooks and read-only ledger health pass. **One explicitly confirmed real turn after restart passes:** two terminal calls exit 0 / 7, one success and one failure, independent final-answer completion, original-topic delivery and message readbacks. Native-client footer fields agree with the isolated usage events and read-only history snapshot. No dependency, V1 layout, generated-hook or configuration changes; older screenshots stay scoped to 0.20.1 and mobile/pixel acceptance remains separate. See [history and sampler hardening](docs/HISTORY-RESILIENCE.md), [deployment](docs/assets/history-resilience-deployment-checks.json) and [real-turn evidence](docs/assets/history-resilience-real-gateway-checks.json).
-
-> **Historical V1 acceptance, 0.20.1 / 2026-10-03:** 1435 full tests, Ruff, mypy, Tests / CodeQL / Hermes Compat Check pass. Two real Gateway turns verify successful stdout and expected nonzero exit, delivery, failure highlighting, requested max and footer/ledger agreement. Doctor/hooks/read-only ledger health passed at that deployment; configuration, credentials, sessions and models were not migrated. An expired mobile login was observed; mobile/theme/scale and pixel-identical acceptance remain separate. See [historical deployment](docs/assets/reference-v1-deployment-checks.json) and [real-turn evidence](docs/assets/reference-v1-real-gateway-checks.json). Source version is not a published-package claim.
+> **Acceptance scope:** desktop Feishu only, per the operator. Mobile is out of scope, not a release blocker. Real-turn and desktop-theme evidence for 0.20.2 keeps its original version label; it is not pixel certification of this revision. See [V1 evidence](docs/REFERENCE-V1.md) and [changelog](CHANGELOG.md).
 
 ### V1 whole-card layout
 
@@ -154,7 +150,7 @@ hermes pm install
 | Revised compact details | Implemented; synthetic desktop preview inspected; 0.19.2 deployed |
 | Reliable reasoning-setting display in real requests | Offline contracts and real Gateway requested-max display pass; not proof of server acceptance |
 | Live answer/tool/approval/summary/provider/error phases | Real answer/tool success/failure pass; approval/summary/provider-switch evidence remains contract/synthetic, not this probe's live coverage |
-| Client visual matrix | Desktop widths, light/dark views and a real-clock eight-minute rollover inspected; mobile pending |
+| Client visual matrix | Desktop widths, light/dark views and a real-clock eight-minute rollover inspected; mobile out of scope |
 | Committed LCM compression telemetry, account quotas and billing | Pending reliable data sources |
 | Historical-report buttons or web dashboard | Not implemented; CLI is available |
 | Every account in the 226-entry provider catalog | Not certified |

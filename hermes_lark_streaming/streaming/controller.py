@@ -29,6 +29,7 @@ from ..feishu import (
     FeishuAPIError,
     classify_delivery_failure,
 )
+from ..footer.runtime import PANEL_IDS
 from ..history import compact_terminal_segments
 from ..metrics import metrics
 from .diagnostics import compact_ids, extract_missing_element_id, segment_state_for_log, summarize_actions
@@ -341,6 +342,7 @@ class StreamingController(RuntimeFooterController):
                         )
                         await self._send_ledger_unavailable_notice(session)
             session.element_count = 1
+            self._remember_runtime_panels(session, card, card_id)
             session.flush.set_throttle(CARDKIT_MS)
 
             if session.image_resolver is None:
@@ -685,6 +687,7 @@ class StreamingController(RuntimeFooterController):
                 session.card_id, recovery_card, sequence=recovery_sequence,
             )
             session.sequence = recovery_sequence
+            self._remember_runtime_panels(session, recovery_card, session.card_id)
             session.stream_failure_streak = 0
             session.stream_retry_after = 0.0
             session.element_count = 1
@@ -805,7 +808,7 @@ class StreamingController(RuntimeFooterController):
             )
             # 缺失元素（300313）时回滚 stale segment：本地 created=True 但卡片上不存在，
             # 下一轮 flush 会用 add_elements 重建该元素，避免反复 partial_update 死循环。
-            if missing_el_id in {_LOADING_ELEMENT_ID, "footer_details"}:
+            if missing_el_id in {_LOADING_ELEMENT_ID, *PANEL_IDS}:
                 await self._reseed_card_after_missing_element(
                     session, session.segment_state.segments if session.segment_state else segments,
                     missing_el_id, operation="batch_update",
@@ -1042,6 +1045,7 @@ class StreamingController(RuntimeFooterController):
                 )
                 return None
             session.delivery_generation = generation
+            self._remember_runtime_panels(session, card, new_card_id)
         except Exception:
             session.delivery_key = prior_delivery_key
             session.delivery_status = prior_delivery_status

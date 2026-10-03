@@ -15,6 +15,7 @@ from .usage import count
 
 LOADING_ID = "loading_icon"  # also the existing body insertion anchor
 DETAILS_ID = "footer_details"
+PANEL_IDS = frozenset({DETAILS_ID, "reference_tools", "reference_resources"})
 
 
 class RuntimeStatus:
@@ -209,3 +210,35 @@ def runtime_actions(elements: list[dict[str, Any]], *, reference: bool = False) 
             "element_id": element["element_id"], "partial_element": update,
         }})
     return actions
+
+
+def reconcile_runtime_panels(
+    elements: list[dict[str, Any]], existing: set[str], *, prefix_anchor: str = LOADING_ID,
+) -> tuple[list[dict[str, Any]], set[str]]:
+    """Plan structural changes; the caller commits membership only after success.
+
+    CardKit batch API uses delete_elements/element_ids, not delete_element.
+    Add before existing answer content to preserve V1's prefix/body/footer order.
+    Unchanged panels receive partial updates without expanded-state resets.
+    """
+    panels = {str(el["element_id"]): el for el in elements if el.get("element_id") in PANEL_IDS}
+    desired = set(panels)
+    actions: list[dict[str, Any]] = []
+    removed = existing - desired
+    if removed:
+        actions.append({"action": "delete_elements", "params": {"element_ids": sorted(removed)}})
+    missing = desired - existing
+    # Reverse order ensures a new tools panel can anchor before a new resource panel.
+    for name in (DETAILS_ID, "reference_resources", "reference_tools"):
+        if name not in missing:
+            continue
+        target = LOADING_ID if name == DETAILS_ID else prefix_anchor
+        if name == "reference_tools" and "reference_resources" in desired:
+            target = "reference_resources"
+        actions.append({"action": "add_elements", "params": {
+            "type": "insert_after" if name == DETAILS_ID else "insert_before",
+            "target_element_id": target, "elements": [panels[name]],
+        }})
+    actions.extend(a for a in runtime_actions(elements, reference=True)
+                   if a["params"]["element_id"] not in missing)
+    return actions, desired
