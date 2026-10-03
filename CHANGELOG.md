@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Validation
 - Fifteen synthetic regressions cover zero/missing usage, idempotent corrections, concurrent WAL writes, two-query aggregation, snapshot isolation, slow-thread coalescing, bounded callers and cancelled waiters. Ten of the initial eleven regression cases failed on 0.20.1 before the fix.
 - 1450 full local tests, Ruff and mypy pass. A disposable 60,000-row comparison produces identical reports; medians were 48.477 ms before and 49.853 ms after in that run. Query count drops from five to two, but no fixed speedup is claimed.
-- No dependency, renderer or generated-hook changes. Managed runtime and real-client evidence remain at 0.20.1 until a separately verified deployment; this source update does not restart Gateway.
+- Exact-revision GitHub Tests (including the Python/Hermes compatibility matrix) and CodeQL pass. Managed 0.20.2 was subsequently deployed with an idle restart, rollback copies and unchanged configuration, credentials, core and LCM. Gateway/Feishu, doctor, installed hooks and read-only ledger health pass; new-turn acceptance after this restart is still pending. No dependency, renderer or generated-hook changes. Prior real-client/turn evidence remains explicitly scoped to 0.20.1; see `docs/assets/history-resilience-deployment-checks.json`.
 
 ## [0.20.1] - 2026-10-03
 
