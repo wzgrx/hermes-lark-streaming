@@ -8,7 +8,7 @@
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **2026-10-03 status:** source 0.20.0 implements the approved V1 whole-card layout. 1405 full tests, Ruff and mypy pass. A synthetic native card passed create/attach/stream/partial/close/final-update APIs and direct Windows Feishu layout inspection, including expanded nested records surviving a partial update. Managed production remains 0.19.2; Gateway was not restarted this round. Deployment, mobile/theme/scale and pixel-level visual acceptance remain separate gates. Source version is not a published-package claim.
+> **2026-10-03 status:** V1 0.20.0 is managed-deployed and Gateway was restarted while idle. 1406 full tests, Ruff, mypy and GitHub CI pass. Synthetic native-card create/attach/stream/partial/close/final-update APIs and direct Windows layout inspection pass, including nested expansion surviving an update. Startup, doctor, hooks, configuration boundaries and read-only ledger health pass. A new real Gateway turn, mobile/theme/scale and pixel-level acceptance remain separate gates. See the [deployment record](docs/assets/reference-v1-deployment-checks.json). Source version is not a published-package claim.
 
 ### V1 whole-card layout
 
@@ -22,7 +22,7 @@ These are **actual Windows Feishu screenshots of synthetic card content**, not p
 
 [Frozen design, configuration and remaining gates](docs/REFERENCE-V1.md) · [Actual-builder synthetic JSON](docs/assets/reference-v1-completed.json)
 
-### 0.19.2 panel-style revision
+### Historical 0.19.2 panel-style revision
 
 Turn details now reuse the **same native panel chrome as background review**, rather than a blue left-hand heading. Compact metrics and default collapse remain. Code/tests and the collapsed desktop preview pass. Managed 0.19.2 is deployed; Gateway and Feishu connection checks pass. Expanded/mobile acceptance remains separate.
 
@@ -84,7 +84,7 @@ streaming:
     enabled: true
     mode: enhanced
     details: true
-    text_size: normal
+    text_size: notation # Muted labels; V1 metric values retain normal_v2
     history:
       enabled: true
       timezone: Asia/Shanghai
@@ -133,6 +133,7 @@ hermes pm install
 | Milestone | Status |
 |---|---|
 | Normalization, isolated turn collection, ledger, CLI reports | Implemented, automated tests pass |
+| V1 0.20.0 managed deployment | Complete; idle restart, doctor/hooks/configuration boundaries/read-only ledger pass; new real turn pending |
 | Managed 0.17.1 deployment and CardKit final update | Verified |
 | Real desktop inspection | Old 0.17.1 mismatch confirmed; new compact synthetic preview inspected |
 | Revised compact details | Implemented; synthetic desktop preview inspected; 0.19.2 deployed |

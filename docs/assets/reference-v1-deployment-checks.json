@@ -1,0 +1,27 @@
+{
+  "checked_at": "2026-10-03T09:58:57.839046+00:00",
+  "source_version": "0.20.0",
+  "installed_commit": "541961a0d4e1c65eb936b0e5e9660b39d4585785",
+  "validation_scope": "managed_deployment_health_not_real_turn_or_pixel_acceptance",
+  "production_gateway_v1_deployed": true,
+  "gateway_restarted_while_idle": true,
+  "gateway_state": "running",
+  "doctor_ok": true,
+  "plugin_manifest_version": "0.20.0",
+  "hooks_compatible_and_installed": true,
+  "managed_checkout_clean": true,
+  "hermes_checkout_clean": true,
+  "presentation_only_config_change": true,
+  "usage_database_read_only_quick_check": "ok",
+  "current_pid_startup_journal_tracebacks": 0,
+  "doctor_warning_codes": ["metrics_stale", "delivery_unknown"],
+  "historical_unknown_receipts_preserved": 1,
+  "real_gateway_round_verified": false,
+  "pixel_identical_certified": false,
+  "ci": {
+    "Tests": "https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37114349795",
+    "CodeQL": "https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37114349822",
+    "conclusion": "success",
+    "head_sha": "541961a0d4e1c65eb936b0e5e9660b39d4585785"
+  }
+}

@@ -17,13 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add controller-scoped nonblocking resource snapshots with bounded NVIDIA subprocesses, CPU deltas and Linux available-memory accounting. Add read-only timezone-aware history summaries with SQL/async deadlines, terminal refresh and an optional three-group subscription/model table.
 
 ### Fixed
+- Keep the managed plugin manifest, Python package and project metadata at 0.20.0; add a regression for version agreement.
 - Use CardKit-compliant element IDs of at most 20 characters; the first real create probe exposed and fixed an overlong nested-panel ID.
 - Preserve top-level and nested expansion during partial updates and reuse the existing mutex/sequence writer. Bound escaped/raw text and recursive layout overhead before answer compaction; retain source-data and missing-value semantics.
 
 ### Validation
-- 1405 full tests pass, including 253 new V1 cases; Ruff and mypy (48 source files) pass. Directory labels, source immutability, worst-case budgets, main/auxiliary usage, timezone boundaries, terminal refresh, timeout handling and controller ownership are covered.
+- 1406 full tests pass, including 254 new V1 cases; Ruff and mypy (48 source files) pass. Directory labels, source immutability, worst-case budgets, main/auxiliary usage, timezone boundaries, terminal refresh, timeout handling and controller ownership are covered.
 - Synthetic CardKit create/attach/body stream/panel partial/close/final update and interactive fetch pass. Direct Windows Feishu inspection covers tools, resources and footer; nested records remain expanded through a real partial update. Public screenshots contain synthetic content only.
-- Managed production remains 0.19.2; no Gateway restart or credential/session/model/database migration this round. Mobile/theme/scale and pixel-level appearance remain separate acceptance work.
+- Managed 0.20.0 is deployed after exact-revision CI and an idle Gateway restart. Doctor/hooks, clean checkouts, presentation-only configuration changes, read-only usage integrity and current-process startup checks pass. No credential/session/model/database migration. A new real Gateway turn and mobile/theme/scale/pixel-level appearance remain separate acceptance work; historical unknown receipts are preserved.
 
 ## [0.19.2] - 2026-10-03
 

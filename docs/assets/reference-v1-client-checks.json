@@ -3,7 +3,7 @@
   "date": "2026-10-03",
   "synthetic": true,
   "platform": "Windows Feishu",
-  "gateway_restarted": false,
+  "gateway_restarted_for_this_synthetic_probe": false,
   "layout_structure_inspected": true,
   "tools_four_columns": true,
   "failure_highlight": true,
@@ -16,6 +16,6 @@
   "real_partial_update_preserves_nested_expansion": true,
   "public_images_synthetic_content_only": true,
   "pixel_identical_certified": false,
-  "production_gateway_v1_deployed": false,
+  "production_deployment_record": "reference-v1-deployment-checks.json",
   "mobile_theme_scale_matrix_complete": false
 }
