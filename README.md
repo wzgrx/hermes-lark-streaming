@@ -4,13 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.4-blue)
+![Code version](https://img.shields.io/badge/code-0.20.5-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
-> **运行状态**：0.20.4 已空闲部署并重启；1482 项本地测试、精确代码提交 CI、服务端探针和运行健康检查通过。已核对新版桌面合成卡片展开效果；未新增真实模型轮次或宣称逐像素相同。见[当前实拍与交付审计](docs/DESKTOP-0204-ACCEPTANCE.md)和[部署摘要](docs/assets/desktop-hardening-deployment-checks.json)。
+> **当前维护版 0.20.5**：保留 V1 布局，优先保留失败步骤详情，修正空错误块和毫秒耗时，折叠状态也能看到本轮失败/停止。[代码、测试与部署记录](docs/MAINTENANCE-0205.md)分别标注；下方截图仍是已核对的 0.20.4 桌面合成预览，不冒充新版逐像素验收。
 
 > **0.20.4 桌面增强**：修复工具面板动态开关、缺失面板恢复、真实配置文件热更新及重试后的首响应统计；历史状态更紧凑，保留 V1 三面板与单写卡通道。代码与部署证据分别记录在 [本轮修复与验证](docs/DESKTOP-HARDENING.md)。
 

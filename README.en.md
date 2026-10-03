@@ -3,12 +3,12 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.4-blue)
+![Code version](https://img.shields.io/badge/code-0.20.5-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **Runtime status:** managed 0.20.4 is deployed after idle checks and restart. 1482 local tests, exact-code CI, server probe and runtime health checks pass. Current synthetic desktop panels were visually checked; this is not a new model turn or pixel-equality certification. See [current screenshots and scope](docs/DESKTOP-0204-ACCEPTANCE.md) and [deployment summary](docs/assets/desktop-hardening-deployment-checks.json).
+> **Current maintenance version: 0.20.5.** Preserve V1 while prioritizing failure excerpts, fixing blank errors and subsecond timing, and exposing failure/stop in the collapsed footer. [Source, tests and deployment](docs/MAINTENANCE-0205.md) are separate gates. Screenshots below remain version-labelled 0.20.4 synthetic desktop previews, not new pixel-equality acceptance.
 
 > **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 

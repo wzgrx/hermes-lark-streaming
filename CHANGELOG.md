@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.5] - 2026-10-04
+
+### Fixed
+- Keep the command/output excerpt for highlighted early failures even after many later successful steps. Excerpts remain chronological and byte-bounded; ordinary records are evicted first. The heading no longer incorrectly calls the selection the latest steps.
+- A blank structured error no longer hides a useful plain error in either the highlighted row or its excerpt.
+- Display subsecond tool timings in milliseconds instead of rounding real work to `0.0s`.
+
+### Changed
+- Failed/stopped turns expose their terminal state in the collapsed model footer, with native Chinese/English titles. Keep the V1 three-panel order, answer placement, neutral borders, compact rows and single writer.
+- No dependencies, database schema, generated hooks or provider settings changed. See [the bounded maintenance report](docs/MAINTENANCE-0205.md) for source/test/deployment scope.
+
 ## [0.20.4] - 2026-10-03
 
 ### Fixed

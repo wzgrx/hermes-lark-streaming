@@ -95,6 +95,8 @@ def _duration(value: Any) -> str:
     n = seconds(value)
     if n is None:
         return ""
+    if n < 1:
+        return f"{n * 1000:.0f}ms"
     return f"{int(n // 60)}m {int(n % 60):02d}s" if n >= 60 else f"{n:.1f}s"
 
 
@@ -196,7 +198,7 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any]) -> dict[str, An
         error_detail = ""
         if step["status"] == "error":
             block = step.get("error_block")
-            error_detail = _tool_text(str(block.get("content", "")) if block else step.get("error") or "", 100)
+            error_detail = _tool_text(str((block.get("content") if block else "") or step.get("error") or ""), 100)
         name_content = name + (f"\n<font color='red'>{error_detail}</font>" if error_detail else "")
         copies = end - start + 1
         state = {"success": ("Succeeded", "成功", "green"), "error": ("Failed", "失败", "red")}.get(
@@ -237,32 +239,38 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any]) -> dict[str, An
         if step["status"] == "error":
             row["background_style"] = "red-50"
         children.append(row)
-    # Show bounded raw records in one nested markdown block. Never add one
-    # nested element per log line; CardKit counts recursively up to 200.
-    raw = []
-    for i, step in enumerate(steps[-24:], max(0, len(steps) - 24) + 1):
+    # The excerpt must retain the actionable errors highlighted above even when
+    # later polling pushes them outside the recent window. Keep chronological
+    # order; drop ordinary excerpts first when the serialized budget is tight.
+    important = {i for start, end, item, _ in shown if item["status"] in {"error", "running"}
+                 for i in range(start, end + 1)}
+    indices = sorted(important | set(range(max(0, len(steps) - 24), len(steps))))
+    raw: list[tuple[int, str]] = []
+    for i in indices:
+        step = steps[i]
         status = {"success": "成功 / Succeeded", "error": "失败 / Failed"}.get(step["status"], "运行中 / Running")
         detail = _tool_text(step.get("detail", ""), 180)
         block = step.get("error_block") or step.get("result_block")
         output = _tool_text(
-            str(block.get("content", "")) if block else step.get("error") or step.get("output") or "", 200
+            str((block.get("content") if block else "") or step.get("error") or step.get("output") or ""), 200
         )
-        raw.append(
-            f"**{prior + i} · {_tool_text(_tool_title(step), 70)} · {status}**\n"
+        raw.append((i,
+            f"**{prior + i + 1} · {_tool_text(_tool_title(step), 70)} · {status}**\n"
             f"{detail}" + (f"\n{output}" if output else "")
-        )
+        ))
     # Long escaped failures and localized status rows consume bytes before raw
     # records. Keep the complete native tools panel within its 13 KB share.
     rows_bytes = len(json.dumps(children, ensure_ascii=False, separators=(",", ":")).encode())
     raw_limit = max(1000, min(4000, 12500 - rows_bytes))
-    while len("\n\n".join(raw).encode()) > raw_limit and len(raw) > 1:
-        raw.pop(0)
+    while len(raw) > 1 and (len(raw) > 24 or len("\n\n".join(text for _, text in raw).encode()) > raw_limit):
+        drop = next((pos for pos, (index, _) in enumerate(raw) if index not in important), 0)
+        raw.pop(drop)
     if raw:
         children.append(
             _panel(
-                f"Step excerpts · latest {len(raw)}/{len(steps)} · bounded command/output",
-                f"步骤摘要 · 最近 {len(raw)}/{len(steps)} 步 · 命令与输出有长度限制",
-                [{"tag": "markdown", "content": "\n\n".join(raw), "text_size": "notation"}],
+                f"Step excerpts · {len(raw)}/{len(steps)} · errors first, bounded output",
+                f"步骤摘要 · {len(raw)}/{len(steps)} 步 · 优先保留异常，输出限长",
+                [{"tag": "markdown", "content": "\n\n".join(text for _, text in raw), "text_size": "notation"}],
                 "ref_tool_records",
             )
         )
@@ -374,6 +382,10 @@ def build_reference_footer(
     title = f"🪙 {model} · {context}"
     if data.get("usage_partial"):
         title += " · Partial / 不完整"
+    title_zh = title
+    if is_error or is_aborted:
+        title = ("✕ Failed · " if is_error else "◼ Stopped · ") + title
+        title_zh = ("✕ 本轮失败 · " if is_error else "◼ 已停止 · ") + title_zh
     en, zh, color = (
         ("Failed", "本轮失败", "red")
         if is_error
@@ -569,7 +581,7 @@ def build_reference_footer(
                     "Only the first three provider path entries are shown.", "服务商路径仅展示前 3 项。", "notation"
                 )
             )
-    return [_panel(title, title, children, "footer_details")]
+    return [_panel(title, title_zh, children, "footer_details")]
 
 
 def build_reference_badge(data: dict[str, Any]) -> list[dict[str, Any]]:
