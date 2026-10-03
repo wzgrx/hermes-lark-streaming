@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-03
+
+### Added
+- Implement the approved opt-in V1 whole-card layout: native tools and resources above the answer, model/context footer below, and optional identity tag. Preserve the legacy presentation by default.
+- Align tool sequence/title/status/time, highlight failures, merge only identical adjacent output-free successful process polls, and retain bounded redacted raw records in a nested panel. Carry prior success/failure counts across clarification.
+- Add controller-scoped nonblocking resource snapshots with bounded NVIDIA subprocesses, CPU deltas and Linux available-memory accounting. Add read-only timezone-aware history summaries with SQL/async deadlines, terminal refresh and an optional three-group subscription/model table.
+
+### Fixed
+- Use CardKit-compliant element IDs of at most 20 characters; the first real create probe exposed and fixed an overlong nested-panel ID.
+- Preserve top-level and nested expansion during partial updates and reuse the existing mutex/sequence writer. Bound escaped/raw text and recursive layout overhead before answer compaction; retain source-data and missing-value semantics.
+
+### Validation
+- 1405 full tests pass, including 253 new V1 cases; Ruff and mypy (48 source files) pass. Directory labels, source immutability, worst-case budgets, main/auxiliary usage, timezone boundaries, terminal refresh, timeout handling and controller ownership are covered.
+- Synthetic CardKit create/attach/body stream/panel partial/close/final update and interactive fetch pass. Direct Windows Feishu inspection covers tools, resources and footer; nested records remain expanded through a real partial update. Public screenshots contain synthetic content only.
+- Managed production remains 0.19.2; no Gateway restart or credential/session/model/database migration this round. Mobile/theme/scale and pixel-level appearance remain separate acceptance work.
+
 ## [0.19.2] - 2026-10-03
 
 ### Changed

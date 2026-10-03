@@ -90,6 +90,7 @@ class CardSession:
         "tool_calls_prior",
         "tool_use",
         "tools_done_prior",
+        "tools_failed_prior",
     )
 
     def __init__(
@@ -118,6 +119,7 @@ class CardSession:
         self.tool_use = ToolUseTracker()
         self.tool_calls_prior = 0
         self.tools_done_prior = 0
+        self.tools_failed_prior = 0
         self.flush = FlushController(throttle_ms=CARDKIT_MS, loop=loop)
         self.footer: dict[str, Any] = {}
         from ..footer.state import TurnFooter

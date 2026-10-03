@@ -1,0 +1,97 @@
+"""Bounded read-only SQL history summaries for native V1 cards."""
+
+from __future__ import annotations
+
+import asyncio
+import sqlite3
+import time
+from contextlib import closing, suppress
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict[str, Any]:
+    tz = ZoneInfo(timezone)
+    current = datetime.fromtimestamp(now if now is not None else time.time(), tz)
+    today = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    month = today.replace(day=1)
+    tomorrow = today + timedelta(days=1)
+    end_month = month.replace(year=month.year + (month.month == 12), month=month.month % 12 + 1)
+    result: dict[str, Any] = {"timezone": timezone, "status": "no_history", "models": []}
+    if not path.is_file():
+        return result
+    measured = "input_tokens IS NOT NULL AND output_tokens IS NOT NULL"
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.2)) as db:
+        deadline = time.monotonic() + 0.5
+        db.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
+        first = db.execute("SELECT MIN(occurred_at) FROM usage_events WHERE scope='main'").fetchone()[0]
+        if first is None:
+            return result
+        result.update(status="ok", since=datetime.fromtimestamp(first, tz).strftime("%Y-%m-%d"))
+        for key, start, end in (
+            ("today", today.timestamp(), tomorrow.timestamp()),
+            ("month", month.timestamp(), end_month.timestamp()),
+            ("total", 0, 253402214400),
+        ):
+            requests, known, tokens = db.execute(
+                f"SELECT COUNT(*), SUM(CASE WHEN {measured} THEN 1 ELSE 0 END), "
+                f"SUM(CASE WHEN {measured} THEN input_tokens+output_tokens END) FROM usage_events "
+                "WHERE scope='main' AND occurred_at >= ? AND occurred_at < ?",
+                (start, end),
+            ).fetchone()
+            # A truly empty period is zero once recording exists. Requests with
+            # missing usage remain unknown/partial, never an invented zero.
+            result[key] = {
+                "tokens": tokens if requests else 0,
+                "requests": requests,
+                "partial": requests != (known or 0),
+            }
+        for subscription, model, requests, known, tokens in db.execute(
+            f"SELECT subscription, CASE WHEN response_model!='' THEN response_model ELSE requested_model END model, "
+            f"COUNT(*), SUM(CASE WHEN {measured} THEN 1 ELSE 0 END), "
+            f"SUM(CASE WHEN {measured} THEN input_tokens+output_tokens END) FROM usage_events "
+            "WHERE scope='main' GROUP BY subscription, model ORDER BY 5 DESC, subscription, model LIMIT 3"
+        ):
+            result["models"].append(
+                {"subscription": subscription, "model": model, "tokens": tokens, "partial": requests != (known or 0)}
+            )
+    return result
+
+
+class HistorySummary:
+    def __init__(self, path: Path, timezone: str) -> None:
+        self._path, self._timezone = path, timezone
+        self._cached: dict[str, Any] = {"status": "pending", "timezone": timezone}
+        self._at = float("-inf")
+        self._task: asyncio.Task[None] | None = None
+
+    def snapshot(self) -> dict[str, Any]:
+        return dict(self._cached)
+
+    def request(self, *, force: bool = False) -> None:
+        if self._task is None and (force or time.monotonic() - self._at >= 60):
+            self._task = asyncio.create_task(self._read())
+
+    async def finish(self) -> None:
+        # Drain an earlier cache read, then query AFTER the terminal usage hook.
+        if self._task is not None:
+            with suppress(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(self._task), 0.8)
+        self.request(force=True)
+        if self._task is not None:
+            with suppress(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(self._task), 0.8)
+
+    async def _read(self) -> None:
+        try:
+            self._cached = await asyncio.wait_for(
+                asyncio.to_thread(read_summary, self._path, self._timezone),
+                0.6,
+            )
+        except (OSError, TimeoutError, ValueError, sqlite3.Error, ZoneInfoNotFoundError):
+            self._cached = {"status": "unavailable", "timezone": self._timezone}
+        finally:
+            self._at = time.monotonic()
+            self._task = None

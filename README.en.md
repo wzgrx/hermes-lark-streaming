@@ -3,12 +3,24 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.19.0-blue)
+![Code version](https://img.shields.io/badge/code-0.20.0-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[中文](README.md) · [Install](INSTALL.md) · [Footer](docs/FOOTER-V2.md) · [History](docs/USAGE-HISTORY.md) · [Design audit](docs/FOOTER-DESIGN-AUDIT.md)
+[中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **2026-10-03 status:** 0.19.2 includes compact details, structured reasoning capture and event-driven runtime footers. CI and 1152 full tests pass. The maintainer's idle Gateway was updated/restarted; service, Feishu connection, managed launcher version and database health passed. Runtime/client acceptance remains open: API success is not a visual result. Code version is not a published-package claim.
+> **2026-10-03 status:** source 0.20.0 implements the approved V1 whole-card layout. 1405 full tests, Ruff and mypy pass. A synthetic native card passed create/attach/stream/partial/close/final-update APIs and direct Windows Feishu layout inspection, including expanded nested records surviving a partial update. Managed production remains 0.19.2; Gateway was not restarted this round. Deployment, mobile/theme/scale and pixel-level visual acceptance remain separate gates. Source version is not a published-package claim.
+
+### V1 whole-card layout
+
+**Tools → resource snapshot → answer → model/turn/history → identity tag**. Three native panels collapse by default; labels sit above paired values. Tool steps have four aligned columns, highlighted failures, and bounded adjacent poll merging. Opt in with `streaming.layout: reference`; legacy presentation remains the default.
+
+These are **actual Windows Feishu screenshots of synthetic card content**, not production task data:
+
+![Native tools panel](docs/assets/reference-v1-client-tools.png)
+![Resource snapshot](docs/assets/reference-v1-client-resources.png)
+![Model, turn and history footer](docs/assets/reference-v1-client-footer.png)
+
+[Frozen design, configuration and remaining gates](docs/REFERENCE-V1.md) · [Actual-builder synthetic JSON](docs/assets/reference-v1-completed.json)
 
 ### 0.19.2 panel-style revision
 
@@ -29,7 +41,9 @@ Hermes owns credentials, inference, routing, tools, and conversations. This plug
 - Store opt-in usage history in profile-local SQLite; query by model, provider, subscription label, day/month and timezone.
 - Keep catalog coverage, protocol fixtures, server verification and real-client acceptance separate.
 
-## Current footer structure
+## Retained legacy footer structure
+
+This section describes `layout: classic`, not the new V1 whole-card layout.
 
 ![Code-derived footer schematic](docs/assets/footer-current-structure.svg)
 
@@ -62,6 +76,10 @@ Merge into existing configuration without replacing credentials or provider sett
 streaming:
   enabled: true
   width_mode: default
+  layout: reference
+  agent_name: "Hermes"
+  resources:
+    enabled: true
   footer:
     enabled: true
     mode: enhanced
@@ -69,9 +87,11 @@ streaming:
     text_size: normal
     history:
       enabled: true
+      timezone: Asia/Shanghai
+      show_models: false
 ```
 
-Repository defaults remain classic footer and history disabled. History collection is independent of footer visibility.
+Repository defaults remain legacy layout, classic footer, resource snapshots and history disabled. History collection is independent of footer visibility. `layout: classic` restores the legacy whole-card layout; `show_models: true` adds the top three subscription/model groups to V1 details.
 Requirements: Python ≥3.11, a compatible Hermes host, `lark-oapi >=1.7.3`, `PyYAML >=6.0.3`, and the required Feishu application permissions. See the [CI compatibility matrix](docs/COMPATIBILITY.md). Node SDK and CLI are optional, not runtime prerequisites.
 
 ## Historical usage

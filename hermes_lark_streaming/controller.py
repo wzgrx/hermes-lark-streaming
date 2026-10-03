@@ -53,6 +53,8 @@ class StreamCardController(StreamingController):
         self._text_fallback_needed: set[str] = set()
         self._text_fallback_aliases: dict[str, set[str]] = {}
         self._unscoped_enabled: bool | None = None
+        self._reference_host = None
+        self._reference_history = None
 
     @property
     def enabled(self) -> bool:

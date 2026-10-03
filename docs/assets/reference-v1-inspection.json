@@ -1,0 +1,20 @@
+{
+  "reference-v1-completed": {
+    "elements": 114,
+    "json_bytes": 17829,
+    "synthetic": true,
+    "validation_scope": "offline_structure_only"
+  },
+  "reference-v1-running": {
+    "elements": 112,
+    "json_bytes": 17613,
+    "synthetic": true,
+    "validation_scope": "offline_structure_only"
+  },
+  "reference-v1-history": {
+    "elements": 138,
+    "json_bytes": 20384,
+    "synthetic": true,
+    "validation_scope": "offline_structure_only"
+  }
+}

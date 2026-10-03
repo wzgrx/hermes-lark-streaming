@@ -144,11 +144,43 @@ class Config:
 
     @property
     def footer_element_reserve(self) -> int:
+        if self.card_layout == "reference":
+            from .cardkit.reference import REFERENCE_ELEMENT_RESERVE
+
+            return REFERENCE_ELEMENT_RESERVE
         if self.footer_mode == "enhanced":
             from .footer.layout import DETAIL_ELEMENT_RESERVE, SUMMARY_ELEMENT_RESERVE
 
             return DETAIL_ELEMENT_RESERVE if self.footer_details else SUMMARY_ELEMENT_RESERVE
         return 2
+
+    @property
+    def card_layout(self) -> str:
+        """Screenshot V1 layout is opt-in and requires enhanced telemetry."""
+        return ("reference" if self._streaming_sec().get("layout") == "reference"
+                and self.footer_mode == "enhanced" else "classic")
+
+    @property
+    def reference_resources_enabled(self) -> bool:
+        settings = self._streaming_sec().get("resources", {})
+        return isinstance(settings, dict) and settings.get("enabled") is True
+
+    @property
+    def reference_agent_name(self) -> str:
+        from .footer.state import label
+
+        return label(self._streaming_sec().get("agent_name"))
+
+    @property
+    def reference_history_timezone(self) -> str:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        value = self.footer_history.get("timezone", "UTC")
+        try:
+            ZoneInfo(value if isinstance(value, str) else "UTC")
+        except (ValueError, ZoneInfoNotFoundError):
+            return "UTC"
+        return value if isinstance(value, str) else "UTC"
 
     @property
     def footer_history(self) -> dict[str, Any]:

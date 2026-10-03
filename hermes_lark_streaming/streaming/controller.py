@@ -428,7 +428,7 @@ class StreamingController(RuntimeFooterController):
 
             # show_tool_use=False: 流式态跳过所有 TOOL segment 处理
             # （新建与 dirty 更新两条路径），只保留 reasoning/answer
-            if seg.type == SegmentType.TOOL and not self._cfg.show_tool_use:
+            if seg.type == SegmentType.TOOL and (not self._cfg.show_tool_use or self._cfg.card_layout == "reference"):
                 if not seg.created:
                     seg.created = True  # 防止 next flush 再次进入 not created 分支
                 seg.dirty = False
@@ -972,6 +972,7 @@ class StreamingController(RuntimeFooterController):
         seal_card = build_complete_card(
             segments=seal_segments,
             all_tool_steps=all_steps,
+            footer_data=self._reference_snapshot(session, {}),
             footer_fields=[],
             footer_show_label=False,
             footer_enabled=False,
@@ -1165,6 +1166,7 @@ class StreamingController(RuntimeFooterController):
             previous_steps = session.tool_use.build_display_steps()
             session.tool_calls_prior += len(previous_steps)
             session.tools_done_prior += sum(step["status"] != "running" for step in previous_steps)
+            session.tools_failed_prior += sum(step["status"] == "error" for step in previous_steps)
             session.tool_use = ToolUseTracker()
 
             _logger.info(
@@ -1213,6 +1215,7 @@ class StreamingController(RuntimeFooterController):
         is_error = session.state == SessionState.FAILED
         is_aborted = session.state == SessionState.ABORTED
         all_tool_steps = session.tool_use.build_display_steps()
+        await self._finish_reference_snapshot(session)
         if self._cfg.footer_mode == "enhanced":
             snapshot = session.footer_state.finish()
             snapshot.setdefault("model", session.footer.get("model", ""))
@@ -1220,6 +1223,8 @@ class StreamingController(RuntimeFooterController):
             snapshot["compression_observed"] = session.runtime_status.snapshot()["compression_observed"]
             session.footer = snapshot
             metrics.increment("footer.turn.missing" if snapshot.get("telemetry_missing") else "footer.turn.measured")
+
+        session.footer = self._reference_snapshot(session, session.footer)
 
         if segment_state is not None:
             segment_state.finalize_segments(len(all_tool_steps))

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import threading
 import time
+from copy import deepcopy
 from typing import Any
 
 from .layout import markdown
@@ -161,6 +162,17 @@ def build_runtime_footer(
     )
     status.update(element_id=LOADING_ID, icon={"tag": "standard_icon", "token": icon, "color": color})
     elements = [status]
+    if data.get("presentation") == "reference":
+        if data.get("reference", {}).get("footer_enabled", True):
+            from ..cardkit.reference import build_reference_footer
+
+            panel = build_reference_footer(data, text_size=text_size, details=details, live_status=status)[0]
+            elements.append(panel)
+        # Keep the nonempty insertion anchor at body level, outside the footer.
+        # Native clients may prune empty elements, breaking insert_before.
+        status["content"] = status["content"].split("\n")[0]
+        status["i18n_content"] = {k: v.split("\n")[0] for k, v in status["i18n_content"].items()}
+        return elements
     if details:
         panel = build_footer(data, text_size=text_size)[-1]
         panel["elements"].append(markdown(
@@ -171,14 +183,28 @@ def build_runtime_footer(
     return elements
 
 
-def runtime_actions(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def runtime_actions(elements: list[dict[str, Any]], *, reference: bool = False) -> list[dict[str, Any]]:
     actions = []
+    panel_ids = {DETAILS_ID, "reference_tools", "reference_resources"} if reference else {DETAILS_ID}
     for element in elements:
-        if element.get("element_id") not in {LOADING_ID, DETAILS_ID}:
+        if element.get("element_id") not in {LOADING_ID, *panel_ids}:
             continue
         # Updating contents only keeps the reader's expanded/collapsed state.
-        update = ({"elements": element["elements"]} if element["element_id"] == DETAILS_ID
+        update = ({"elements": element["elements"]} if element["element_id"] in panel_ids
                   else {k: element[k] for k in ("content", "i18n_content", "icon")})
+        if reference and element["element_id"] in panel_ids:
+            update["header"] = element["header"]
+            # Stable nested raw-record panel IDs must not receive a fresh
+            # expanded=False on every token/host tick either.
+            update = deepcopy(update)
+            pending = [update]
+            while pending:
+                node = pending.pop()
+                if isinstance(node, dict):
+                    node.pop("expanded", None)
+                    pending.extend(node.values())
+                elif isinstance(node, list):
+                    pending.extend(node)
         actions.append({"action": "partial_update_element", "params": {
             "element_id": element["element_id"], "partial_element": update,
         }})

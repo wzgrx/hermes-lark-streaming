@@ -415,12 +415,18 @@ def build_streaming_card_v2(
     """CardKit 2.0 流式占位卡片 — 含工具面板 + streaming + loading 元素."""
     elements: list[dict] = []
 
+    reference = bool(footer_data and footer_data.get("presentation") == "reference")
+    if reference:
+        from .reference import build_reference_prefix
+
+        elements.extend(build_reference_prefix(footer_data or {}))
+
     if show_reasoning:
         elements.append(
             _build_reasoning_panel(" ", expanded=True, element_id=REASONING_ELEMENT_ID)
         )
 
-    if show_tool_use:
+    if show_tool_use and not reference:
         if tool_steps:
             elements.append(_build_tool_panel(tool_steps, elapsed_ms))
         else:
@@ -434,6 +440,11 @@ def build_streaming_card_v2(
         elements.extend(build_runtime_footer(footer_data, text_size=footer_text_size, details=footer_details))
     else:
         elements.append(_loading_element())
+
+    if reference:
+        from .reference import build_reference_badge
+
+        elements.extend(build_reference_badge(footer_data or {}))
 
     card = {
         "schema": "2.0",
@@ -480,6 +491,11 @@ def build_complete_card(
     """完成态流式卡片 — 按 segments 顺序渲染."""
     elements: list[dict] = []
     has_answer = False
+    reference = bool(footer_data and footer_data.get("presentation") == "reference")
+    if reference:
+        from .reference import build_reference_prefix
+
+        elements.extend(build_reference_prefix(footer_data or {}))
 
     for seg in segments:
         if seg.type == SegmentType.REASONING:
@@ -489,7 +505,7 @@ def build_complete_card(
                     element_id=None, text_element_id=None,
                 ))
         elif seg.type == SegmentType.TOOL:
-            if not show_tool_use:
+            if not show_tool_use or reference:
                 continue
             start = seg.tool_offset
             end = seg.tool_end_offset if seg.tool_end_offset else len(all_tool_steps)
@@ -509,10 +525,11 @@ def build_complete_card(
 
     if footer_enabled and footer_mode == "enhanced":
         from ..footer.render import build_footer
+        from .reference import build_reference_footer
 
         try:
             elements.extend(
-                build_footer(
+                (build_reference_footer if reference else build_footer)(
                     footer_data or {}, is_error=is_error, is_aborted=is_aborted,
                     text_size=footer_text_size, details=footer_details,
                 )
@@ -531,6 +548,11 @@ def build_complete_card(
                 text_size=footer_text_size,
             )
         )
+
+    if reference:
+        from .reference import build_reference_badge
+
+        elements.extend(build_reference_badge(footer_data or {}))
 
     summary_text = ""
     for seg in reversed(segments):

@@ -1,6 +1,6 @@
 """Hermes Lark streaming package entry point."""
 
-__version__ = "0.19.2"
+__version__ = "0.20.0"
 
 
 def register(ctx: object) -> None:

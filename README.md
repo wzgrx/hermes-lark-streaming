@@ -4,13 +4,27 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.19.0-blue)
+![Code version](https://img.shields.io/badge/code-0.20.0-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[English](README.en.md) · [安装](INSTALL.md) · [Footer](docs/FOOTER-V2.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md) · [视觉审查](docs/FOOTER-DESIGN-AUDIT.md)
+[English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
-> **当前状态 · 2026-10-03**：0.19.2 包含紧凑详情、思考标量采集修复及事件驱动运行态，已通过 CI 并在维护者本机空闲部署/重启。Gateway 运行、飞书连接、托管启动器版本和数据库健康检查通过；1152 项全量测试通过。运行态实机与跨端验收继续单列，不用 API 成功代替客户端效果。源码版本不等于同名 PyPI/Release 发布。
+> **当前状态 · 2026-10-03**：源码 0.20.0 实现用户冻结的 V1 整卡布局，1405 项全量测试、Ruff 与 mypy 通过。合成卡片通过真实 CardKit 创建/投递/流式/局部更新/终态更新，并直接检查 Windows 飞书展开布局；原始记录保持展开的局部更新也已实测。运行中的托管版仍为 0.19.2，本轮未重启 Gateway。部署、手机/主题/不同缩放及像素级外观验收继续独立记录。代码版本不等于同名 PyPI/Release 发布。
+
+### 0.20.0：V1 整卡布局
+
+**工具 → 资源快照 → 回答正文 → 模型/本轮/历史 → 身份标签**。三个一级面板默认折叠，与后台复盘复用原生边框和箭头。工具四列对齐、失败浅红底、重复进度轮询有界合并；资源与用量使用标签在上、数值在下的双列网格。配置 `streaming.layout: reference` 开启；旧布局默认保留。
+
+下面是**真实 Windows 飞书客户端**的合成预览截图，仅裁出卡片内容，不是生产任务数据：
+
+![V1 工具执行：原生四列、失败突出和二级原始记录](docs/assets/reference-v1-client-tools.png)
+
+![V1 资源快照：双列数值和采样时间](docs/assets/reference-v1-client-resources.png)
+
+![V1 Footer：模型上下文标题、紧凑本轮统计和历史摘要](docs/assets/reference-v1-client-footer.png)
+
+[冻结设计图、配置、代码契约及剩余验收](docs/REFERENCE-V1.md) · [真实 builder 合成 JSON](docs/assets/reference-v1-completed.json)
 
 ### 0.19.2：与后台复盘统一样式
 
@@ -34,14 +48,14 @@ Hermes 负责提供商认证、模型调用、工具执行和会话；本插件�
 | 可靠投递 | 成功后提交 sequence、稳定 UUID、投递三态台账 | `unknown` 不冒充成功，不自动重复发送答案 |
 | 长任务续卡 | 时间/元素预算续卡，旧片封存 | 卡片历史收缩不等于 LCM 上下文压缩 |
 | 打断与审批 | `/stop`、排队、后台/Cron、审批边界适配 | 原生审批 resolver 仍由 Hermes 持有 |
-| Footer V2 | 两行摘要、紧凑双列指标、运行态和折叠详情 | 按需开启；新版托管与跨端矩阵继续验收 |
+| V1 整卡 / Footer V2 | 工具、资源、正文、模型和历史；旧紧凑布局保留 | 新布局按需开启；托管部署与跨端矩阵继续验收 |
 | 历史用量 | SQLite 持久化，按月/日/模型/服务商/订阅标签查询 | 从启用后开始收集；不是账户全局账单 |
 | 多提供商口径 | Hermes canonical + 6 类协议字段解析测试 | 226 个目录入口不等于 226 家真实账号验收 |
 | 运维 | doctor、metrics、只读检查、显式 API smoke | 测试通过、服务端通过、客户端验收分别记录 |
 
-## Footer 长什么样
+## 兼容保留的旧 Footer 布局
 
-下面的图从**实际 `build_footer` 生成的字段与分组**绘制，使用合成数据。
+以下图用于保留的旧整卡布局（`layout: classic`），不是新的 V1；从**实际 `build_footer` 生成的字段与分组**绘制，使用合成数据。
 **它是结构示意，不是飞书客户端截图，也不承诺像素一致。**
 
 ![0.18.0 紧凑 Footer 结构；示例数据，非客户端截图](docs/assets/footer-current-structure.svg)
@@ -93,6 +107,10 @@ hermes --run-module hermes_lark_streaming install
 streaming:
   enabled: true
   width_mode: default
+  layout: reference
+  agent_name: "龙虾3号"
+  resources:
+    enabled: true
   footer:
     enabled: true
     mode: enhanced
@@ -100,12 +118,14 @@ streaming:
     text_size: normal
     history:
       enabled: true
+      timezone: Asia/Shanghai
+      show_models: false
       provider_labels:
         opencode-go: "OpenCode Go 订阅"
         siliconflow: "SiliconFlow 按量服务"
 ```
 
-仓库默认是 `classic`；历史账本默认关闭。上面的配置显式开启 enhanced 和历史统计。`mode: classic` 恢复经典显示，`enabled: false` 隐藏 Footer；账本采集是独立开关。旧 `fields` / `show_label` 仅作用于经典模式。
+仓库默认是旧布局、`classic` Footer、资源和历史关闭。上面的配置显式开启 V1 / enhanced / 资源快照 / 历史统计。`layout: classic` 返回旧整卡布局；`mode: classic` 恢复经典 Footer，`enabled: false` 隐藏 Footer；账本采集独立。`show_models: true` 在展开区增加前三组订阅商/模型复盘。旧 `fields` / `show_label` 仅作用于经典模式。
 
 ## 历史用量：几个月以后仍然可查
 
