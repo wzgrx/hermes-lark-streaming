@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import tomllib
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import yaml
 
+from hermes_lark_streaming import __version__
 from hermes_lark_streaming.card_limits import inspect_card
 from hermes_lark_streaming.cardkit.builder import build_complete_card, build_streaming_card_v2
 from hermes_lark_streaming.cardkit.reference import (
@@ -93,6 +96,13 @@ def segments():
     state.on_answer_delta("ANSWER preserved")
     state.finalize_segments(1)
     return state.segments
+
+
+def test_packaged_and_directory_plugin_versions_match():
+    root = Path(__file__).parents[1]
+    manifest = yaml.safe_load((root / "plugin.yaml").read_text())
+    project = tomllib.loads((root / "pyproject.toml").read_text())
+    assert manifest["version"] == project["project"]["version"] == __version__
 
 
 def test_completed_layout_has_three_panels_in_reference_order_no_duplicate_summary():
