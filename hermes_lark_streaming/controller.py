@@ -839,6 +839,12 @@ class StreamCardController(StreamingController):
             **({"context_used": context.get("used_tokens")} if context else {}),
             **({"context_max": context.get("max_tokens")} if context else {}),
         }
+        if self._cfg.footer_mode == "enhanced":
+            # Core result tokens may be session-cumulative: never label them as turn usage.
+            snapshot = session.footer_state.finish()
+            snapshot.setdefault("model", model)
+            snapshot["tool_calls"] = len(session.tool_use.build_display_steps())
+            session.footer = snapshot
 
     def _complete_session(self, session: CardSession) -> None:
         """异步完成当前流式卡片."""

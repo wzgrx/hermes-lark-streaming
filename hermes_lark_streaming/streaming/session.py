@@ -66,6 +66,7 @@ class CardSession:
         "element_count",
         "flush",
         "footer",
+        "footer_state",
         "guard",
         "image_resolver",
         "manual_split_in_progress",
@@ -110,6 +111,9 @@ class CardSession:
         self.tool_use = ToolUseTracker()
         self.flush = FlushController(throttle_ms=CARDKIT_MS, loop=loop)
         self.footer: dict[str, Any] = {}
+        from ..footer.state import TurnFooter
+
+        self.footer_state = TurnFooter()
         self.sequence = 1
         self._loop = loop
         self.created_at = time.time()

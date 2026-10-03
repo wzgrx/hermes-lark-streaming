@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-03
+
+### Added
+- Opt-in profile-local SQLite usage history: idempotent terminal-attempt ledger, main/auxiliary scopes, timezone-aware monthly/date reports, provider/subscription/model grouping and read-only CLI/JSON; no message bodies or credentials stored.
+- Opt-in Hermes-only Footer V2 (`streaming.footer.mode: enhanced`): two-row summary and native collapsed details, with classic layout preserved by default.
+- Read-only public API hook collection with exact context/turn binding, bounded request-attempt deduplication, final-state sealing, missing/partial usage semantics and no environment-only routing fallback.
+- Canonical usage adapters plus Chat, Responses, Anthropic, Gemini, Bedrock and Ollama fixtures; a timestamped 226-entry provider inventory clearly separated from real-account certification.
+- Input including cache, last-request context, requested/reported model, requested reasoning controls, first-response timing and route history. No extra inference clients, credential reads, account polling or Gateway patch seams.
+- Detailed task plan, source-linked coverage matrix, architecture image and offline regression tests. Live compression commit events, billing and Feishu device acceptance remain explicitly separate milestones.
+
 ### Fixed
 - Surface current-process API errors, failed completions and plain-text fallbacks in `doctor`, while distinguishing lifetime counters from a current outage. Do not double-count error-code buckets or treat stale/malformed counters as zero-error success.
 - Warn about pending delivery receipts beyond the retry window without reclaiming them, resending or rewriting the ledger. Preserve the default diagnostic exit-code contract: operational evidence is reported as warnings, not invented fatal failures.

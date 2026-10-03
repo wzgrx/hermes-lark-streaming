@@ -37,7 +37,6 @@ from .image import ImageResolver
 from .media import deliver_media_files, hook_media_paths, strip_media_directives
 from .segment_helper import (
     ELEMENT_THRESHOLD,
-    FOOTER_RESERVE,
     build_add_segment_action,
     build_reasoning_finalized_action,
     build_tool_update_action,
@@ -425,19 +424,22 @@ class StreamingController:
                 estimated = estimate_segment_elements(seg, all_steps)
                 if (
                     seg.type == SegmentType.TOOL
-                    and session.element_count + new_el_total + estimated + FOOTER_RESERVE > ELEMENT_THRESHOLD
+                    and session.element_count + new_el_total + estimated + self._cfg.footer_element_reserve
+                    > ELEMENT_THRESHOLD
                     and not session.split_disabled
                 ):
                     split_offset = find_tool_split_offset(
                         base_count=session.element_count + new_el_total,
                         seg=seg,
                         all_steps=all_steps,
+                        footer_reserve=self._cfg.footer_element_reserve,
                     )
                     if split_offset is not None:
                         segment_state.split_tool_segment(i, split_offset)
                         estimated = estimate_segment_elements(seg, all_steps)
                 if (
-                    session.element_count + new_el_total + estimated + FOOTER_RESERVE > ELEMENT_THRESHOLD
+                    session.element_count + new_el_total + estimated + self._cfg.footer_element_reserve
+                    > ELEMENT_THRESHOLD
                     and session.element_count + new_el_total > 1
                     and not session.split_disabled
                 ):
@@ -846,7 +848,7 @@ class StreamingController:
         delta = estimate - seg.element_estimate
         if (
             delta <= 0
-            or session.element_count + pending_delta + delta + FOOTER_RESERVE <= ELEMENT_THRESHOLD
+            or session.element_count + pending_delta + delta + self._cfg.footer_element_reserve <= ELEMENT_THRESHOLD
             or session.split_disabled
         ):
             return None
@@ -855,6 +857,7 @@ class StreamingController:
             base_count=session.element_count + pending_delta - seg.element_estimate,
             seg=seg,
             all_steps=all_steps,
+            footer_reserve=self._cfg.footer_element_reserve,
         )
         if split_offset is None:
             return None
@@ -1183,6 +1186,11 @@ class StreamingController:
         is_error = session.state == SessionState.FAILED
         is_aborted = session.state == SessionState.ABORTED
         all_tool_steps = session.tool_use.build_display_steps()
+        if self._cfg.footer_mode == "enhanced":
+            snapshot = session.footer_state.finish()
+            snapshot.setdefault("model", session.footer.get("model", ""))
+            snapshot["tool_calls"] = len(all_tool_steps)
+            session.footer = snapshot
 
         if segment_state is not None:
             segment_state.finalize_segments(len(all_tool_steps))
@@ -1216,6 +1224,8 @@ class StreamingController:
             footer_show_label=self._cfg.footer_show_label,
             footer_enabled=self._cfg.footer_enabled,
             footer_text_size=self._cfg.footer_text_size,
+            footer_mode=self._cfg.footer_mode,
+            footer_details=self._cfg.footer_details,
             panel_expanded=self._cfg.panel_expanded,
             header_enabled=self._cfg.header_enabled,
             body_text_size=self._cfg.body_text_size,

@@ -1,6 +1,6 @@
 """Hermes Lark streaming package entry point."""
 
-__version__ = "0.16.4"
+__version__ = "0.17.0"
 
 
 def register(ctx: object) -> None:
@@ -10,7 +10,9 @@ def register(ctx: object) -> None:
     the CardKit delivery owner. A future ``register_streaming_renderer`` protocol takes
     precedence without running both delivery paths.
     """
+    from .footer.hooks import register as register_footer
     from .native_hooks import try_register
 
     try_register(ctx)
+    register_footer(ctx)
     return None

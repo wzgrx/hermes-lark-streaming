@@ -37,6 +37,7 @@ def _commands() -> dict[str, Callable[[], int]]:
         "verify": _cmd_verify,
         "doctor": _cmd_doctor,
         "metrics": _cmd_metrics,
+        "history": _cmd_history,
         "smoke": _cmd_smoke,
         "lark-cli-smoke": _cmd_lark_cli_smoke,
         "repair-sdk": _cmd_repair_sdk,
@@ -55,10 +56,17 @@ def _print_usage() -> None:
     print("  verify     Verify compatibility without patching")
     print("  doctor     Run structured configuration/runtime diagnostics [--json]")
     print("  metrics    Show gateway metrics [--json]; add --sidecar for the sidecar process")
+    print("  history    Query local usage ledger [--month YYYY-MM] [--group-by provider-model] [--json]")
     print("  smoke      CardKit dry-run; add --execute --chat-id CHAT, --entity-only, or --closed-stream-probe")
     print("  lark-cli-smoke  Inspect optional lark-cli; add --execute for read-only checks")
     print("  repair-sdk  Explicitly repair lark-oapi in the active Hermes interpreter")
     print("  sidecar    Run optional health/metrics sidecar [--host HOST --port PORT]")
+
+
+def _cmd_history() -> int:
+    from .footer.history import cli
+
+    return cli(sys.argv[2:])
 
 
 def _get_patcher() -> Patcher | None:

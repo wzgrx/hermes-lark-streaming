@@ -13,6 +13,16 @@
 
 ---
 
+## Footer V2（0.17.0，按需开启）
+
+新增 Hermes 专用两行摘要与默认折叠的「本轮详情」，统一不同提供商的输入/缓存/上下文口径。
+设置 `streaming.footer.mode: enhanced` 开启；默认 `classic` 保留现有布局。完整目录收录 226 个提供商入口，不等同真实账号逐家验收。
+
+- [使用与边界](docs/FOOTER-V2.md) · [任务计划](docs/FOOTER-V2-PLAN.md)
+- [全部提供商与协议覆盖清单](docs/PROVIDER-COVERAGE.md) · [架构图](docs/assets/footer-v2-architecture.png)
+- [测试和交付证据](docs/FOOTER-V2-VALIDATION.md)
+- [历史用量：按月/模型/服务商/订阅统计](docs/USAGE-HISTORY.md)，独立可选的 SQLite 账本与 CLI/JSON。
+
 ## Cron 投递证据
 
 现代 Hermes Cron 钩子会等待 CardKit 返回真实 `message_id`，再把结构化回执交回调度器。成功卡片会清除 `last_delivery_unverified`；旧版只有布尔值的回执仍标记为未核验，不会被静默当成有证据的成功。

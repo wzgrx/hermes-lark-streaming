@@ -1,0 +1,8 @@
+Mode: built-in image_gen, generate, infographic-diagram
+Use case: infographic-diagram. Create a large landscape Chinese software implementation architecture design sheet, flat crisp UI vector-like editorial style, white and very pale blue background, large readable Chinese text, simple arrows, no decoration. Title "Hermes Card · Footer V2 实现架构". Subtitle "提供商交给 Hermes，统计与显示交给 Card". Small badge "2026-10-03 · 设计图，非部署截图".
+Top separate pale grey note "目录快照：226 个提供商入口 ≠ 全球厂商总数". Main flow LEFT TO RIGHT through four large columns:
+1 heading "① 提供商 / 接口", seven neat stacked labels "OpenAI Chat / Responses", "Anthropic Messages", "Gemini / Vertex", "Bedrock Converse", "DeepSeek / OpenCode / SiliconFlow", "Ollama / vLLM / llama.cpp", "其他自定义端点".
+2 heading "② Hermes 统一调用", boxes "认证与模型路由", "公开请求事件", "标准化 usage", "会话 / 轮次 / 请求 ID". Below "Card 不另建推理客户端".
+3 heading "③ Footer 数据层", boxes "输入 / 缓存口径归一", "请求去重 · 重试区分", "主请求与辅助调用分开", "缺失字段保留未知". Below "只读采集，不保存密钥与正文".
+4 heading "④ 飞书显示", a realistic compact white footer preview with rows "✓ 完成 · 18.6s · 模型 · max", "输入 / 输出 · 上下文 · 缓存", "▸ 本轮详情". Below boxes "复用现有发送队列", "保留 classic 回退".
+Bottom horizontal four validation gates: "协议样例测试" → "Hermes 集成测试" → "GitHub CI" → "飞书实机验收". Highlight last gate amber with "部署后单独确认". Bottom footnote large enough "目录收录、代码覆盖、真实账号实测分别记录。". Keep enough space, avoid cramped text. No fabricated benchmark data; preview numbers clearly example.

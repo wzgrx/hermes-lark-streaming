@@ -13,6 +13,20 @@ Inspired by [openclaw-lark](https://github.com/larksuite/openclaw-lark) and [her
 
 ---
 
+## Footer V2 (0.17.0, opt-in)
+
+Set `streaming.footer.mode: enhanced` for a provider-neutral two-row summary and collapsed turn details.
+The default `classic` mode preserves existing layouts. Usage is collected per turn, not mislabelled from session totals.
+Missing data stays unknown. No new inference client, account polling, or core patch seam is added.
+
+See the [usage guide](docs/FOOTER-V2.md), [implementation plan](docs/FOOTER-V2-PLAN.md),
+[226-entry provider inventory and protocol matrix](docs/PROVIDER-COVERAGE.md),
+[architecture](docs/assets/footer-v2-architecture.png), and [validation report](docs/FOOTER-V2-VALIDATION.md).
+Catalog/protocol coverage is not certification of every provider account. Live compression events, billing, and device acceptance are separate milestones.
+
+Persistent usage history is also opt-in: see [history configuration and CLI](docs/USAGE-HISTORY.md).
+Group by provider, subscription label, requested/reported model, day or month; export JSON without network calls.
+
 ## Cron delivery evidence
 
 The modern Hermes Cron hook waits for CardKit to return a real `message_id` and passes a structured receipt back to the scheduler. Successful cards clear `last_delivery_unverified`; legacy boolean-only receipts remain explicitly unverified.

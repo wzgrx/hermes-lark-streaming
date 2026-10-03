@@ -130,6 +130,29 @@ class Config:
         return bool(footer.get("enabled", True))
 
     @property
+    def footer_mode(self) -> str:
+        """Enhanced telemetry is opt-in; retain existing layouts on upgrade."""
+        footer = self._streaming_sec().get("footer", {})
+        if not isinstance(footer, dict):
+            return "classic"
+        return "enhanced" if footer.get("mode") == "enhanced" else "classic"
+
+    @property
+    def footer_details(self) -> bool:
+        footer = self._streaming_sec().get("footer", {})
+        return footer.get("details", True) is not False if isinstance(footer, dict) else True
+
+    @property
+    def footer_element_reserve(self) -> int:
+        return 6 if self.footer_mode == "enhanced" and self.footer_details else 2
+
+    @property
+    def footer_history(self) -> dict[str, Any]:
+        footer = self._streaming_sec().get("footer", {})
+        value = footer.get("history", {}) if isinstance(footer, dict) else {}
+        return value if isinstance(value, dict) else {}
+
+    @property
     def body_text_size(self) -> str:
         """Body answer markdown 的文字大小."""
         sec = self._streaming_sec()
@@ -177,7 +200,7 @@ class Config:
         """Footer 是否显示字段标签."""
         sec = self._streaming_sec()
         footer = sec.get("footer", {})
-        return bool(footer.get("show_label", False))
+        return bool(footer.get("show_label", False)) if isinstance(footer, dict) else False
 
     @staticmethod
     def _default_footer_fields() -> list[list[str]]:

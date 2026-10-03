@@ -10,6 +10,14 @@ from hermes_lark_streaming.metrics import metrics
 
 
 @pytest.fixture(autouse=True)
+def isolate_usage_history(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Observers in tests must never persist synthetic events in the live usage ledger."""
+    from hermes_lark_streaming.footer import history
+
+    monkeypatch.setattr(history, "default_path", lambda: tmp_path / "card-usage.sqlite3")
+
+
+@pytest.fixture(autouse=True)
 def isolate_metrics_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Keep card/Feishu tests from replacing the live gateway metrics snapshot."""
     monkeypatch.setattr(metrics, "_path", tmp_path / "metrics.json")

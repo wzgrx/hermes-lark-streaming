@@ -17,7 +17,7 @@ from .segments import Segment, SegmentType
 from .tooluse import ToolDisplayStep
 
 ELEMENT_THRESHOLD = 180  # 飞书硬上限 200，预留 20 给 footer + 波动
-FOOTER_RESERVE = 2  # footer 元素预留（hr + markdown）
+FOOTER_RESERVE = 2  # classic default; enhanced details reserve 6 via config
 
 
 def estimate_segment_elements(seg: Segment, all_steps: list[ToolDisplayStep]) -> int:
@@ -59,6 +59,7 @@ def find_tool_split_offset(
     base_count: int,
     seg: Segment,
     all_steps: list[ToolDisplayStep],
+    footer_reserve: int = FOOTER_RESERVE,
 ) -> int | None:
     """寻找 tool step 拆分点，让当前卡保留尽可能多的 steps."""
     start = seg.tool_offset
@@ -67,7 +68,7 @@ def find_tool_split_offset(
         return None
     for split_offset in range(end - 1, start, -1):
         estimate = estimate_tool_elements(start, split_offset, all_steps)
-        if base_count + estimate + FOOTER_RESERVE <= ELEMENT_THRESHOLD:
+        if base_count + estimate + footer_reserve <= ELEMENT_THRESHOLD:
             return split_offset
     return None
 

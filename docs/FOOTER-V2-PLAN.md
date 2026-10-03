@@ -1,0 +1,54 @@
+# Hermes Footer V2：任务计划与验收边界
+
+日期：2026-10-03。目标仓库：`wzgrx/hermes-lark-streaming`。仅 Hermes；保留现有 CardKit 投递所有权。
+
+## 目标与范围
+
+将已确认的「两行摘要 + 折叠详情」变成可测试代码。提供商由 Hermes 负责认证、模型调用与路由；Card 负责统一展示，而不是另造推理客户端。
+
+本轮抓取 models.dev 得到 **226 个提供商条目**。这是带时间戳的目录快照，包含地区、订阅和代理入口，并非全球企业总数。完整表与来源见 `PROVIDER-COVERAGE.md`，机器可读快照保留检索时间和哈希。
+
+“覆盖”分四级：目录收录、协议 fixture 通过、Hermes 集成通过、真实账号端到端通过。禁止将前三级写成第四级。未知提供商通过 Hermes canonical usage 接入；未知字段保留未知。
+
+## 执行阶段
+
+1. **研究与基线**：核对官方文档、Hermes 注册表、用户 fork / 上游 issues；冻结源码和目录版本；不读取凭据。
+2. **计划与设计**：保存本计划、完整提供商清单、接口字段矩阵和架构图。UI 沿用已确认三张设计图。
+3. **协议适配层**：实现 Hermes canonical、OpenAI Chat/Responses、Anthropic Messages、Gemini、Bedrock Converse、Ollama 的只读 usage 归一化；未知协议显式降级。
+4. **采集与状态**：公共 pre/post API hooks；精确 profile/session/turn/request 身份；重复回调去重，重试不混同，辅助调用不混入主任务；标量白名单。
+5. **渲染与兼容**：enhanced/classic 开关；两行摘要、默认折叠详情、实际时间/请求模型/返回模型/缓存/上下文；缺失字段不伪造零；保持旧调用兼容。
+6. **测试**：每个协议字段 fixture，目录所有 ID 的通用路径参数化测试，跨会话、乱序、重试、缺失、异常、HTML/Markdown 注入、配置降级；现有全量回归、lint/typecheck、Hermes main/旧版本补丁往返。
+7. **发布**：中文/英文使用文档、变更日志、版本号；核对 diff 无凭据、无线上配置；提交用户 main、推送、检查 GitHub CI；不创建 PR。
+8. **部署与实机验收**：本轮不重启 Gateway。部署后另测飞书桌面/手机、折叠行为、真实 provider usage 与换卡；上线验收前不宣称全平台实测。
+
+追加用户需求：**历史用量**纳入本轮代码交付。新增 opt-in `footer/history.py`，按请求去重写入 profile SQLite；按月份、时区范围、服务商/订阅标签/请求与返回模型查询。主任务/辅助任务分别统计，缺失标记明确；CLI/JSON 可供 Hermes 调用。详细配置和统计口径见 `USAGE-HISTORY.md`。真实费用与账号额度继续保持能力门控。
+
+## 模块边界
+
+`footer/usage.py`：纯协议归一化；`footer/state.py`：有界、可去重的单轮状态；`footer/hooks.py`：只读生命周期适配；`footer/render.py`：纯 CardKit 数据生成。
+
+collector 不发卡、不请求账号余额、不保存提示词/请求正文/密钥。请求来自 Hermes；投递继续走现有 controller/flush/sequence。优先使用 canonical usage，不按提供商名称猜协议。
+
+## 正确性契约
+
+- `↑输入` 是本轮多次请求含缓存的 prompt 总量；上下文是末次主请求的输入及当时有效上限。
+- Anthropic/Bedrock 非缓存输入需加读/写缓存；OpenAI 缓存为输入子集；Gemini 思考用量与正文输出按原协议区别处理。
+- 缺失缓存统计与真实零缓存不同；部分统计应标记，禁止包装成完整总额。
+- 配置的 max 不等于服务端确认；展示实际请求的白名单思考参数，并注明来源。
+- 总耗时取卡片逻辑轮次单调时钟，不用 API 时间总和冒充；首响应只代表收到首 chunk。
+- provider / 请求模型 / 返回模型分开；不把多路由费用都归给最后服务商。
+- 账号额度、费用、LCM 压缩前后值只展示具有可靠来源的数据，不为了填满设计图而编造。
+- LCM 摘要 API 完成不等于上下文压缩提交成功；完整压缩状态待明确提交事件接入。
+- 无精确轮次关联就保留基础 footer，不回退到“最近会话”。
+
+## 有界交付
+
+本轮优先交付协议覆盖、正确统计、真实 hook 接入和完成态详情。实时压缩提交事件、账户额度、费用台账列为能力门控项，不靠新核心补丁/数据库轮询强行实现。状态图是目标交互契约，未接入事件的部分在实现报告中单列。
+
+## 回滚
+
+`streaming.footer.mode: classic` 保留原布局；`streaming.footer.enabled: false` 关闭 footer。使用旧提交回滚不触及会话、模型、LCM 数据库或凭据。
+
+## 本轮证据
+
+开始基线 Card `759dc499dc36dd0ac271f0543ddd2356b7fe87d6`；本地 Hermes `fa6e6815d4b23dceb8b101627da3e0f4e69de1fa`；查询官方 main `0ff4c748658ff5b92661fa2b453fcf8ed813414d`。后续测试结果与实际交付见 `FOOTER-V2-VALIDATION.md`。

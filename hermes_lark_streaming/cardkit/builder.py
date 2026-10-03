@@ -488,6 +488,8 @@ def build_complete_card(
     footer_show_label: bool = True,
     footer_enabled: bool = True,
     footer_text_size: str = "notation",
+    footer_mode: str = "classic",
+    footer_details: bool = True,
     panel_expanded: bool = False,
     header_enabled: bool = False,
     body_text_size: str = "normal_v2",
@@ -524,7 +526,20 @@ def build_complete_card(
     if not has_answer:
         elements.append({"tag": "markdown", "content": _T["done"][0], "text_size": body_text_size})
 
-    if footer_enabled:
+    if footer_enabled and footer_mode == "enhanced":
+        from ..footer.render import build_footer
+
+        try:
+            elements.extend(
+                build_footer(
+                    footer_data or {}, is_error=is_error, is_aborted=is_aborted,
+                    text_size=footer_text_size, details=footer_details,
+                )
+            )
+        except Exception:
+            # A presentation failure must never suppress the answer.
+            elements.extend(_build_footer_elements(footer_data, is_error, is_aborted))
+    elif footer_enabled:
         elements.extend(
             _build_footer_elements(
                 footer_data,
