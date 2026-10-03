@@ -53,6 +53,14 @@ python -m pytest tests -q
 - 新增 20 项回归，包括实际 Hermes middleware chain 的成功/异常路径；本机 Hermes `fa6e6815d4b2` 的隔离探针用 80 条合成长消息复现裁剪，并从结构化执行参数恢复 `max`。模型 API 调用 0 次，没有启动或重启 Gateway。
 - 生产托管部署与真实轮次复验继续单列，不将隔离测试等同线上验收。
 
+## 2026-10-03 桌面交互复验
+
+直接在 Windows 飞书打开已有的合成预览，操作“本轮详情”的折叠与展开，并检查 1291、961、1536 像素宽窗口。服务商/模型、四行双列指标、上下文和缺失说明均保持可读，未观察到重叠或截断。常规示例详情为八行；长模型名和实际服务商切换仍按需增行。
+
+这是**浅色桌面完成态的布局验收**：961 像素窗口不是手机端测试，已有合成预览也不是新 Gateway 真实对话。运行中展开保持、真实请求思考标量、深色和手机端继续单列。此次检查没有发送聊天消息、调用模型或重启 Gateway。
+
+文档基线 `80cab7a` 的 [Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37103007296) 与 [CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37103007316) 均成功。私有聊天窗口与身份信息不进入公开仓库。
+
 ## 提供商范围复核
 
 本轮重新读取 [models.dev API](https://models.dev/api.json)，仍为 226 个目录入口，与已有快照相比没有新增/移除 ID；响应哈希为 `8c708f8391cdc7bbf335097669d41c864efce9c93448a942dc14777480a4702d`。模型元数据会持续变化，完整冻结清单及时间戳仍见 [覆盖矩阵](PROVIDER-COVERAGE.md)。目录全覆盖的测试不等于所有商业账号逐一认证。
