@@ -13,6 +13,7 @@ from inspect import iscoroutinefunction
 from typing import Any
 
 from .controller import get_controller
+from .streaming.tool_result import normalize_tool_completion
 
 _logger = logging.getLogger("hermes_lark_streaming")
 
@@ -226,8 +227,11 @@ def on_tool_updated(
     tool_name: str,
     status: str,
     detail: str = "",
+    result: Any = None,
+    is_error: Any = None,
 ) -> bool:
     """[注入点 3] progress_callback — tool.updated."""
+    status, detail = normalize_tool_completion(tool_name, status, detail, result=result, is_error=is_error)
     return bool(
         ctrl.on_tool_update(
             message_id=message_id,

@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-10-03
+
+### Fixed
+- Read completion `result` and strict boolean `is_error` from Hermes's existing tool callback kwargs. Current Hermes supplies `preview=None` on completion; preserve terminal stdout and nonzero exit codes instead of presenting every completion as successful. Keep the same hook/controller/writer ownership and legacy callbacks without metadata.
+- Project only bounded terminal-like output fields, not read/browser/media payloads. Preserve source results; redact credentials before presentation. Correct the sensitive flag regex that previously retained the original matched secret while appending a redaction marker; cover JSON values and reserved key prefixes as well.
+- Round resource percentages to one decimal while retaining unknown values and genuine zero.
+
+### Validation
+- Two real Gateway turns on managed 0.20.0 validated delivery, requested max, main/auxiliary usage separation and one terminal invocation, and exposed the missing completion metadata fixed here. The post-fix runtime acceptance is tracked separately in the deployment record.
+- 1435 full tests, Ruff and mypy (49 source files) pass, including 29 added completion/redaction/resource regressions. GitHub CI and managed runtime evidence are recorded independently.
+
 ## [0.20.0] - 2026-10-03
 
 ### Added

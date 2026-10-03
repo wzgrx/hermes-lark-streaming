@@ -368,6 +368,8 @@ def _tool_hook(indent: str) -> str:
             "            tool_name=tool_name or '',",
             "            status='started' if event_type == 'tool.started' else 'completed',",
             "            detail=preview or '',",
+            "            result=locals().get('kwargs', {}).get('result'),",
+            "            is_error=locals().get('kwargs', {}).get('is_error'),",
             "        ):",
             "            _lark_log_queue = getattr(_lark_ctx, 'log_queue', None) if _lark_ctx is not None else None",
             "            if _lark_ctx is None:",

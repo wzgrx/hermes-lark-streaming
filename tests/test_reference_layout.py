@@ -21,6 +21,7 @@ from hermes_lark_streaming.cardkit.reference import (
     REFERENCE_ELEMENT_RESERVE,
     _tool_groups,
     build_reference_footer,
+    build_resources,
     build_tools,
 )
 from hermes_lark_streaming.config import Config
@@ -410,6 +411,15 @@ async def test_footer_off_still_updates_reference_tools_without_missing_footer_a
 
 
 PROVIDERS = json.loads((Path(__file__).parents[1] / "docs/data/providers-20261003.json").read_text())["providers"]
+
+
+@pytest.mark.parametrize("percent, expected", [(10.655, "10.7%"), (0, "0%"), (None, "—")])
+def test_reference_resources_round_percent_without_inventing_unknown(percent, expected):
+    snap = data()
+    snap["reference"]["host"]["cpu_percent"] = percent
+    content = json.dumps(build_resources(snap["reference"]["host"]), ensure_ascii=False)
+    assert expected in content
+    assert "10.655" not in content
 
 
 @pytest.mark.parametrize("provider", [p["id"] for p in PROVIDERS])

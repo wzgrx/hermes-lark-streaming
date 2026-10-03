@@ -274,7 +274,10 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any]) -> dict[str, An
 def build_resources(host: dict[str, Any]) -> dict[str, Any]:
     def value(key: str, suffix: str = "") -> str:
         n = seconds(host.get(key))
-        return f"{n:g}{suffix}" if n is not None else "—"
+        if n is None:
+            return "—"
+        number = f"{n:.1f}".rstrip("0").rstrip(".")
+        return f"{number}{suffix}"
 
     def memory(prefix: str) -> str:
         used, maximum = seconds(host.get(prefix + "_used_gib")), seconds(host.get(prefix + "_total_gib"))

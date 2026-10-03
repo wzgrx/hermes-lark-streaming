@@ -225,7 +225,7 @@ def _build_tool_hook_runner(*, use_turn_context: bool):
             "class Callbacks:\n"
             "    def __init__(self, ctx):\n"
             "        self._ctx = ctx\n"
-            "    def callback(self, event_type, tool_name=None, preview=None):\n"
+            "    def callback(self, event_type, tool_name=None, preview=None, **kwargs):\n"
             f"{_tool_hook('        ')}"
             "        ctx = self._ctx\n"
             "        return 'native'\n"
@@ -235,7 +235,7 @@ def _build_tool_hook_runner(*, use_turn_context: bool):
 
     source = (
         "def callback(event_type, event_message_id, _run_still_current, "
-        "tool_name=None, preview=None):\n"
+        "tool_name=None, preview=None, **kwargs):\n"
         f"{_tool_hook('    ')}"
         "    return 'native'\n"
     )
@@ -444,6 +444,8 @@ class TestGeneratedToolHook:
             tool_name="search",
             status="started",
             detail="query",
+            result=None,
+            is_error=None,
         )
 
     def test_consumed_tool_event_preserves_log_mode(self) -> None:
@@ -482,6 +484,8 @@ class TestGeneratedToolHook:
             tool_name="search",
             status="completed",
             detail="done",
+            result=None,
+            is_error=None,
         )
 
     def test_exception_is_logged_before_native_fallback(self, caplog: pytest.LogCaptureFixture) -> None:

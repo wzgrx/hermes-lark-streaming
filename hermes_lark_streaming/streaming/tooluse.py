@@ -67,8 +67,10 @@ _AUTH_HEADER_RE = re.compile(
     re.IGNORECASE,
 )
 _SECRET_FLAG_RE = re.compile(
-    r'((?:^|[\s"\'`])(--?[A-Za-z0-9][A-Za-z0-9-]*)(=|\s+)("(?:[^"]*)"|\'(?:[^\']*)\'|[^\s"\'`]+))'
+    r'(^|[\s"\'`])(--?[A-Za-z0-9][A-Za-z0-9-]*)(=|\s+)("(?:[^"]*)"|\'(?:[^\']*)\'|[^\s"\'`]+)'
 )
+_JSON_SECRET_RE = re.compile(r'("([A-Za-z_][A-Za-z0-9_-]*)"\s*:\s*)("(?:\\.|[^"\\])*")')
+_BARE_KEY_RE = re.compile(r"(?<![A-Za-z0-9_])(?:sk-[A-Za-z0-9_-]+|(?:ghp_|github_pat_|oc_sk_)[A-Za-z0-9_]+)")
 
 
 def redact_inline_secrets(value: str) -> str:
@@ -86,10 +88,15 @@ def redact_inline_secrets(value: str) -> str:
             return f"{m.group(1)}{m.group(2)}{m.group(3)}[redacted]"
         return str(m.group(0))
 
-    return _SECRET_FLAG_RE.sub(
+    redacted = _SECRET_FLAG_RE.sub(
         _redact_flag,
         _AUTH_HEADER_RE.sub(r"\1[redacted]", _INLINE_ASSIGNMENT_RE.sub(_redact_assign, value)),
     )
+    redacted = _JSON_SECRET_RE.sub(
+        lambda m: m.group(1) + '"[redacted]"' if _SENSITIVE_NAME_RE.search(m.group(2)) else m.group(0),
+        redacted,
+    )
+    return _BARE_KEY_RE.sub("[redacted]", redacted)
 
 
 def _sanitize_detail(text: str, sanitizer: str | None) -> str:
