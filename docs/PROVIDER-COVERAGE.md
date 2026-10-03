@@ -8,7 +8,7 @@
 
 所有下列 ID 均可作为 provider 标签通过 Hermes canonical footer 路径；fixture 对全部目录 ID 运行相同回归。这仅证明统计/展示不依赖硬编码厂商白名单，不代表能绕过 Hermes 的认证与客户端支持，也不代表每个账号/模型都已实测。
 
-SDK 列仅记录目录线索，不能据此确定某个端点支持哪些接口。实际 transport 由 Hermes 解析。空 usage 显示未知，不请求 provider API 来补齐。所有真实账号 E2E 状态均为 **本轮未执行**。
+SDK 列仅记录目录线索，不据此选择端点协议；实际 transport 由 Hermes 解析。空 usage 显示未知，不请求 provider API 来补齐。**本轮已执行 OpenCode Go + deepseek-v4.1-flash 的真实 Gateway 验收**：成功 stdout 与预期退出 7、独立话题投递、max（请求）和 Footer/账本一致通过，见 [实测记录](assets/reference-v1-real-gateway-checks.json)。这不是 DeepSeek 直连接口或其余 225 个目录入口的逐账号认证；它们仍只有目录/协议/canonical 路径证据。
 
 ## 协议矩阵
 
