@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Validation
 - Five new regressions cover both sealed snapshot entry points, a real SQLite UTC/Shanghai day-and-month boundary, and timezone changes during successful/failing background reads. Layout, dependencies, generated hooks and database schema are unchanged. Runtime deployment and visual acceptance are recorded separately.
 - 1455 full local tests, Ruff and mypy (49 source files) pass; the 0.20.3 wheel builds offline. Correct history documentation to distinguish canonical-hook zeros in the ledger from raw-provider presence and per-turn cache display.
+- Exact-revision Tests/CodeQL pass. Managed deployment, idle restart, Gateway/Feishu, doctor/hooks and read-only ledger health pass; configuration, credentials, core and LCM are unchanged. No new real-message or mobile/pixel acceptance is claimed. See `docs/assets/footer-cache-boundaries-deployment-checks.json`.
 
 ## [0.20.2] - 2026-10-03
 
