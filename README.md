@@ -4,13 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.18.1-blue)
+![Code version](https://img.shields.io/badge/code-0.19.0-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [Footer](docs/FOOTER-V2.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md) · [视觉审查](docs/FOOTER-DESIGN-AUDIT.md)
 
-> **当前状态 · 2026-10-03**：源码 0.18.1 包含紧凑详情与思考标量采集修复；布局合成预览通过 CardKit API，桌面实际展开检查通过。运行中的 Gateway 仍为 0.17.1，本轮未重启或替换。新布局不是旧三列长表，见[紧凑布局设计与证据](docs/FOOTER-COMPACT.md)。整体计划仍有运行态及跨端验收待完成。源码版本不等于同名 PyPI/Release 发布。
+> **当前状态 · 2026-10-03**：源码 0.19.0 包含紧凑详情、思考标量采集修复及事件驱动运行态。紧凑合成预览已通过桌面展开检查，七种运行阶段局部更新通过真实 CardKit API。运行中的 Gateway 仍为 0.17.1，本轮未重启或替换。新版部署、运行态实机与跨端验收继续单列。源码版本不等于同名 PyPI/Release 发布。
 
 ![运行架构：Hermes、Card 插件、飞书客户端及独立用量账本](docs/assets/runtime-overview.svg)
 
@@ -28,7 +28,7 @@ Hermes 负责提供商认证、模型调用、工具执行和会话；本插件�
 | 可靠投递 | 成功后提交 sequence、稳定 UUID、投递三态台账 | `unknown` 不冒充成功，不自动重复发送答案 |
 | 长任务续卡 | 时间/元素预算续卡，旧片封存 | 卡片历史收缩不等于 LCM 上下文压缩 |
 | 打断与审批 | `/stop`、排队、后台/Cron、审批边界适配 | 原生审批 resolver 仍由 Hermes 持有 |
-| Footer V2 | 两行摘要、紧凑双列指标与折叠详情 | 按需开启；运行态与跨端矩阵继续验收 |
+| Footer V2 | 两行摘要、紧凑双列指标、运行态和折叠详情 | 按需开启；新版托管与跨端矩阵继续验收 |
 | 历史用量 | SQLite 持久化，按月/日/模型/服务商/订阅标签查询 | 从启用后开始收集；不是账户全局账单 |
 | 多提供商口径 | Hermes canonical + 6 类协议字段解析测试 | 226 个目录入口不等于 226 家真实账号验收 |
 | 运维 | doctor、metrics、只读检查、显式 API smoke | 测试通过、服务端通过、客户端验收分别记录 |
@@ -39,6 +39,10 @@ Hermes 负责提供商认证、模型调用、工具执行和会话；本插件�
 **它是结构示意，不是飞书客户端截图，也不承诺像素一致。**
 
 ![0.18.0 紧凑 Footer 结构；示例数据，非客户端截图](docs/assets/footer-current-structure.svg)
+
+运行期间显示回答、工具、确认、上下文摘要和实际服务商切换；单次请求错误与整轮失败分开。只有真实事件触发状态，详见[运行态契约与验证](docs/FOOTER-RUNTIME.md)。
+
+![0.19.0 原生运行态结构；示例数据，非客户端截图](docs/assets/footer-runtime-states.svg)
 
 **约八行常规详情**：服务/接口/思考、模型、四行双列指标、末次上下文、统计说明。长字段自动换行；模型差异或服务商切换时增加对应信息，不删掉真实差异。
 
@@ -157,6 +161,7 @@ hermes pm install
 | 桌面展开检查 | 0.17.1 旧设计失败；0.18.0 紧凑合成预览已直接检查 |
 | 用户新要求：高密度紧凑详情 | 0.18.0 已实现；合成卡片桌面检查通过，待托管部署 |
 | 思考档位在真实请求中的稳定展示 | 0.18.1 标量采集修复通过真实 Hermes 离线契约验证；生产部署后复验仍待完成 |
+| 回答/工具/确认/摘要/切换/错误运行态 | 0.19.0 已实现；真实 CardKit 局部更新通过，待新版托管与实机验收 |
 | 手机窄屏、深浅色、长任务完整视觉矩阵 | 待验收 |
 | LCM 压缩提交前后值、账户额度、真实费用 | 待可靠事件/API；当前不推算 |
 | 飞书内历史报表按钮或网页 Dashboard | 尚未实现，CLI 已可查询 |

@@ -35,6 +35,7 @@ from .diagnostics import compact_ids, extract_missing_element_id, segment_state_
 from .flush import CARDKIT_MS
 from .image import ImageResolver
 from .media import deliver_media_files, hook_media_paths, strip_media_directives
+from .runtime_footer import RuntimeFooterController
 from .segment_helper import (
     ELEMENT_THRESHOLD,
     build_add_segment_action,
@@ -91,7 +92,7 @@ class CronDeliveryOutcomeUnknown(RuntimeError):
     """A Cron card send may have committed without a usable message receipt."""
 
 
-class StreamingController:
+class StreamingController(RuntimeFooterController):
     """流式卡片专用方法 — 由 StreamCardController 继承."""
 
     _client: FeishuClient | None
@@ -109,7 +110,9 @@ class StreamingController:
     def _schedule_flush(self, session: CardSession) -> None:
         if session.state == SessionState.IDLE or session.state.is_terminal:
             return
-        if session.state == SessionState.CLARIFY_PAUSED:
+        if session.manual_split_in_progress:
+            return  # the manual split owns sealing/handoff until its finally block
+        if session.state == SessionState.CLARIFY_PAUSED and not self._runtime_enabled():
             return
         if session.guard.should_skip("_schedule_flush"):
             return
@@ -129,6 +132,7 @@ class StreamingController:
             segment_state.on_answer_delta(answer)
         if not (reasoning and self._cfg.show_reasoning) and not answer:
             return False
+        session.runtime_status.signal("answer" if answer else "thinking")
         self._schedule_flush(session)
         return True
 
@@ -283,6 +287,9 @@ class StreamingController:
                 header_enabled=self._cfg.header_enabled,
                 text_size=self._cfg.body_text_size,
                 width_mode=self._cfg.width_mode,
+                footer_data=self._runtime_snapshot(session),
+                footer_text_size=self._cfg.footer_text_size,
+                footer_details=self._cfg.footer_details,
             )
             try:
                 card_id, card_msg_id = await self._create_and_attach_card(
@@ -345,6 +352,7 @@ class StreamingController:
             session.flush.set_card_message_ready(True)
             if session.state == SessionState.CREATING:
                 session.state = SessionState.STREAMING
+            self._start_runtime_timer(session)
             if session.segment_state and session.segment_state.has_dirty:
                 self._schedule_flush(session)
             _logger.info(
@@ -376,6 +384,10 @@ class StreamingController:
         """幂等 flush：按 segment 顺序处理结构性变更，超阈值时拆卡."""
         if session.state.is_terminal or not session.card_id:
             return
+        if session.state == SessionState.CLARIFY_PAUSED:
+            if not session.streaming_closed:
+                await self._flush_runtime_footer(session)
+            return  # approval pauses body updates; the footer remains observable
         # A single Hermes turn can outlive CardKit's streaming window many times.
         # The previous behavior stopped all updates on 300309 until final completion,
         # leaving an apparently dead card for the rest of a long-running turn.
@@ -392,6 +404,8 @@ class StreamingController:
                     return
                 session.rollover_retry_after = time.monotonic() + _CARDKIT_ROLLOVER_RETRY_SEC
         if session.streaming_closed:
+            return
+        if not await self._flush_runtime_footer(session):
             return
         segment_state = session.segment_state
         if segment_state is None:
@@ -663,6 +677,9 @@ class StreamingController:
                 header_enabled=self._cfg.header_enabled,
                 text_size=self._cfg.body_text_size,
                 width_mode=self._cfg.width_mode,
+                footer_data=self._runtime_snapshot(session),
+                footer_text_size=self._cfg.footer_text_size,
+                footer_details=self._cfg.footer_details,
             )
             await self._session_client(session).cardkit_update(
                 session.card_id, recovery_card, sequence=recovery_sequence,
@@ -671,6 +688,8 @@ class StreamingController:
             session.stream_failure_streak = 0
             session.stream_retry_after = 0.0
             session.element_count = 1
+            session.runtime_last_signature = None
+            session.runtime_next_update = 0.0
             for seg in segments[session.split_index :]:
                 seg.created = False
                 seg.dirty = True
@@ -786,9 +805,10 @@ class StreamingController:
             )
             # 缺失元素（300313）时回滚 stale segment：本地 created=True 但卡片上不存在，
             # 下一轮 flush 会用 add_elements 重建该元素，避免反复 partial_update 死循环。
-            if missing_el_id == _LOADING_ELEMENT_ID:
+            if missing_el_id in {_LOADING_ELEMENT_ID, "footer_details"}:
                 await self._reseed_card_after_missing_element(
-                    session, segments, missing_el_id, operation="batch_update",
+                    session, session.segment_state.segments if session.segment_state else segments,
+                    missing_el_id, operation="batch_update",
                 )
             elif missing_el_id and any(
                 seg.type == SegmentType.REASONING
@@ -999,6 +1019,9 @@ class StreamingController:
                 header_enabled=self._cfg.header_enabled,
                 text_size=self._cfg.body_text_size,
                 width_mode=self._cfg.width_mode,
+                footer_data=self._runtime_snapshot(session),
+                footer_text_size=self._cfg.footer_text_size,
+                footer_details=self._cfg.footer_details,
             )
             new_card_id, new_msg_id = await self._create_and_attach_card(
                 session,
@@ -1139,6 +1162,9 @@ class StreamingController:
             session.segment_state = SegmentState()
             session.split_index = 0
             session.element_count = 1  # loading element（与拆卡一致）
+            previous_steps = session.tool_use.build_display_steps()
+            session.tool_calls_prior += len(previous_steps)
+            session.tools_done_prior += sum(step["status"] != "running" for step in previous_steps)
             session.tool_use = ToolUseTracker()
 
             _logger.info(
@@ -1183,13 +1209,15 @@ class StreamingController:
         session.flush.mark_completed()
 
         segment_state = session.segment_state
+        session.stop_runtime_timer()
         is_error = session.state == SessionState.FAILED
         is_aborted = session.state == SessionState.ABORTED
         all_tool_steps = session.tool_use.build_display_steps()
         if self._cfg.footer_mode == "enhanced":
             snapshot = session.footer_state.finish()
             snapshot.setdefault("model", session.footer.get("model", ""))
-            snapshot["tool_calls"] = len(all_tool_steps)
+            snapshot["tool_calls"] = session.tool_calls_prior + len(all_tool_steps)
+            snapshot["compression_observed"] = session.runtime_status.snapshot()["compression_observed"]
             session.footer = snapshot
             metrics.increment("footer.turn.missing" if snapshot.get("telemetry_missing") else "footer.turn.measured")
 

@@ -73,6 +73,11 @@ class CardSession:
         "media_text",
         "message_id",
         "rollover_retry_after",
+        "runtime_last_signature",
+        "runtime_next_update",
+        "runtime_retry_after",
+        "runtime_status",
+        "runtime_timer",
         "segment_state",
         "sequence",
         "session_key",
@@ -82,7 +87,9 @@ class CardSession:
         "stream_failure_streak",
         "stream_retry_after",
         "streaming_closed",
+        "tool_calls_prior",
         "tool_use",
+        "tools_done_prior",
     )
 
     def __init__(
@@ -109,11 +116,20 @@ class CardSession:
         self.card_msg_id: str | None = None
         self.card_id: str | None = None
         self.tool_use = ToolUseTracker()
+        self.tool_calls_prior = 0
+        self.tools_done_prior = 0
         self.flush = FlushController(throttle_ms=CARDKIT_MS, loop=loop)
         self.footer: dict[str, Any] = {}
         from ..footer.state import TurnFooter
 
         self.footer_state = TurnFooter()
+        from ..footer.runtime import RuntimeStatus
+
+        self.runtime_status = RuntimeStatus()
+        self.runtime_timer: asyncio.TimerHandle | None = None
+        self.runtime_last_signature: tuple[Any, ...] | None = None
+        self.runtime_next_update = 0.0
+        self.runtime_retry_after = 0.0
         self.sequence = 1
         self._loop = loop
         self.created_at = time.time()
@@ -155,11 +171,20 @@ class CardSession:
             self.stream_retry_after = 0.0
             self.rollover_retry_after = 0.0
             self.card_started_at = time.monotonic()
+            self.runtime_last_signature = None
+            self.runtime_next_update = 0.0
+            self.runtime_retry_after = 0.0
         self.card_id = card_id
         self.card_msg_id = card_msg_id
 
     def mark_failed(self) -> None:
         self.state = SessionState.FAILED
+        self.stop_runtime_timer()
+
+    def stop_runtime_timer(self) -> None:
+        if self.runtime_timer is not None:
+            self.runtime_timer.cancel()
+            self.runtime_timer = None
 
     def active_segments(self) -> list[Segment]:
         if self.segment_state is None:

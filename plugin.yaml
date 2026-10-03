@@ -1,5 +1,5 @@
 name: hermes-lark-streaming
-version: 0.18.1
+version: 0.19.0
 description: "Feishu/Lark CardKit streaming integration for Hermes Gateway"
 author: "wzgrx"
 kind: standalone
@@ -17,4 +17,5 @@ provides_hooks:
   - pre_api_request
   - post_api_request
   - api_request_error
+  - pre_auxiliary_call
   - post_auxiliary_call

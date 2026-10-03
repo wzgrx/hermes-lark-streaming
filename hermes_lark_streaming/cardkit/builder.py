@@ -435,6 +435,9 @@ def build_streaming_card_v2(
     header_enabled: bool = False,
     text_size: str = "normal_v2",
     width_mode: str = "default",
+    footer_data: dict[str, Any] | None = None,
+    footer_text_size: str = "notation",
+    footer_details: bool = True,
 ) -> dict[str, Any]:
     """CardKit 2.0 流式占位卡片 — 含工具面板 + streaming + loading 元素."""
     elements: list[dict] = []
@@ -452,7 +455,12 @@ def build_streaming_card_v2(
 
     if show_streaming_element:
         elements.append(_streaming_element(text_size=text_size))
-    elements.append(_loading_element())
+    if footer_data is not None:
+        from ..footer.runtime import build_runtime_footer
+
+        elements.extend(build_runtime_footer(footer_data, text_size=footer_text_size, details=footer_details))
+    else:
+        elements.append(_loading_element())
 
     card = {
         "schema": "2.0",

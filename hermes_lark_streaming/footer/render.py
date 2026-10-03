@@ -171,8 +171,17 @@ def build_footer(
             f"<font color='orange'>Provider path</font> {route_text}",
             f"<font color='orange'>服务商路径</font> {route_text}", text_size,
         ))
+    error_type = safe(data.get("last_error_type"))
+    if error_type:
+        groups.append(markdown(
+            f"<font color='orange'>Latest API error type</font> {error_type}",
+            f"<font color='orange'>最近 API 错误类型</font> {error_type}", text_size,
+        ))
     note_en = "Main requests only; cost not reported · compression not observed"
     note_zh = "主请求累计；费用未提供 · 压缩尚未观测"
+    if data.get("compression_observed"):
+        note_en = "Main requests only; cost not reported · summary observed; compression commit unverified"
+        note_zh = "主请求累计；费用未提供 · 已观测摘要请求，压缩提交待确认"
     if data.get("usage_partial"):
         note_en, note_zh = "Partial usage · " + note_en, "统计不完整 · " + note_zh
     groups.append(markdown(f"<font color='grey'>{note_en}</font>", f"<font color='grey'>{note_zh}</font>", "notation"))

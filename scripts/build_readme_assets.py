@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from hermes_lark_streaming.footer.render import build_footer  # noqa: E402
+from hermes_lark_streaming.footer.runtime import build_runtime_footer  # noqa: E402
 
 ASSETS = ROOT / "docs/assets"
 ASSETS.mkdir(parents=True, exist_ok=True)
@@ -101,7 +102,34 @@ def main() -> None:
     (ASSETS / "footer-current-structure.svg").write_text(
         svg(1120, 632, drawing, "Compact footer schematic, not a client screenshot"), encoding="utf-8"
     )
-    print("Built 2 SVG diagrams and 1 synthetic Card JSON fixture; no live config read.")
+    live = text(32, 47, "运行中的 Footer · 原生紧凑布局", 28, bold=True)
+    live += text(32, 78, "代码对应结构示意 / 合成数据 / 非飞书客户端截图", 17, "#536781")
+    phases = [("answer", "01  正在回答"), ("tool", "02  执行工具"),
+              ("compression", "03  整理上下文"), ("waiting", "04  等待确认"),
+              ("provider_switch", "05  服务商切换"), ("failed", "06  本轮失败")]
+    for i, (phase, heading) in enumerate(phases):
+        x, y = 28 + (i % 2) * 554, 115 + (i // 2) * 226
+        live += text(x + 5, y, heading, 21, bold=True)
+        live += box(x, y + 17, 532, 177)
+        data = {"runtime_phase": phase, "duration": 28, "runtime_tool": "terminal",
+                "runtime_tools_done": 2, "runtime_route": ("Provider A", "Provider B"),
+                "telemetry_missing": True, "compression_observed": phase == "compression"}
+        if phase == "failed":
+            node = build_footer(data, is_error=True)[1]
+            lines = [plain(node["i18n_content"]["zh_cn"]), "正文和已有工具记录保持可见"]
+        else:
+            node = build_runtime_footer(data)[0]
+            lines = plain(node["i18n_content"]["zh_cn"]).splitlines()
+        color = "#d92d20" if phase == "failed" else "#bb7400" if i > 1 else "#2464d2"
+        live += text(x + 20, y + 57, lines[0], 20, color, True)
+        live += text(x + 20, y + 91, lines[1], 17, "#536781")
+        live += f'<path d="M{x + 20} {y + 123}h492" stroke="#d5e0ec"/>'
+        live += text(x + 20, y + 158, "▸ 本轮详情", 18, "#2464d2", True)
+    live += text(32, 817, "真实事件驱动；摘要返回不等于压缩提交，单次请求错误不等于本轮最终失败。", 18)
+    (ASSETS / "footer-runtime-states.svg").write_text(
+        svg(1120, 850, live, "Native runtime footer states, synthetic code-derived schematic"), encoding="utf-8"
+    )
+    print("Built 3 SVG diagrams and 1 synthetic Card JSON fixture; no live config read.")
 
 
 if __name__ == "__main__":

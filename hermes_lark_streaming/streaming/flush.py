@@ -40,6 +40,10 @@ class FlushController:
         self._loop = loop if loop is not None else asyncio.get_running_loop()
 
     @property
+    def completed(self) -> bool:
+        return self._completed
+
+    @property
     def throttle_ms(self) -> float:
         return self._throttle_ms
 

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-03
+
+### Added
+- Render event-driven running footers in enhanced mode: processing, answer/reasoning, tools, confirmation, context-summary requests, observed provider changes, and request failures distinct from terminal failure.
+- Keep compact details available while running without resetting the reader's expanded state. Reuse the existing flush mutex, sequence, insertion anchor and element reserve; coalesce counters and use one cancellable five-second timer per active session.
+
+### Fixed
+- Preserve body pause during approval while allowing footer-only updates; suppress new scheduled flushes during manual card handoff.
+- Recover missing runtime details with the existing bounded card reseed and replay body segments; footer-only updates never finalize untouched reasoning segments.
+- Preserve per-turn tool totals across clarify card replacements. Separate summary request completion from compression commit and ignore late auxiliary events after the main stream resumes.
+
+### Validation
+- 1139 full tests pass, including 56 new runtime regressions; Ruff and mypy pass. Real unattached CardKit entity accepts seven phase updates, subsequent body insertion, stream close and final failure update. Gateway deployment and client visual acceptance remain separate gates.
+
 ## [0.18.1] - 2026-10-03
 
 ### Fixed

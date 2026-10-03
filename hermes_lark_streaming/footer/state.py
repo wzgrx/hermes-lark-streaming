@@ -78,6 +78,7 @@ class Request:
     usage: Usage = field(default_factory=Usage)
     finished: bool = False
     failed: bool = False
+    error_type: str = ""
 
 
 class TurnFooter:
@@ -136,6 +137,10 @@ class TurnFooter:
                 request.request_truncated = mapping(payload.get("request")).get("_truncated") is True
             elif event == "api_request_error":
                 request.failed = True  # do not retain the error message/body
+                error_type = mapping(payload.get("error")).get("type") or payload.get("error_type")
+                if (isinstance(error_type, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.]{0,95}", error_type)
+                        and label(error_type) == error_type):
+                    request.error_type = error_type
             elif event == "post_api_request":
                 request.finished = True
                 request.response_model = label(payload.get("response_model"))
@@ -194,6 +199,11 @@ class TurnFooter:
                 self._sealed = self._snapshot()
             return dict(self._sealed)
 
+    def snapshot(self) -> dict[str, Any]:
+        """Read live counters without sealing the turn or retaining body content."""
+        with self._lock:
+            return dict(self._sealed) if self._sealed is not None else self._snapshot()
+
     def _snapshot(self) -> dict[str, Any]:
         requests = list(self._requests.values())
         data: dict[str, Any] = {"duration": max(0.0, time.monotonic() - self.started), "usage_scope": "turn"}
@@ -202,6 +212,9 @@ class TurnFooter:
             return data
         requests.sort(key=lambda r: r.started or 0)
         last = requests[-1]
+        failures = [r for r in requests if r.failed and r.error_type]
+        if failures:
+            data["last_error_type"] = failures[-1].error_type
         measured = [r for r in requests if r.usage.prompt is not None and r.usage.output is not None]
         data.update(
             provider=last.provider,

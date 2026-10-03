@@ -266,6 +266,7 @@ class StreamCardController(StreamingController):
             return False
 
         session.segment_state.on_reasoning_delta(text)
+        session.runtime_status.signal("thinking")
         self._schedule_flush(session)
         return True
 
@@ -316,6 +317,7 @@ class StreamCardController(StreamingController):
                 self._schedule_clarify_split(session)
 
         session.segment_state.on_tool_event(len(session.tool_use.build_display_steps()))
+        session.runtime_status.signal("processing")
         self._schedule_flush(session)
         return True
 
@@ -359,6 +361,7 @@ class StreamCardController(StreamingController):
             return False
 
         session.segment_state.on_answer_delta(answer_text)
+        session.runtime_status.signal("answer")
         self._schedule_flush(session)
         return True
 
@@ -455,6 +458,7 @@ class StreamCardController(StreamingController):
         session.approval_pending_split = True
         if session.state == SessionState.STREAMING:
             session.state = SessionState.CLARIFY_PAUSED
+        self.request_runtime_update(session)
 
     def on_clarify_enter(
         self,
@@ -470,6 +474,7 @@ class StreamCardController(StreamingController):
         if session is None or session.state != SessionState.STREAMING:
             return
         session.state = SessionState.CLARIFY_PAUSED  # 暂停 flush，保留当前卡
+        self.request_runtime_update(session)
 
     def on_clarify_exit(
         self,
@@ -486,6 +491,7 @@ class StreamCardController(StreamingController):
             return  # 已被 interrupt 接管 / enter 未生效
         session.clarify_pending_split = True
         session.state = SessionState.STREAMING  # 让 tool.completed 能更新卡片
+        self.request_runtime_update(session)
 
     async def on_completed_wait(
         self,
@@ -750,6 +756,9 @@ class StreamCardController(StreamingController):
         for k in stale_keys:
             del self._interrupt_map[k]
         session.flush.mark_completed()
+        stop_runtime = getattr(session, "stop_runtime_timer", None)
+        if callable(stop_runtime):
+            stop_runtime()
         if session.image_resolver:
             session.image_resolver.cancel_pending()
 
@@ -766,6 +775,7 @@ class StreamCardController(StreamingController):
         for key in stale_keys:
             del self._interrupt_map[key]
         session.flush.mark_completed()
+        session.stop_runtime_timer()
         if session.image_resolver:
             session.image_resolver.cancel_pending()
 

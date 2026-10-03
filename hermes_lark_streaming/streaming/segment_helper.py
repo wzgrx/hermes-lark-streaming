@@ -17,7 +17,7 @@ from .segments import Segment, SegmentType
 from .tooluse import ToolDisplayStep
 
 ELEMENT_THRESHOLD = 180  # 飞书硬上限 200，预留 20 给 footer + 波动
-FOOTER_RESERVE = 2  # classic default; enhanced details reserve 6 via config
+FOOTER_RESERVE = 2  # classic default; enhanced details reserve 40 via config
 
 
 def estimate_segment_elements(seg: Segment, all_steps: list[ToolDisplayStep]) -> int:

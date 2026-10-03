@@ -7,7 +7,7 @@ from collections.abc import Callable
 from contextvars import copy_context
 from typing import Any
 
-HOOKS = ("pre_api_request", "post_api_request", "api_request_error", "post_auxiliary_call")
+HOOKS = ("pre_api_request", "post_api_request", "api_request_error", "pre_auxiliary_call", "post_auxiliary_call")
 _logger = logging.getLogger("hermes_lark_streaming")
 
 
@@ -19,7 +19,10 @@ def observe(event: str, payload: dict[str, Any]) -> None:
 
 
 def _observe_bound(event: str, payload: dict[str, Any]) -> None:
-    if payload.get("platform") not in {"feishu", "lark"} or payload.get("aux_task"):
+    if payload.get("platform") not in {"feishu", "lark"}:
+        return
+    auxiliary = event in {"pre_auxiliary_call", "post_auxiliary_call"}
+    if payload.get("aux_task") and not (auxiliary and payload.get("aux_task") == "compression"):
         return
     try:
         from hermes_lark_streaming.controller import get_controller
@@ -42,10 +45,16 @@ def _observe_bound(event: str, payload: dict[str, Any]) -> None:
             return
         session = ctrl._session_keys.get(key)
         if session is not None and not session.state.is_terminal:
-            accepted = (
+            accepted = session.runtime_status.observe(event, payload) if auxiliary else (
                 session.footer_state.observe_execution(payload)
                 if event == "llm_execution" else session.footer_state.observe(event, payload)
             )
+            runtime = getattr(session, "runtime_status", None)
+            if accepted and not auxiliary and runtime is not None:
+                runtime.observe(event, payload)
+            notify = getattr(ctrl, "request_runtime_update", None)
+            if accepted and callable(notify):
+                notify(session)
             metrics.increment("footer.event.accepted" if accepted else "footer.event.rejected")
         else:
             metrics.increment("footer.skip.session")
