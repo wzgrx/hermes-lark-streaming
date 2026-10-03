@@ -45,8 +45,9 @@
 doctor/hooks、只读 SQLite quick_check 及当前进程异常堆栈检查通过。
 
 配置、密钥、Hermes 核心、LCM 与数据结构未改。doctor 仍提示新进程指标待刷新
-及旧投递未知记录；不删除历史证据，不自动重发。未发送新版真实模型对话或做新版
-客户端像素验收。后续文档提交与该代码快照相同，不要求为文档再次重启。
+及旧投递未知记录；不删除历史证据，不自动重发。未发送新版真实模型对话。
+随后已完成新版合成卡片的桌面展开核对，见[实拍与验收范围](DESKTOP-0204-ACCEPTANCE.md)；
+这不等于逐像素认证。后续文档提交与该代码快照相同，不要求为文档再次重启。
 
 [公开部署摘要](assets/desktop-hardening-deployment-checks.json) ·
 [Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37133503584) ·

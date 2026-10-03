@@ -8,7 +8,7 @@
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **Runtime status:** managed 0.20.4 is deployed after idle checks and restart. 1482 local tests, exact-code CI, unattached server probe and runtime health checks pass. Configuration/data preserved; no new real-turn or pixel acceptance claimed. See [deployment summary](docs/assets/desktop-hardening-deployment-checks.json).
+> **Runtime status:** managed 0.20.4 is deployed after idle checks and restart. 1482 local tests, exact-code CI, server probe and runtime health checks pass. Current synthetic desktop panels were visually checked; this is not a new model turn or pixel-equality certification. See [current screenshots and scope](docs/DESKTOP-0204-ACCEPTANCE.md) and [deployment summary](docs/assets/desktop-hardening-deployment-checks.json).
 
 > **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 
@@ -18,11 +18,11 @@
 
 **Tools → resource snapshot → answer → model/turn/history → identity tag**. Three native panels collapse by default; labels sit above paired values. Tool steps have four aligned columns, highlighted failures, and bounded adjacent poll merging. Opt in with `streaming.layout: reference`; legacy presentation remains the default.
 
-These are **actual Windows Feishu screenshots of synthetic card content**, not production task data:
+These are **0.20.4 Windows Feishu screenshots of synthetic card content**, not production task data:
 
-![Native tools panel](docs/assets/reference-v1-client-tools.png)
-![Resource snapshot](docs/assets/reference-v1-client-resources.png)
-![Model, turn and history footer](docs/assets/reference-v1-client-footer.png)
+![Native tools panel](docs/assets/reference-v1-0204-tools.png)
+![Resource snapshot](docs/assets/reference-v1-0204-resources.png)
+![Model, turn and history footer](docs/assets/reference-v1-0204-footer.png)
 
 [Frozen design, configuration and remaining gates](docs/REFERENCE-V1.md) · [Actual-builder synthetic JSON](docs/assets/reference-v1-completed.json)
 

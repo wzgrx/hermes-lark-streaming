@@ -10,7 +10,7 @@
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
-> **运行状态**：0.20.4 已空闲部署并重启；1482 项本地测试、精确代码提交 CI、未投递的服务端探针及运行健康检查通过。配置和数据保留，未新增真实对话/像素验收。见 [部署摘要](docs/assets/desktop-hardening-deployment-checks.json)。
+> **运行状态**：0.20.4 已空闲部署并重启；1482 项本地测试、精确代码提交 CI、服务端探针和运行健康检查通过。已核对新版桌面合成卡片展开效果；未新增真实模型轮次或宣称逐像素相同。见[当前实拍与交付审计](docs/DESKTOP-0204-ACCEPTANCE.md)和[部署摘要](docs/assets/desktop-hardening-deployment-checks.json)。
 
 > **0.20.4 桌面增强**：修复工具面板动态开关、缺失面板恢复、真实配置文件热更新及重试后的首响应统计；历史状态更紧凑，保留 V1 三面板与单写卡通道。代码与部署证据分别记录在 [本轮修复与验证](docs/DESKTOP-HARDENING.md)。
 
@@ -20,13 +20,13 @@
 
 **工具 → 资源快照 → 回答正文 → 模型/本轮/历史 → 身份标签**。三个一级面板默认折叠，与后台复盘复用原生边框和箭头。工具四列对齐、失败浅红底、重复进度轮询有界合并；资源与用量使用标签在上、数值在下的双列网格。配置 `streaming.layout: reference` 开启；旧布局默认保留。
 
-下面是**真实 Windows 飞书客户端**的合成预览截图，仅裁出卡片内容，不是生产任务数据：
+下面是 **0.20.4 真实 Windows 飞书客户端**的合成预览截图，仅裁出卡片内容，不是生产任务数据：
 
-![V1 工具执行：原生四列、失败突出和二级原始记录](docs/assets/reference-v1-client-tools.png)
+![V1 工具执行：原生四列、失败突出和有界步骤摘要](docs/assets/reference-v1-0204-tools.png)
 
-![V1 资源快照：双列数值和采样时间](docs/assets/reference-v1-client-resources.png)
+![V1 资源快照：双列数值、GiB 和 WSL 范围](docs/assets/reference-v1-0204-resources.png)
 
-![V1 Footer：模型上下文标题、紧凑本轮统计和历史摘要](docs/assets/reference-v1-client-footer.png)
+![V1 Footer：模型上下文标题、紧凑本轮统计和历史分组](docs/assets/reference-v1-0204-footer.png)
 
 [冻结设计图、配置、代码契约及剩余验收](docs/REFERENCE-V1.md) · [真实 builder 合成 JSON](docs/assets/reference-v1-completed.json)
 

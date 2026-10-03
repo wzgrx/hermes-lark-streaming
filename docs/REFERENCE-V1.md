@@ -1,6 +1,6 @@
 # 用户参考卡片 V1 — 设计基准与代码契约
 
-> **当前范围 · 0.20.4**：桌面 V1 修复与验证见 [DESKTOP-HARDENING.md](DESKTOP-HARDENING.md)。手机已由用户排除，不是阻塞项；以下历史记录不代表新版实测。
+> **当前范围 · 0.20.4**：桌面 V1 修复与验证见 [DESKTOP-HARDENING.md](DESKTOP-HARDENING.md)，新版[客户端实拍与交付审计](DESKTOP-0204-ACCEPTANCE.md)已补齐。手机已由用户排除，不是阻塞项；以下历史记录不代表新版实测。
 
 > 历史部署记录：0.20.3，布局与 0.20.2 相同；修复时区热更新和终态嵌套快照隔离。见[独立部署摘要](assets/footer-cache-boundaries-deployment-checks.json)。下文证据均保留生成时的版本范围，不把旧卡片复核冒充新版新轮次测试。
 
