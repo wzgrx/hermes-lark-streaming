@@ -111,8 +111,8 @@ hermes pm install
 | Real desktop inspection | Old 0.17.1 mismatch confirmed; new compact synthetic preview inspected |
 | Revised compact details | Implemented; synthetic desktop preview inspected; 0.19.0 deployed |
 | Reliable reasoning-setting display in real requests | Deployed; real-Hermes offline contracts pass; new production-turn verification pending |
-| Live answer/tool/approval/summary/provider/error phases | 0.19.0 deployed; real CardKit partial updates pass; client acceptance pending |
-| Mobile/dark-mode/long-running visual matrix | Pending |
+| Live answer/tool/approval/summary/provider/error phases | 0.19.0 deployed; synthetic desktop phase updates retain expanded details; real model/Gateway turn still pending |
+| Client visual matrix | Desktop widths and light/dark completed/failed views inspected; mobile and full long-running scenarios pending |
 | Committed LCM compression telemetry, account quotas and billing | Pending reliable data sources |
 | Historical-report buttons or web dashboard | Not implemented; CLI is available |
 | Every account in the 226-entry provider catalog | Not certified |
