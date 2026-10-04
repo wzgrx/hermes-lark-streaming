@@ -63,3 +63,40 @@ tool commands, execution, results, usage counting and ledger records are untouch
 README screenshots keep their original **0.20.6 synthetic native desktop** label.
 This round does not send a user message, perform inference, certify pixel equality
 or label a code test as a real-model turn.
+
+## Publication and deployed runtime
+
+Code commit: `52a3f23f43e6926c20ef7ab2485097b80bd56b30`, version **0.20.8**.
+Both exact-commit GitHub workflows succeeded:
+[Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37169808467)
+and [CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37169808454).
+
+The unchanged LCM source (`cfa583275ed0612cc520d11fd896908e598aa186`)
+also passed **3482 tests, 6 skips, 12 expected failures** against the staged
+Hermes source, in an isolated test home. LCM was not re-released or needlessly
+reinstalled for this renderer change.
+
+After two idle checks, deployment used one graceful stop/start, not a forced
+termination. Live results:
+
+- Hermes source and Gateway-reported code SHA: `919093187f1c56ebf0374f4ea924b89d7e4acd89`.
+- Managed Card and runtime import: **0.20.8**, code commit `52a3f23f43e6`.
+- Gateway `running`, Feishu `connected`; current-process journal has no traceback.
+- Managed plugin doctors, PM doctor, Card hook verification and reinstall,
+  runtime doctor checks and local smoke all pass. Generated hooks leave the
+  core checkout clean.
+- Existing TUI and Web build receipts are current; no redundant rebuild.
+- Read-only SQLite `quick_check`: `lcm.db`, `state.db` and `card-usage.sqlite3`
+  each report `ok`.
+- Configuration and credential-file hashes remain unchanged. Sessions, models,
+  ledger rows and PM dependency generations are retained. The update timer
+  is restored to its preceding active state.
+
+Private receipts and rollback material are retained locally, outside the public
+repository. No credentials, message content or database exports are published.
+
+Two existing runtime warnings remain explicit: metrics belong to an older
+Gateway process, and one historical delivery outcome is unconfirmed. They are
+not erased or automatically resent to make diagnostics appear green. No fresh
+end-to-end model turn or new native-client screenshot was collected this round;
+runtime health is verified, but that separate acceptance remains outstanding.
