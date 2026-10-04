@@ -49,3 +49,31 @@ def test_blank_structured_error_does_not_hide_useful_plain_error():
     panel = build_tools({}, {"steps": [item]})
     row = next(el for el in panel["elements"] if el["tag"] == "column_set")
     assert "VISIBLE-CAUSE" in json.dumps(row)
+
+
+@pytest.mark.parametrize(
+    "data, expected",
+    [
+        ({"input_tokens": 0, "cache_read_tokens": 0}, "0 / —"),
+        ({"input_tokens": 100, "cache_read_tokens": 0}, "0 / 0.0%"),
+        ({"cache_read_tokens": 40}, "40 / —"),
+        ({"input_tokens": 100, "cache_read_tokens": 40, "usage_partial": True}, "40 / —"),
+        ({"input_tokens": 100, "cache_read_tokens": 40}, "40 / 40.0%"),
+    ],
+)
+def test_known_cache_count_is_not_erased_when_hit_rate_is_unknown(data, expected):
+    panel = build_reference_footer(data)[0]
+    row = next(el for el in panel["elements"] if el.get("tag") == "column_set"
+               and "Cache read" in json.dumps(el))
+    assert row["columns"][0]["elements"][1]["content"] == f"**{expected}**"
+    if data.get("usage_partial"):
+        assert "Partial" in panel["header"]["title"]["content"]
+
+
+@pytest.mark.parametrize("data", [{}, {"input_tokens": 10, "cache_read_tokens": 11},
+                                 {"input_tokens": 0, "cache_read_tokens": 1}])
+def test_missing_or_inconsistent_cache_is_still_unknown(data):
+    panel = build_reference_footer(data)[0]
+    row = next(el for el in panel["elements"] if el.get("tag") == "column_set"
+               and "Cache read" in json.dumps(el))
+    assert row["columns"][0]["elements"][1]["content"] == "**Not reported**"

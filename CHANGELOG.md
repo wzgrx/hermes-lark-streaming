@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.6] - 2026-10-04
+
+### Fixed
+- Keep a known cache-read count visible when the hit rate is indeterminate (zero/missing input or partial turn usage). Show an em dash for the unavailable ratio, retain the partial-turn label and reject counts greater than known input. Unknown and genuine zero stay distinct.
+- Eight regression cases cover this distinction; three reproduced the issue before the fix. No extra rows, layout redesign, provider calls, dependencies, schema or hook changes.
+
+See [the maintenance evidence](docs/MAINTENANCE-0206.md). The reviewed Hermes update and earlier V1 fixes are documented under 0.20.5 below.
+
 ## [0.20.5] - 2026-10-04
 
 ### Fixed

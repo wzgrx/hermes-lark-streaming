@@ -4,13 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.5-blue)
+![Code version](https://img.shields.io/badge/code-0.20.6-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
-> **当前维护版 0.20.5**：保留 V1 布局，优先保留失败步骤详情，修正空错误块和毫秒耗时，折叠状态也能看到本轮失败/停止。[代码、测试与部署记录](docs/MAINTENANCE-0205.md)分别标注；下方截图仍是已核对的 0.20.4 桌面合成预览，不冒充新版逐像素验收。
+> **当前代码版 0.20.6**：在 0.20.5 的 V1 可读性修复上，保留已知缓存读取量，命中率未知时单独显示“—”。[本版证据与部署状态](docs/MAINTENANCE-0206.md)及[Hermes 更新记录](docs/MAINTENANCE-0205.md)分别标注；下方截图仍是已核对的 0.20.4 桌面合成预览，不冒充新版逐像素验收。
 
 > **0.20.4 桌面增强**：修复工具面板动态开关、缺失面板恢复、真实配置文件热更新及重试后的首响应统计；历史状态更紧凑，保留 V1 三面板与单写卡通道。代码与部署证据分别记录在 [本轮修复与验证](docs/DESKTOP-HARDENING.md)。
 

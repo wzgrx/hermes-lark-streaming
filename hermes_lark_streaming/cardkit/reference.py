@@ -409,11 +409,12 @@ def build_reference_footer(
         status["i18n_content"]["zh_cn"] += f" · 工具失败 {failures} 次"
     first = seconds(data.get("first_response"))
     inp, cached = count(data.get("input_tokens")), count(data.get("cache_read_tokens"))
-    cache = (
-        f"{compact(cached)} / {cached / inp:.1%}"
-        if cached is not None and inp and cached <= inp and not data.get("usage_partial")
-        else ""
-    )
+    # The count and its ratio have separate availability. A zero denominator or
+    # incomplete input must not erase a known cache count or fabricate a rate.
+    cache = ""
+    if cached is not None and (inp is None or cached <= inp):
+        hit = f"{cached / inp:.1%}" if inp and not data.get("usage_partial") else "—"
+        cache = f"{compact(cached)} / {hit}"
     requests, errors = count(data.get("api_calls")), count(data.get("retries"))
     attempts = f"{requests} / {errors}" if requests is not None and errors is not None else ""
     attempts_zh = f"{requests} 次 / {errors} 次" if attempts else ""
