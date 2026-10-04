@@ -115,11 +115,12 @@ def _tool_title(step: ToolDisplayStep) -> str:
     return re.sub(r" \([0-9.]+ (?:s|ms)\)$", "", step.get("title") or step["name"])
 
 
-def _tool_groups(steps: list[ToolDisplayStep]) -> list[tuple[int, int, ToolDisplayStep, float]]:
+def _tool_groups(steps: list[ToolDisplayStep]) -> list[tuple[int, int, ToolDisplayStep, float | None]]:
     """Only adjacent successful output-free process polls merge; commands never merge."""
-    groups: list[tuple[int, int, ToolDisplayStep, float]] = []
+    groups: list[tuple[int, int, ToolDisplayStep, float | None]] = []
     for i, step in enumerate(steps):
-        elapsed = (seconds(step.get("elapsed_ms")) or 0) / 1000
+        measured_ms = seconds(step.get("elapsed_ms"))
+        elapsed = measured_ms / 1000 if measured_ms is not None else None
         poll = (
             step["name"].lower() in {"process", "process_poll", "poll_process"}
             and step["status"] == "success"
@@ -140,7 +141,9 @@ def _tool_groups(steps: list[ToolDisplayStep]) -> list[tuple[int, int, ToolDispl
                 and not previous.get("result_block")
                 and not previous.get("error_block")
             ):
-                groups[-1] = start, i, previous, total + elapsed
+                # A partial sum is not an exact duration for the whole group.
+                combined = total + elapsed if total is not None and elapsed is not None else None
+                groups[-1] = start, i, previous, combined
                 continue
         groups.append((i, i, step, elapsed))
     return groups
@@ -156,13 +159,17 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
     failures = prior_failed + sum(s["status"] == "error" for s in steps)
     # Ending a model turn is not evidence that a background command stopped.
     # Keep observed counts intact; only replace a now-stale live indicator.
-    unconfirmed = sum(s["status"] == "running" for s in steps) if interrupted else 0
+    running = sum(s["status"] == "running" for s in steps)
+    unconfirmed = running if interrupted else 0
     elapsed = _duration(data.get("duration"))
     tail_en = f" · {failures} failed" if failures else ""
     tail_zh = f" · {failures} 失败" if failures else ""
     if unconfirmed:
         tail_en += f" · {unconfirmed} unconfirmed"
         tail_zh += f" · {unconfirmed} 结果未确认"
+    elif running:
+        tail_en += f" · {running} running"
+        tail_zh += f" · {running} 运行中"
     elapsed_part = f" · {elapsed}" if elapsed else ""
     en = f"🛠 Tools{elapsed_part} · {done}/{total} ended{tail_en}"
     zh = f"🛠 工具执行{elapsed_part} · {done}/{total} 结束{tail_zh}"
@@ -189,14 +196,16 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
             )
         )
     groups = _tool_groups(steps)
-    # Fixed budget; errors/running steps take priority, but chosen rows retain
-    # their original order. Older failures stay explicitly counted.
-    selected = [i for i, group in enumerate(groups) if group[2]["status"] in {"error", "running"}][-8:]
-    for i in range(len(groups) - 1, -1, -1):
-        if len(selected) >= 8:
-            break
-        if i not in selected:
-            selected.append(i)
+    # Live (or terminal-unconfirmed) work must not disappear behind a burst of
+    # newer failures. Then prioritize errors, then recent ordinary steps.
+    # Render the selected rows chronologically and retain all observed counts.
+    selected: list[int] = []
+    for status in ("running", "error", None):
+        for i in range(len(groups) - 1, -1, -1):
+            if len(selected) >= 8:
+                break
+            if i not in selected and (status is None or groups[i][2]["status"] == status):
+                selected.append(i)
     shown = [groups[i] for i in sorted(selected)]
     omitted = max(0, len(groups) - 8)
     if omitted or prior:
@@ -232,7 +241,7 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
         )
         status_text["text_align"] = "right"
         elapsed_label = ("—" if unresolved else "…") if step["status"] == "running" else (
-            f"<font color='grey'>{_duration(elapsed_s)}</font>"
+            "—" if elapsed_s is None else f"<font color='grey'>{_duration(elapsed_s)}</font>"
         )
         timing = markdown(elapsed_label, elapsed_label, "notation")
         timing["text_align"] = "right"

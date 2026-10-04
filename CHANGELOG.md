@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.12] - 2026-10-04
+
+### Fixed
+- Preserve live/unconfirmed tool rows ahead of bursts of newer failures, then fill from recent errors/completions; keep chronological rendering, an eight-row cap and all original counts. The collapsed title exposes pending work even when not all rows fit.
+- Missing/invalid finished timings and partially measured poll groups show an unknown marker rather than fabricated zero or exact totals. Observed zero remains `0ms`.
+- Nine focused cases (eight fail before the fix); approved native V1 layout, serialized budgets, dependencies, hooks and historical messages are preserved. See [maintenance scope](docs/MAINTENANCE-0212.md).
+
 ## [0.20.11] - 2026-10-04
 
 ### Fixed
