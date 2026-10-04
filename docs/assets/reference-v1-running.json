@@ -450,9 +450,9 @@
             "header": {
               "title": {
                 "tag": "plain_text",
-                "content": "Step excerpts · latest 24/24 · bounded command/output",
+                "content": "Step excerpts · 24/24 · errors first, bounded output",
                 "i18n_content": {
-                  "zh_cn": "步骤摘要 · 最近 24/24 步 · 命令与输出有长度限制"
+                  "zh_cn": "步骤摘要 · 24/24 步 · 优先保留异常，输出限长"
                 },
                 "text_size": "notation",
                 "text_color": "grey"

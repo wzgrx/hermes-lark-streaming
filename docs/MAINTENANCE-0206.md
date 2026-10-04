@@ -34,11 +34,12 @@ single writer; installing an additional SDK is not a visual-renderer replacement
   changes are not runtime acceptance.
 - The preceding reviewed Hermes and Card update is documented in
   [0.20.5 maintenance](MAINTENANCE-0205.md).
-- Desktop inspection stopped after `failed to activate captured window` recurred
+- The initial desktop attempt stopped after `failed to activate captured window` recurred
   during one recovery attempt. No user message was sent and no new desktop
   pixel-equivalence or real-model-turn result is claimed.
-- Existing desktop screenshots remain 0.20.4; the last real user-message model
-  turn remains 0.20.2. Mobile testing is outside the user's current scope.
+- At that initial gate the screenshots were still 0.20.4. The follow-up below
+  supersedes only that visual evidence, not the last real user-message model
+  turn (0.20.2). Mobile testing is outside the user's current scope.
 
 ## Published and deployed
 
@@ -70,3 +71,16 @@ This finishes this maintenance change's code and deployment work. New real-turn
 and literal desktop pixel-equality acceptance remain unverified, not silently
 promoted by the successful service checks. Do not add unrelated features while
 those independent acceptance steps await their prerequisites.
+
+## Desktop follow-up
+
+The native Feishu window became operable again on 2026-10-04. Updated only the
+existing bot-owned synthetic preview with the current renderer's generated JSON;
+no new chat message, inference request, runtime restart or real-reply edit.
+Independently expanded tools/resources/footer and captured cropped native images.
+The new priority-excerpt label is visible; all three panels collapse, the answer
+stays independent, and the grouped local history is readable.
+
+See [the current desktop evidence](DESKTOP-0206-ACCEPTANCE.md) and its machine-readable
+receipt. This advances client-rendering acceptance. Literal equality to the
+frozen SVG and a new real-model turn are still separate, unverified requirements.

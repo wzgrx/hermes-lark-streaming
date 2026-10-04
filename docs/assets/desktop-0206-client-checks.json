@@ -1,0 +1,62 @@
+{
+  "source_version": "0.20.6",
+  "code_commit": "d2dd2dbf5521da7ecc37c2f2bb67c6a3ca191e4d",
+  "checked_at": "2026-10-04T01:11:59.539905+00:00",
+  "fixture_sha256": "a2df62e7ec187e9e076c3cbae77eab176fbabf3bfe3b1d6cde6146d27021715c",
+  "api_update_accepted": true,
+  "existing_synthetic_card_updated": true,
+  "new_messages_sent": 0,
+  "real_replies_changed": false,
+  "model_called": false,
+  "gateway_restarted_for_visual_check": false,
+  "client": "Windows Feishu",
+  "client_visual_verified": true,
+  "theme": "light",
+  "window_logical_pixels": [
+    [
+      961,
+      731
+    ],
+    [
+      1536,
+      912
+    ]
+  ],
+  "observed": [
+    "three independently collapsible native panels; independent answer and identity badge",
+    "four-column grouped tools; error row retained; new bounded priority-excerpt label visible",
+    "two-column resource values, GiB units, WSL scope and sample timestamp",
+    "provider/request/returned identity, requested effort, usage, unavailable cost, local history/model grouping"
+  ],
+  "images": [
+    {
+      "file": "reference-v1-0206-collapsed.png",
+      "sha256": "86e683d72171fa08acf5fc0bffb7647c8f1a274038e06cf3bfbbd14e12373b02",
+      "synthetic_only": true
+    },
+    {
+      "file": "reference-v1-0206-tools.png",
+      "sha256": "2209fe0bf00c5820164fb596eaaf50fcebe0e91670ef15b926f478bae698ca20",
+      "synthetic_only": true
+    },
+    {
+      "file": "reference-v1-0206-resources.png",
+      "sha256": "2b10bf1c28b027afc3c31c6bbc499b7c3b42e8c4252d681caa4a0f4651fd1960",
+      "synthetic_only": true
+    },
+    {
+      "file": "reference-v1-0206-footer.png",
+      "sha256": "8557d2eb441d7bbf2543b0d6d85469dbe8c7536a22bec1f4b0e2e73921bd8fcb",
+      "synthetic_only": true
+    }
+  ],
+  "real_model_turn_on_this_version_verified": false,
+  "pixel_equality_certified": false,
+  "frozen_designs_changed": false,
+  "mobile_in_scope": false,
+  "deployment_known_warning_codes": [
+    "metrics_stale",
+    "delivery_unknown"
+  ],
+  "new_ledger_events_after_deployment": []
+}
