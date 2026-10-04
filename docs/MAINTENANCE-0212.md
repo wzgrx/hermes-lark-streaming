@@ -53,3 +53,39 @@ initial 1583-test pass above. An unattached server-accepted card is not a client
 screenshot or a real model/Gateway round trip.
 
 Final isolated suite after the smoke correction: **1585 passed**, two existing SDK warnings; Ruff and mypy pass. No new dependency or hook change.
+
+## Verified publication and deployment
+
+Reviewed/runtime code is `cf9caccb05e638087ae463dcb056dd924d9195d6`.
+Exact-commit [Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37176802425)
+and [CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37176802421)
+passed. Tests include current official Hermes source and the maintained legacy
+patch round-trip matrix, separately from local deployed-host tests.
+
+The paired LCM target is `f31fcb3e3931b76508d005b48198497548624ddc`;
+its [CI](https://github.com/wzgrx/hermes-lcm/actions/runs/37176787396) and complete
+3510-pass local/low-FD release gates passed. Two idle checks preceded managed
+plugin updates, PM dependency synchronization, Card hook verification and one
+graceful Gateway stop/start. Plugin/PM doctors, installed version import, source
+cleanliness and read-only checks of all three databases passed. Configuration
+and credential-file hashes match the protected pre-update backups.
+
+An unattached native CardKit entity accepted the configured V1 final update
+after stream closure. It sent no chat message, called no model and wrote no
+usage history. Selected-PM-runtime synthetic checks also exercised active-row
+visibility/unknown timing and LCM whole-group budgeting/state reset in a
+temporary database. These are distinct from a real Gateway model turn.
+
+At the 2026-10-04 12:32 Asia/Shanghai audit, Gateway was running, Feishu connected
+and active agents were zero; the update timer was restored. Test/release log
+hashes still matched their recorded evidence. Official Hermes main remained
+`ea81748579ee`, source-reviewed but not deployed; core stayed `0764e9165721`.
+Idle `metrics_stale` and historical `delivery_unknown` remain visible rather
+than erasing history or resending old messages. Existing 0.20.8 desktop content
+was observed read-only and retains that version label. No new 0.20.12 real-turn,
+desktop pixel or mobile acceptance is claimed.
+
+This receipt and the corrected plan/roadmap are documentation-only follow-ups.
+The installed tested code remains the exact commit above; documentation alone
+does not require another service restart. Broader roadmap features and open
+upstream reports remain independently scoped rather than declared fixed.
