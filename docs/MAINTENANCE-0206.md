@@ -39,3 +39,34 @@ single writer; installing an additional SDK is not a visual-renderer replacement
   pixel-equivalence or real-model-turn result is claimed.
 - Existing desktop screenshots remain 0.20.4; the last real user-message model
   turn remains 0.20.2. Mobile testing is outside the user's current scope.
+
+## Published and deployed
+
+- Exact code: `d2dd2dbf5521da7ecc37c2f2bb67c6a3ca191e4d` on the user's main.
+  [Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37166273027)
+  and [CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37166272978)
+  passed. The 1498-test full suite was also rerun in a disposable Hermes home
+  against the reviewed modular core; legacy source remains checksum-pinned.
+- Offline wheel built through uv's isolated cached build environment. The lean
+  test interpreter lacks pip/setuptools; it was not modified to build the wheel.
+- Two live idle checks preceded graceful stop and an exact-SHA managed plugin
+  update. PM synchronization, both plugin doctors, Card hook round trip, PM
+  doctor, Card doctor and dry smoke passed. No additional dependency consent or
+  provider configuration changes were required.
+- PM runtime imports **0.20.6**. Gateway running, Feishu connected; update timer
+  restored. Config and credential files are byte-identical; core remains
+  `194501c6a78574f6ea7498ae7661dc78ec36276c` (official `158fd638` plus overlays),
+  LCM remains `cfa583275ed0612cc520d11fd896908e598aa186`, all live Git trees clean.
+- Read-only `quick_check` passes for LCM, sessions and Card usage databases.
+  Current-process journal has no traceback. No stored rows were rewritten or
+  removed. Prior database backups and PM generations were retained.
+- `metrics_stale` and historical `delivery_unknown` remain visible; no new model
+  turn was sent to clear warnings cosmetically. The unrelated upstream Telegram
+  regression and optional unconfigured core tools stay recorded in 0.20.5.
+
+Private deployment/rollback receipt:
+`/home/wzgrx/.hermes/state/card-reviewed-deploy-20261004-0206.json`.
+This finishes this maintenance change's code and deployment work. New real-turn
+and literal desktop pixel-equality acceptance remain unverified, not silently
+promoted by the successful service checks. Do not add unrelated features while
+those independent acceptance steps await their prerequisites.
