@@ -65,3 +65,31 @@ The reviewed Hermes source remains
 plus the already-tested local overlays (`919093187f1c`). No further core update
 is needed for this presentation correction. Local source review checks the
 canonical usage pipeline, not just provider-specific response fields.
+
+## Publication and runtime evidence
+
+Reviewed code commit: `a54fbae6ebdb5a8e657b36cf87bb365af7bcb014`.
+Exact-commit [Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37172004237)
+and [CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37172004233)
+completed successfully. Tests include Python 3.11/3.12/3.13 and the Hermes
+main/tag compatibility matrix. The isolated local suite also passed 1554 tests.
+
+After two idle checks, the managed updater published that exact reviewed commit,
+then PM synchronized the runtime. Card and LCM plugin doctors, PM doctor, hook
+verify/uninstall/install/status, frontend freshness and local smoke passed.
+One graceful Gateway stop/start loaded **0.20.9**; Gateway reports `running` and
+Feishu `connected`. Hermes core remains `919093187f1c`, LCM remains unchanged.
+The core and both managed plugin checkouts are clean. The update timer is restored.
+
+Read-only `quick_check` passes for the conversation, LCM and usage databases.
+Configuration and credential-file hashes match the backup; no historical rows
+or cards were rewritten. Current-process journal has no traceback. Existing
+`metrics_stale` and historical `delivery_unknown` warnings remain visible rather
+than being erased or causing automatic resends.
+
+The managed **0.20.9 runtime** then replayed only the saved scalar measurements
+from the approved **0.20.8** test. Both footer layouts retained positive cache
+evidence with a partial lower-bound label and no invented ratio; input/output
+totals stayed unchanged. This replay made **zero provider calls and zero sends**.
+It is post-restart package/renderer validation, not a second real-model turn or
+a new server-rendered card. Private receipts and rollback material remain local.

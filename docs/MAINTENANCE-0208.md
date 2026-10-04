@@ -100,3 +100,13 @@ Gateway process, and one historical delivery outcome is unconfirmed. They are
 not erased or automatically resent to make diagnostics appear green. No fresh
 end-to-end model turn or new native-client screenshot was collected this round;
 runtime health is verified, but that separate acceptance remains outstanding.
+
+### Subsequent real acceptance — 2026-10-04
+
+The above describes the initial deployment checkpoint. A later explicitly
+confirmed single-message test completed real Gateway/Feishu readback and native
+desktop tool/Footer expansion. It verified two terminal results (0/7), compact
+errors with multiline details, answer completion and input/output/history
+accounting. It also found hidden partial cache evidence; this was fixed and
+deployed as 0.20.9. See [the separate findings and deployment receipt](MAINTENANCE-0209.md).
+The 0.20.8 test is not relabelled as a fresh 0.20.9 model turn.
