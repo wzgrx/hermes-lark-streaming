@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.11] - 2026-10-04
+
+### Fixed
+- Keep process count and uptime independently visible in partial resource snapshots; show seconds/minutes for recently booted hosts instead of rounding to zero days/hours.
+- Prioritize available CPU/RAM when GPU readings are missing, label wholly missing metrics per locale, and distinguish an attempted sample from a never-sampled state. Complete GPU snapshot titles and approved V1 panel/grid geometry stay unchanged.
+- Nine new cases, six reproduced against 0.20.10; full suite: 1574 passed. No new dependency, hook, schema, resource polling or frozen-design change. See [maintenance evidence](docs/MAINTENANCE-0211.md).
+
 ## [0.20.10] - 2026-10-04
 
 ### Fixed

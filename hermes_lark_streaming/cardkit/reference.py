@@ -329,13 +329,41 @@ def build_resources(host: dict[str, Any]) -> dict[str, Any]:
         total = f"{maximum:.1f}".rstrip("0").rstrip(".")
         return f"{used:.1f}/{total}G"
 
-    title = f"🖥 GPU {gpu} · {temperature} · VRAM {memory_title('gpu')} · RAM {memory_title('ram')}"
+    # Keep the familiar GPU-first summary when observed; do not spend the
+    # collapsed row on absent GPU fields on CPU-only/unavailable hosts.
+    title_parts = []
+    if gpu != "—":
+        title_parts.append(f"GPU {gpu}")
+    if temperature != "—":
+        title_parts.append(temperature if title_parts else f"GPU {temperature}")
+    if memory_title("gpu") != "—":
+        title_parts.append(f"VRAM {memory_title('gpu')}")
+    if not title_parts and value("cpu_percent", "%") != "—":
+        title_parts.append(f"CPU {value('cpu_percent', '%')}")
+    if memory_title("ram") != "—":
+        title_parts.append(f"RAM {memory_title('ram')}")
+    title = "🖥 " + " · ".join(title_parts) if title_parts else "🖥 Resources · Not sampled"
+    title_zh = title if title_parts else "🖥 系统资源 · 未采集"
+    if not title_parts and host.get("sampled_at"):
+        title, title_zh = "🖥 Resources · Unavailable", "🖥 系统资源 · 指标未获取"
     uptime_s = seconds(host.get("uptime"))
-    uptime = f"{int(uptime_s // 86400)}d {int(uptime_s % 86400 // 3600)}h" if uptime_s is not None else ""
-    uptime_zh = f"{int(uptime_s // 86400)}天{int(uptime_s % 86400 // 3600)}小时" if uptime_s is not None else ""
+    uptime = uptime_zh = ""
+    if uptime_s is not None:
+        n = int(uptime_s)
+        if n >= 86400:
+            uptime, uptime_zh = f"{n // 86400}d {n % 86400 // 3600}h", f"{n // 86400}天{n % 86400 // 3600}小时"
+        elif n >= 3600:
+            uptime, uptime_zh = f"{n // 3600}h {n % 3600 // 60}m", f"{n // 3600}小时{n % 3600 // 60}分"
+        elif n >= 60:
+            uptime, uptime_zh = f"{n // 60}m {n % 60}s", f"{n // 60}分{n % 60}秒"
+        else:
+            uptime, uptime_zh = f"{n}s", f"{n}秒"
     processes = count(host.get("processes"))
-    extra = f" · Processes {processes} · Uptime {uptime}" if processes is not None and uptime else ""
-    extra_zh = f" · 进程 {processes} · 运行 {uptime_zh}" if processes is not None and uptime else ""
+    extra = f" · Processes {processes}" if processes is not None else ""
+    extra_zh = f" · 进程 {processes}" if processes is not None else ""
+    if uptime:
+        extra += f" · Uptime {uptime}"
+        extra_zh += f" · 运行 {uptime_zh}"
     children = [
         metric_row(
             _metric("GPU / temperature", "GPU 利用率 / 温度", (f"{gpu} · {temperature}",) * 2),
@@ -365,7 +393,7 @@ def build_resources(host: dict[str, Any]) -> dict[str, Any]:
                 "notation",
             )
         )
-    return _panel(title, title, children, RESOURCES_ID)
+    return _panel(title, title_zh, children, RESOURCES_ID)
 
 
 def build_reference_prefix(data: dict[str, Any], *, interrupted: bool = False) -> list[dict[str, Any]]:
