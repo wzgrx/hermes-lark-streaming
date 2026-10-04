@@ -61,3 +61,31 @@ The existing README screenshots are explicitly **0.20.6 synthetic native desktop
 captures**. They are not relabelled as 0.20.7. New real-model-turn acceptance and
 literal equality to the frozen SVGs remain unverified. This renderer-only change
 does not send any user message or perform inference.
+
+## Published and deployed
+
+- Exact code: [`73e0d5e95f62`](https://github.com/wzgrx/hermes-lark-streaming/commit/73e0d5e95f62298820e6bb257a170d35f4805f1f), directly on the user's main, no new PR.
+  [Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37169009477)
+  and [CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37169009288)
+  both passed for that exact revision.
+- Saved restricted-permission rollback material and old plugin/PM metadata.
+  Two idle checks preceded a graceful stop. Updated the managed plugin using
+  the exact-revision gate, synchronized PM and round-tripped Card hooks.
+- Both plugin doctors, PM doctor, Card verify/status, Card runtime doctor and
+  dry smoke passed. PM runtime imports **0.20.7**. Gateway running and Feishu
+  connected; the updater timer was restored.
+- Live core remains clean at `194501c6a78574f6ea7498ae7661dc78ec36276c`,
+  including official `158fd638`. LCM remains clean at
+  `cfa583275ed0612cc520d11fd896908e598aa186`. Card managed checkout is clean
+  at the exact tested code revision above.
+- Configuration and credential files are byte-identical to their pre-deploy
+  copies. Read-only quick checks pass for LCM, sessions and Card usage databases.
+  Existing backup generations and all conversation/usage rows are retained.
+- Current-process journal has no traceback. `metrics_stale` and historical
+  `delivery_unknown` remain visible; no unknown delivery was automatically resent.
+  No new real-model turn, chat message, screenshot or pixel-equivalence result
+  is claimed by this deployment.
+
+Private receipt: `/home/wzgrx/.hermes/state/card-reviewed-deploy-20261004-0207.json`.
+Public maintenance completion is separate from the remaining real-turn and
+pixel-equivalence acceptance gates.
