@@ -974,6 +974,7 @@ class StreamingController(RuntimeFooterController):
         all_steps = session.tool_use.build_display_steps()
         seal_card = build_complete_card(
             segments=seal_segments,
+            is_continuation=True,
             all_tool_steps=all_steps,
             footer_data=self._reference_snapshot(session, {}),
             footer_fields=[],

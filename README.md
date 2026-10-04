@@ -1,5 +1,8 @@
 # Hermes Lark Streaming
 
+> **0.20.17 · 2026-10-05**：终态工具结果缺失统一显示“结果未确认”，不再残留“运行中”；长引用字段先脱敏后截断。V1 布局不变。[本轮维护与验收边界](docs/MAINTENANCE-0217.md)。
+
+
 **让 Hermes 的回复成为持续更新、可追溯的飞书卡片。**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)

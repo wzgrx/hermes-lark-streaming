@@ -476,6 +476,7 @@ def build_complete_card(
     footer_data: dict | None = None,
     is_error: bool = False,
     is_aborted: bool = False,
+    is_continuation: bool = False,
     footer_fields: list[list[str]] | None = None,
     footer_show_label: bool = True,
     footer_enabled: bool = True,
@@ -495,7 +496,10 @@ def build_complete_card(
     if reference:
         from .reference import build_reference_prefix
 
-        elements.extend(build_reference_prefix(footer_data or {}, interrupted=is_error or is_aborted))
+        # Closing an old CardKit entity during rollover is not ending the turn.
+        elements.extend(build_reference_prefix(
+            footer_data or {}, terminal=not is_continuation or is_error or is_aborted,
+        ))
 
     for seg in segments:
         if seg.type == SegmentType.REASONING:

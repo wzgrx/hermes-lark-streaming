@@ -132,7 +132,7 @@ def test_live_and_sealed_continuation_keep_genuine_running_tool_status():
     data = {"presentation": "reference", "reference": {"show_tools": True, "steps": [step("running")]}}
     live = build_streaming_card_v2(footer_data=data)
     sealed = build_complete_card(segments=[], all_tool_steps=data["reference"]["steps"],
-                                 footer_data=data, footer_enabled=False)
+                                 footer_data=data, footer_enabled=False, is_continuation=True)
     for card in (live, sealed):
         panel = card["body"]["elements"][0]
         assert "运行中" in json.dumps(panel, ensure_ascii=False)

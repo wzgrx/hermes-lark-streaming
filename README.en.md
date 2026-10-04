@@ -1,5 +1,8 @@
 # Hermes Lark Streaming
 
+> **0.20.17 · 2026-10-05**: terminal missing tool results are unconfirmed, not permanently running. Quoted values are redacted before excerpt truncation. V1 layout stays unchanged. [Scope and evidence](docs/MAINTENANCE-0217.md).
+
+
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)

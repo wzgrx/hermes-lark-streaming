@@ -101,7 +101,10 @@ def _duration(value: Any) -> str:
 
 
 def _tool_text(value: str, limit: int = 160, *, single_line: bool = False) -> str:
-    text = _SECRET.sub("[redacted]", redact_inline_secrets(value[: limit * 2]))
+    # Keep complete quoted assignments/flags/JSON values visible to the
+    # redactor. Cutting first can remove their closing quote and expose a
+    # credential fragment in both the compact row and the expanded excerpt.
+    text = _SECRET.sub("[redacted]", redact_inline_secrets(value))[: limit * 2]
     if single_line:
         # Summary rows stay compact; the bounded excerpt retains line breaks.
         text = " ".join(text.split())
@@ -151,7 +154,9 @@ def _tool_groups(steps: list[ToolDisplayStep]) -> list[tuple[int, int, ToolDispl
     return groups
 
 
-def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted: bool = False) -> dict[str, Any]:
+def build_tools(
+    data: dict[str, Any], reference: dict[str, Any], *, interrupted: bool = False, terminal: bool = False,
+) -> dict[str, Any]:
     steps: list[ToolDisplayStep] = reference.get("steps", [])
     prior = count(reference.get("tools_prior")) or 0
     prior_done = count(reference.get("done_prior")) or 0
@@ -162,7 +167,8 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
     # Ending a model turn is not evidence that a background command stopped.
     # Keep observed counts intact; only replace a now-stale live indicator.
     running = sum(s["status"] == "running" for s in steps)
-    unconfirmed = running if interrupted else 0
+    ended = interrupted or terminal
+    unconfirmed = running if ended else 0
     elapsed = _duration(data.get("duration"))
     tail_en = f" · {failures} failed" if failures else ""
     tail_zh = f" · {failures} 失败" if failures else ""
@@ -240,7 +246,7 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
             ("Running", "运行中", "blue"),
         )
         repeat_en, repeat_zh = (f" · {copies} calls", f" · {copies} 次") if copies > 1 else ("", "")
-        unresolved = interrupted and step["status"] == "running"
+        unresolved = ended and step["status"] == "running"
         if unresolved:
             state = ("Unconfirmed", "结果未确认", "orange")
         status_text = markdown(
@@ -285,7 +291,7 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
     for i in indices:
         step = steps[i]
         status = {"success": "成功 / Succeeded", "error": "失败 / Failed"}.get(step["status"], "运行中 / Running")
-        if interrupted and step["status"] == "running":
+        if ended and step["status"] == "running":
             status = "结果未确认 / Unconfirmed"
         detail = _tool_text(step.get("detail", ""), 180)
         block = step.get("error_block") or step.get("result_block")
@@ -427,9 +433,11 @@ def build_resources(host: dict[str, Any]) -> dict[str, Any]:
     return _panel(title, title_zh, children, RESOURCES_ID)
 
 
-def build_reference_prefix(data: dict[str, Any], *, interrupted: bool = False) -> list[dict[str, Any]]:
+def build_reference_prefix(
+    data: dict[str, Any], *, interrupted: bool = False, terminal: bool = False,
+) -> list[dict[str, Any]]:
     ref = data.get("reference", {})
-    elements = [build_tools(data, ref, interrupted=interrupted)] if ref.get("show_tools") else []
+    elements = [build_tools(data, ref, interrupted=interrupted, terminal=terminal)] if ref.get("show_tools") else []
     if ref.get("resources_enabled"):
         elements.append(build_resources(ref.get("host") or {}))
     return elements
@@ -509,8 +517,9 @@ def build_reference_footer(
         succeeded = count(ref.get("succeeded_total"))
         if succeeded is None:
             succeeded = sum(s["status"] == "success" for s in ref.get("steps", []))
-        unconfirmed = (sum(s["status"] == "running" for s in ref.get("steps", []))
-                       if is_error or is_aborted else 0)
+        # This branch is terminal (no live_status), including successful answers.
+        # Missing tool results stay unknown; do not invent completion or failure.
+        unconfirmed = sum(s["status"] == "running" for s in ref.get("steps", []))
         pending_en = f" / {unconfirmed} unconfirmed" if unconfirmed else ""
         pending_zh = f" / {unconfirmed} 结果未确认" if unconfirmed else ""
         tools = markdown(

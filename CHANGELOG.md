@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## 0.20.17 — 2026-10-05
+
+- Completed V1 cards no longer leave missing tool results looking live. Normal completion, failure and stop share an honest unconfirmed state; real success/failure counts, timing and background process ownership stay unchanged.
+- Keep the collapsed tools header, rows, excerpts and footer consistent. Streaming cards still show running work; V1 geometry and native expansion state are preserved.
+- Redact complete quoted flags, assignments and JSON values before excerpt truncation, so a removed closing quote does not expose a credential fragment.
+- See [maintenance scope and evidence](docs/MAINTENANCE-0217.md). No dependency, provider, hook or ledger changes.
+
 ## [Unreleased]
 
 ## [0.20.16] - 2026-10-04
