@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.13] - 2026-10-04
+
+### Fixed
+- Keep selected live/unconfirmed command excerpts ahead of newer error excerpts when the bounded expanded panel fills up. Rows and excerpts retain chronological order; row/detail/byte caps stay unchanged.
+- Do not coalesce successful process polls whose target details are absent or whitespace-only. Consecutive output-free polls with matching nonblank details still group.
+- Six regression cases, including five pre-fix failures, cover live/interrupted cards, long Chinese errors, native JSON budgets, blank details and compatible known-target grouping. See [maintenance scope](docs/MAINTENANCE-0213.md).
+
 ## [0.20.12] - 2026-10-04
 
 ### Fixed

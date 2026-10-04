@@ -123,6 +123,8 @@ def _tool_groups(steps: list[ToolDisplayStep]) -> list[tuple[int, int, ToolDispl
         elapsed = measured_ms / 1000 if measured_ms is not None else None
         poll = (
             step["name"].lower() in {"process", "process_poll", "poll_process"}
+            # Missing details are not evidence of the same poll target.
+            and bool((step.get("detail") or "").strip())
             and step["status"] == "success"
             and not step.get("error_block")
             and not step.get("result_block")
@@ -293,7 +295,13 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
     # Reserve that overhead rather than letting long excerpts consume it.
     raw_limit = max(1000, min(4000, 12500 - rows_bytes - (512 if unconfirmed else 0)))
     while len(raw) > 1 and (len(raw) > 24 or len("\n\n".join(text for _, text in raw).encode()) > raw_limit):
-        drop = next((pos for pos, (index, _) in enumerate(raw) if index not in important), 0)
+        # The excerpt follows the same priorities as the visible rows. Keeping
+        # an active row but evicting its command behind long errors is misleading.
+        # Within a priority tier, retain newer entries; render chronologically.
+        drop = min(range(len(raw)), key=lambda pos: (
+            (2 if steps[raw[pos][0]]["status"] == "running" else 1) if raw[pos][0] in important else 0,
+            raw[pos][0],
+        ))
         raw.pop(drop)
     if raw:
         children.append(
