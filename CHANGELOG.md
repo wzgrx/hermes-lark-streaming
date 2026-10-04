@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add explicit Cohere V2 completed-usage normalization: physical token counts are separate from billed units; cache is an input subset. Accept the SDK's exact integral floats without rounding invalid counts or relaxing other protocols. Offline adapter coverage only; current Hermes hooks and ledger retain their canonical contract, with no new provider client or dependency.
+
 ## [0.20.8] - 2026-10-04
 
 ### Fixed

@@ -21,6 +21,7 @@ SDK 列仅记录目录线索，不据此选择端点协议；实际 transport �
 | Gemini | promptTokenCount | cachedContentTokenCount 为子集 | Gemini / Vertex；输出为 candidates+thoughts |
 | Bedrock Converse | inputTokens + cache read + write | 独立输入桶 | AWS Bedrock |
 | Ollama 原生 | prompt_eval_count | 未报告则未知 | Ollama /api/chat、/api/generate 最终 usage |
+| Cohere V2 原生 | tokens.input_tokens / output_tokens；不使用 billed_units 代替 | cached_tokens 为输入子集 | 显式 cohere_v2 / cohere_chat 纯适配器；SDK model_dump 后的最终 usage |
 | 未知原生协议 | 不猜测 | 不猜测 | 先由 Hermes adapter 归一化；Card 不发推理请求 |
 
 ## 官方字段来源
@@ -31,6 +32,29 @@ SDK 列仅记录目录线索，不据此选择端点协议；实际 transport �
 - [Bedrock 缓存输入总量](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html)
 - [SiliconFlow Chat](https://docs.siliconflow.com/en/api-reference/chat-completions/chat-completions)
 - [Ollama API](https://docs.ollama.com/api/chat)
+- [Cohere V2 Chat](https://docs.cohere.com/v2/reference/chat)、[实际与计费 Token 的区别](https://docs.cohere.com/docs/how-does-cohere-pricing-work)
+- Cohere Python SDK 固定提交 `0eacfe77e1710322b355928574cfec18f6791c42`：
+  [Usage](https://github.com/cohere-ai/cohere-python/blob/0eacfe77e1710322b355928574cfec18f6791c42/src/cohere/types/usage.py)、
+  [UsageTokens](https://github.com/cohere-ai/cohere-python/blob/0eacfe77e1710322b355928574cfec18f6791c42/src/cohere/types/usage_tokens.py)。
+
+### 2026-10-04：Cohere 原生协议补齐（Unreleased）
+
+目录已收录 Cohere，但之前只有 canonical 标签覆盖，没有原生 V2 解析。
+现补齐 `normalize_usage(response_usage, "cohere_v2")`（别名 `cohere_chat`）：
+仅接收最终 `usage` 字典，不遍历正文、不累计流式片段。SDK 的整数值浮点数
+转换为整数；小数、负数、布尔值、字符串、非有限值与越界数保持未知。
+缓存不重复加到输入，计费桶不替代上下文桶，也不由二者差值推导思考用量。
+
+这是**协议解析层**扩展，不是新增 Hermes 推理客户端。当前 Hermes
+`post_api_request` 仍发布 canonical usage；Card 的实时统计和历史账本仍只读该
+明确契约，不按 provider 名称切换解释方式。Cohere 原生的账号认证、完整流式
+聚合与真实服务端验收尚未完成，不将离线 fixture 称为真实接口联通。目录数量
+仍沿用上面带时间戳的快照，不把新增解析器误写成新增提供商。
+
+验证：新增 **22** 个离线用例，其中 **5** 个在修改前失败；协议及 Footer
+组合 **317 passed**，隔离全量 **1539 passed**，Ruff、mypy（49 个源文件）
+及 diff 检查通过。两个已有 SDK 弃用警告仍保留。运行中的 0.20.8 未因此次
+纯适配器开发重启；不把此测试数量改写成部署版或真实账号验收数量。
 
 ## 226 个入口（完整快照）
 

@@ -14,6 +14,14 @@ def count(value: Any) -> int | None:
     return value if type(value) is int and 0 <= value <= 10**15 else None
 
 
+def _cohere_count(value: Any) -> int | None:
+    # Cohere's SDK declares these counters as Optional[float]. Accept exact
+    # integral representations only, never round or relax other protocols.
+    if type(value) is float and 0 <= value <= 10**15 and value.is_integer():
+        return int(value)
+    return count(value)
+
+
 def mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -69,6 +77,13 @@ def normalize_usage(value: Any, protocol: str = "unknown") -> Usage:
             prompt += (read or 0) + (write or 0)
     elif protocol == "ollama":
         prompt, output = count(u.get("prompt_eval_count")), count(u.get("eval_count"))
+    elif protocol in {"cohere_v2", "cohere_chat"}:
+        # V2 completed response.usage (or completed message-end delta.usage).
+        # billed_units excludes provider-added tokens and is not context usage.
+        tokens = mapping(u.get("tokens"))
+        prompt = _cohere_count(tokens.get("input_tokens"))
+        output = _cohere_count(tokens.get("output_tokens"))
+        read = _cohere_count(u.get("cached_tokens"))  # subset of input, not extra
     # Inconsistent cache claims must not produce misleading percentages.
     if prompt is None or (read or 0) + (write or 0) > prompt:
         read = write = None

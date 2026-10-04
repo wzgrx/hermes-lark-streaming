@@ -53,6 +53,7 @@ Hermes owns credentials, inference, routing, tools, and conversations. This plug
 - Enable Footer V2 for per-turn usage, cache, last-request context, timing and collapsed details.
 - Store opt-in usage history in profile-local SQLite; query by model, provider, subscription label, day/month and timezone.
 - Keep catalog coverage, protocol fixtures, server verification and real-client acceptance separate.
+- Unreleased: the standalone usage parser adds Cohere V2 physical tokens and cached-input counts, distinct from billed units. This is offline protocol coverage, not a new Hermes transport or live Cohere account certification. See [the coverage matrix](docs/PROVIDER-COVERAGE.md).
 
 ## Retained legacy footer structure
 

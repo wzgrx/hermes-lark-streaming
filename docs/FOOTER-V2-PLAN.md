@@ -1,5 +1,7 @@
 # Hermes Footer V2：任务计划与验收边界
 
+> **开发分支补齐 · Unreleased**：加入 Cohere V2 原生最终 usage 的显式解析，区分实际 Token 与计费桶，并处理 SDK 整数值浮点字段；见[协议矩阵](PROVIDER-COVERAGE.md)。这是纯适配器扩展，运行中的 0.20.8、Hermes canonical 事件与历史账本未切换为 Cohere 原生传输。
+
 > **当前代码 · 0.20.8**：紧凑错误摘要、未知运行耗时及新版 Hermes 兼容验证，见[本版维护与部署证据](MAINTENANCE-0208.md)。原生桌面截图保持 [0.20.6](DESKTOP-0206-ACCEPTANCE.md) 标签。本轮保持有界维护；历史部署、真实模型轮次及截图保留其原版号。
 
 > **桌面实拍基线 · 0.20.4**：代码修复、托管部署和桌面合成卡片展开核对见[交付审计与实拍](DESKTOP-0204-ACCEPTANCE.md)。手机已由用户排除，不是阻塞项；真实新模型轮次与逐像素认证未混同为通过。以下历史记录不代表新版实测。
@@ -63,12 +65,12 @@
 
 1. **研究与基线**：核对官方文档、Hermes 注册表、用户 fork / 上游 issues；冻结源码和目录版本；不读取凭据。
 2. **计划与设计**：保存本计划、完整提供商清单、接口字段矩阵和架构图。UI 沿用已确认三张设计图。
-3. **协议适配层**：实现 Hermes canonical、OpenAI Chat/Responses、Anthropic Messages、Gemini、Bedrock Converse、Ollama 的只读 usage 归一化；未知协议显式降级。
+3. **协议适配层**：实现 Hermes canonical、OpenAI Chat/Responses、Anthropic Messages、Gemini、Bedrock Converse、Ollama、Cohere V2 的只读 usage 归一化；未知协议显式降级。原生适配器测试与 Hermes canonical 集成分开计证，不按厂商名猜测协议。
 4. **采集与状态**：公共 pre/post API hooks；精确 profile/session/turn/request 身份；重复回调去重，重试不混同，辅助调用不混入主任务；标量白名单。
 5. **渲染与兼容**：enhanced/classic 开关；两行摘要、默认折叠详情、实际时间/请求模型/返回模型/缓存/上下文；缺失字段不伪造零；保持旧调用兼容。
 6. **测试**：每个协议字段 fixture，目录所有 ID 的通用路径参数化测试，跨会话、乱序、重试、缺失、异常、HTML/Markdown 注入、配置降级；现有全量回归、lint/typecheck、Hermes main/旧版本补丁往返。
 7. **发布**：中文/英文使用文档、变更日志、版本号；核对 diff 无凭据、无线上配置；提交用户 main、推送、检查 GitHub CI；不创建 PR。
-8. **部署与实机验收**：代码、部署和外观分开验收。0.20.1 已刷新生成钩子并空闲重启，真实 Gateway 成功输出/预期退出 7 和账本核对通过。历史桌面宽度/主题/真实时钟续卡证据保留其原版本范围，不充当 V1 全平台逐像素证明；手机和跨端对照仍待验收。
+8. **部署与实机验收**：代码、部署和外观分开验收。0.20.1 已刷新生成钩子并空闲重启，真实 Gateway 成功输出/预期退出 7 和账本核对通过。历史桌面宽度/主题/真实时钟续卡证据保留其原版本范围，不充当 V1 全平台逐像素证明。用户已排除手机验收；桌面冻结图逐像素一致尚未认证，后续新版本证据按版本单列。
 
 追加用户需求：**历史用量**纳入本轮代码交付。新增 opt-in `footer/history.py`，按请求去重写入 profile SQLite；按月份、时区范围、服务商/订阅标签/请求与返回模型查询。主任务/辅助任务分别统计，缺失标记明确；CLI/JSON 可供 Hermes 调用。详细配置和统计口径见 `USAGE-HISTORY.md`。真实费用与账号额度继续保持能力门控。
 
