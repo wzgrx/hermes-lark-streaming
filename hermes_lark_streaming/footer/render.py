@@ -124,7 +124,8 @@ def build_footer(
         second_en.append(f"Last context {value}")
         second_zh.append(f"末次上下文 {value}")
     cached = count(data.get("cache_read_tokens"))
-    if cached is not None and inp and cached <= inp and not data.get("usage_partial"):
+    cache_partial = bool(data.get("cache_read_partial"))
+    if cached is not None and inp and cached <= inp and not data.get("usage_partial") and not cache_partial:
         second_en.append(f"Cache {cached / inp:.0%}")
         second_zh.append(f"缓存 {cached / inp:.0%}")
     if data.get("usage_partial"):
@@ -155,7 +156,8 @@ def build_footer(
 
     def number(key: str) -> tuple[str, str]:
         n = count(data.get(key))
-        return (f"{n:,}", f"{n:,}") if n is not None else (unknown_en, unknown_zh)
+        prefix = "≥" if key == "cache_read_tokens" and cache_partial else ""
+        return (f"{prefix}{n:,}", f"{prefix}{n:,}") if n is not None else (unknown_en, unknown_zh)
 
     def metric(en: str, zh: str, values: tuple[str, str]) -> tuple[str, str, str, str]:
         return en, zh, *values
@@ -177,7 +179,8 @@ def build_footer(
     elapsed_value = (f"{duration:.1f}s", f"{duration:.1f}s") if duration is not None else (unknown_en, unknown_zh)
     first_value = (f"{first:.2f}s", f"{first:.2f}s") if first is not None else (unknown_en, unknown_zh)
     ratio = (f"{cached / inp:.1%}"
-             if cached is not None and inp and cached <= inp and not data.get("usage_partial") else "")
+             if cached is not None and inp and cached <= inp
+             and not data.get("usage_partial") and not cache_partial else "")
     attempts_en, attempts_zh = number("api_calls")
     errors = count(data.get("retries"))
     if errors is not None:
@@ -189,7 +192,8 @@ def build_footer(
                    metric("First response", "首响应", first_value), text_size),
         metric_row(metric("Input incl. cache", "输入（含缓存）", number("input_tokens")),
                    metric("Output", "输出", number("output_tokens")), text_size),
-        metric_row(metric("Cache read", "缓存读取", number("cache_read_tokens")),
+        metric_row(metric("Cache read (partial)" if cache_partial else "Cache read",
+                          "缓存读取（部分）" if cache_partial else "缓存读取", number("cache_read_tokens")),
                    metric("Cache hit", "命中率", (ratio, ratio) if ratio else (unknown_en, unknown_zh)), text_size),
         metric_row(metric("Attempts", "请求尝试", (attempts_en, attempts_zh)),
                    metric("Tools", "工具", number("tool_calls")), text_size),

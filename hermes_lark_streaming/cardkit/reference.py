@@ -433,9 +433,10 @@ def build_reference_footer(
     # The count and its ratio have separate availability. A zero denominator or
     # incomplete input must not erase a known cache count or fabricate a rate.
     cache = ""
+    cache_partial = bool(data.get("cache_read_partial"))
     if cached is not None and (inp is None or cached <= inp):
-        hit = f"{cached / inp:.1%}" if inp and not data.get("usage_partial") else "—"
-        cache = f"{compact(cached)} / {hit}"
+        hit = f"{cached / inp:.1%}" if inp and not data.get("usage_partial") and not cache_partial else "—"
+        cache = f"{'≥' if cache_partial else ''}{compact(cached)} / {hit}"
     requests, errors = count(data.get("api_calls")), count(data.get("retries"))
     attempts = f"{requests} / {errors}" if requests is not None and errors is not None else ""
     attempts_zh = f"{requests} 次 / {errors} 次" if attempts else ""
@@ -488,7 +489,11 @@ def build_reference_footer(
                     text_size,
                 ),
                 metric_row(
-                    _metric("Cache read / hit", "缓存读取 / 命中率", (cache, cache) if cache else _UNKNOWN),
+                    _metric(
+                        "Cache read (partial) / hit" if cache_partial else "Cache read / hit",
+                        "缓存读取（部分） / 命中率" if cache_partial else "缓存读取 / 命中率",
+                        (cache, cache) if cache else _UNKNOWN,
+                    ),
                     _metric(
                         "API attempts / errors", "API 请求 / 错误", (attempts, attempts_zh) if attempts else _UNKNOWN
                     ),

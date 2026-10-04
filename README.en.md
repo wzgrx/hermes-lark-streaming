@@ -3,12 +3,12 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.8-blue)
+![Code version](https://img.shields.io/badge/code-0.20.9-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **Current maintenance version: 0.20.8.** Compact multiline error summaries without flattening folded details; show pending timing as `…` rather than `0ms`. Preserve the 0.20.7 terminal-state fixes and V1 layout. See [evidence, Hermes update and deployment status](docs/MAINTENANCE-0208.md). Screenshots below remain the labelled [0.20.6 native desktop preview](docs/DESKTOP-0206-ACCEPTANCE.md), not a new real-model turn or pixel-equality certification.
+> **Current maintenance version: 0.20.9.** Preserve positive cache evidence as a labelled partial lower bound without inventing a whole-turn hit rate. Found during the real 0.20.8 desktop/Gateway test; includes the tested Cohere V2 usage adapter. See [test, fix and deployment evidence](docs/MAINTENANCE-0209.md). The frozen V1 design and labelled 0.20.6 screenshots below are unchanged.
 
 > **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 

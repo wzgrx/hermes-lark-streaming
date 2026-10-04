@@ -37,7 +37,7 @@ SDK 列仅记录目录线索，不据此选择端点协议；实际 transport �
   [Usage](https://github.com/cohere-ai/cohere-python/blob/0eacfe77e1710322b355928574cfec18f6791c42/src/cohere/types/usage.py)、
   [UsageTokens](https://github.com/cohere-ai/cohere-python/blob/0eacfe77e1710322b355928574cfec18f6791c42/src/cohere/types/usage_tokens.py)。
 
-### 2026-10-04：Cohere 原生协议补齐（Unreleased）
+### 2026-10-04：Cohere 原生协议补齐（纳入 0.20.9）
 
 目录已收录 Cohere，但之前只有 canonical 标签覆盖，没有原生 V2 解析。
 现补齐 `normalize_usage(response_usage, "cohere_v2")`（别名 `cohere_chat`）：
@@ -348,3 +348,5 @@ llama.cpp、vLLM、SGLang、LM Studio、Ollama 的 OpenAI-compatible 路径同�
 当前 Hermes 的 post_api_request 会为缺失缓存桶填 0，且 response.usage 也是 canonical；因此实时 collector 对零缓存保守隐藏百分比。未关联轮次、缺失 usage、超过有界请求容量均显式显示统计不完整/待采集。辅助调用不计入本轮主请求。
 
 本轮检索用户 fork 无 open issues；上游包括 #116 中途压缩/插话、#114 anchor/sequence、#111/#109 媒体投递、#98 elementID、#82 审批等，现有机制由回归测试保留；这次 footer 重构不把它们标为新增已修复。
+
+0.20.9 包含以上适配器及部分缓存显示修复；发布/部署与真实轮次范围见 [MAINTENANCE-0209](MAINTENANCE-0209.md)。不把适配器覆盖写成新的在线传输或逐账号验证。

@@ -4,13 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.8-blue)
+![Code version](https://img.shields.io/badge/code-0.20.9-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
-> **当前维护版 0.20.8**：多行错误压成紧凑摘要，折叠详情保留换行；运行中计时显示“…”而非误导的 `0ms`。保留 0.20.7 终态修复与 V1 布局，见[本版证据及 Hermes 更新/部署状态](docs/MAINTENANCE-0208.md)。下方仍是明确标注的 [0.20.6 桌面实拍](docs/DESKTOP-0206-ACCEPTANCE.md)，不冒充新版真实模型整轮或逐像素验收。
+> **当前维护版 0.20.9**：真实 0.20.8 验收发现部分请求缺失缓存统计时，已观测缓存量也被隐藏。现保留“部分 / ≥”计数、不虚报命中率，并纳入已测试的 Cohere V2 usage 适配。见[真实测试、修复与部署证据](docs/MAINTENANCE-0209.md)。下方 0.20.6 合成截图保持原标签，冻结 V1 设计不变。
 
 > **0.20.4 桌面增强**：修复工具面板动态开关、缺失面板恢复、真实配置文件热更新及重试后的首响应统计；历史状态更紧凑，保留 V1 三面板与单写卡通道。代码与部署证据分别记录在 [本轮修复与验证](docs/DESKTOP-HARDENING.md)。
 

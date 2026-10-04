@@ -234,8 +234,13 @@ class TurnFooter:
         if measured:
             data["input_tokens"] = sum(r.usage.prompt or 0 for r in measured)
             data["output_tokens"] = sum(r.usage.output or 0 for r in measured)
-        if len(measured) == len(requests) and all(r.usage.cache_read is not None for r in measured):
-            data["cache_read_tokens"] = sum(r.usage.cache_read or 0 for r in measured)
+        cached = [r for r in measured if r.usage.cache_read is not None]
+        if cached:
+            # A cold/unknown request must not erase a later positive observation.
+            # Canonical zero still lacks presence information: expose a lower
+            # bound, not an invented full-turn hit rate, when coverage differs.
+            data["cache_read_tokens"] = sum(r.usage.cache_read or 0 for r in cached)
+            data["cache_read_partial"] = self._overflow or len(cached) != len(requests)
         if last.usage.prompt is not None:
             data["context_used"] = last.usage.prompt
         if last.context_max:

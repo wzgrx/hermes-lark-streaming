@@ -104,3 +104,7 @@ Hermes post_api_request / api_request_error / post_auxiliary_call
   └─ precise session ContextVar → per-turn footer state (ephemeral)
        └─ two-line footer + collapsible details (existing delivery owner)
 ```
+
+## 单轮缓存覆盖（0.20.9）
+
+上游 canonical 零值可能来自未上报字段。若本轮仅部分请求有正缓存证据，Footer 保留已观测量并标 `≥` 与“部分”，不计算完整命中率；输入/输出总量和历史记录不受影响。所有缓存字段未知时仍显示未知。旧卡片与账本行不重写。

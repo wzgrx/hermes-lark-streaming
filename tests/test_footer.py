@@ -170,7 +170,7 @@ def test_retry_partial_unknown_and_auxiliary_exclusion():
     complete(s, p2)
     d = s.finish()
     assert d["api_calls"] == 2 and d["retries"] == 1
-    assert d["usage_partial"] and "cache_read_tokens" not in d
+    assert d["usage_partial"] and d["cache_read_partial"] and d["cache_read_tokens"] == 70
     assert d["routes"] == ["opencode-go", "siliconflow"]
 
 

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.9] - 2026-10-04
+
+### Fixed
+- A real 0.20.8 desktop/Gateway turn exposed hidden positive cache usage when another request had a zero-filled/unknown cache bucket. Preserve observed cache counts as a labelled lower bound (`≥`), with no fabricated whole-turn hit rate, in both footer layouts. Complete token totals and historical rows remain unchanged.
+- Fifteen cache coverage cases, including eleven red-before-fix regressions; see [evidence and deployment scope](docs/MAINTENANCE-0209.md). Keep the V1 layout, hooks, dependencies and frozen designs unchanged.
+
 ### Added
 - Add explicit Cohere V2 completed-usage normalization: physical token counts are separate from billed units; cache is an input subset. Accept the SDK's exact integral floats without rounding invalid counts or relaxing other protocols. Offline adapter coverage only; current Hermes hooks and ledger retain their canonical contract, with no new provider client or dependency.
 
