@@ -306,8 +306,8 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
     if raw:
         children.append(
             _panel(
-                f"Step excerpts · {len(raw)}/{len(steps)} · errors first, bounded output",
-                f"步骤摘要 · {len(raw)}/{len(steps)} 步 · 优先保留异常，输出限长",
+                f"Step excerpts · {len(raw)}/{len(steps)} · pending/errors first, bounded output",
+                f"步骤摘要 · {len(raw)}/{len(steps)} 步 · 优先保留待确认与异常，输出限长",
                 [{"tag": "markdown", "content": "\n\n".join(text for _, text in raw), "text_size": "notation"}],
                 "ref_tool_records",
             )

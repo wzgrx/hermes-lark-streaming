@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import copy
 
+from .footer.state import seconds
 from .streaming.segments import Segment, SegmentType
 from .streaming.tooluse import ToolDisplayStep
 
@@ -17,12 +18,16 @@ def compact_tool_steps(
     recent = steps[-keep_recent:]
     errors = [step for step in old if step.get("status") == "error"]
     success_count = sum(step.get("status") == "success" for step in old)
-    total_ms = sum(float(step.get("elapsed_ms", 0)) for step in old)
+    measured = [seconds(step.get("elapsed_ms")) for step in old]
+    # A partial sum is not an exact total. Keep unknown data unknown, including
+    # legacy malformed values; never fail terminal-card delivery on float(None).
+    total_ms = seconds(sum(n for n in measured if n is not None)) if all(n is not None for n in measured) else None
+    duration = f"{total_ms / 1000:.1f}s" if total_ms is not None else "duration unknown"
     summary: ToolDisplayStep = {
         "name": "history_summary",
         "title": f"Earlier tool history · {len(old)} steps",
         "status": "success" if not errors else "error",
-        "detail": f"{success_count} succeeded · {len(errors)} failed · {total_ms / 1000:.1f}s",
+        "detail": f"{success_count} succeeded · {len(errors)} failed · {duration}",
         "output": "",
         "error": "",
         "icon": "history_outlined",

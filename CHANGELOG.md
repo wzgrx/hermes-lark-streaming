@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.14] - 2026-10-04
+
+### Fixed
+- Use monotonic clocks for tool and tracker elapsed time, so wall-clock corrections do not create negative or inflated timings.
+- Preserve missing start/end evidence as `None`; unmatched completions display unknown timing rather than a fabricated `0ms`. Measured zero remains known.
+- History compaction tolerates missing/invalid/nonfinite durations and labels an incomplete total unknown instead of crashing or inventing an exact sum. Existing errors and recent records remain intact.
+- Clarify expanded-excerpt priority wording without changing the approved native V1 geometry. Ten new regressions include nine pre-fix failures; see [maintenance scope](docs/MAINTENANCE-0214.md).
+
 ## [0.20.13] - 2026-10-04
 
 ### Fixed

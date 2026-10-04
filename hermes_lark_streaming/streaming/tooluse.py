@@ -31,7 +31,7 @@ class ToolDisplayStep(TypedDict):
     output: str
     error: str
     icon: str
-    elapsed_ms: float
+    elapsed_ms: float | None
     result_block: ToolBlock | None
     error_block: ToolBlock | None
 
@@ -46,7 +46,8 @@ class ToolStep:
     result_block: ToolBlock | None = None
     error_block: ToolBlock | None = None
     started_at: float = 0.0
-    elapsed_ms: float = 0.0
+    # None means no start/end pair was observed; zero is a measured duration.
+    elapsed_ms: float | None = None
 
 
 @dataclass
@@ -258,11 +259,11 @@ class ToolUseTracker:
     def elapsed_ms(self) -> float:
         if self._session is None:
             return 0.0
-        return (time.time() - self._session.started_at) * 1000
+        return (time.monotonic() - self._session.started_at) * 1000
 
     def record_start(self, name: str, detail: str = "") -> None:
         if self._session is None:
-            self._session = ToolSession(started_at=time.time())
+            self._session = ToolSession(started_at=time.monotonic())
         if len(self._session.steps) >= self._max_steps:
             return
         self._session.steps.append(
@@ -270,7 +271,7 @@ class ToolUseTracker:
                 name=name,
                 status=ToolStatus.RUNNING,
                 detail=detail,
-                started_at=time.time(),
+                started_at=time.monotonic(),
             )
         )
 
@@ -285,7 +286,7 @@ class ToolUseTracker:
                 step.status = ToolStatus.ERROR if error else ToolStatus.SUCCESS
                 step.error = error
                 step.output = output
-                step.elapsed_ms = (time.time() - step.started_at) * 1000
+                step.elapsed_ms = (time.monotonic() - step.started_at) * 1000
                 if error:
                     step.error_block = _build_display_block(error, "text", sanitizer=sanitizer)
                 elif output:
@@ -298,7 +299,7 @@ class ToolUseTracker:
                 detail=error or output,
                 output=output,
                 error=error,
-                started_at=time.time(),
+                started_at=time.monotonic(),
                 error_block=_build_display_block(error, "text", sanitizer=sanitizer) if error else None,
                 result_block=_build_display_block(output, "json", sanitizer=sanitizer) if output else None,
             )
@@ -312,7 +313,7 @@ class ToolUseTracker:
         for s in self._session.steps:
             desc = _resolve_tool_descriptor(s.name)
             base_title = desc["title"] if desc else _humanize_tool_name(s.name)
-            if s.elapsed_ms > 0:
+            if s.elapsed_ms is not None and s.elapsed_ms > 0:
                 base_title = f"{base_title} ({_format_duration_label(s.elapsed_ms)})"
             sanitizer = desc.get("sanitizer") if desc else None
             detail = _sanitize_detail(s.detail, sanitizer)

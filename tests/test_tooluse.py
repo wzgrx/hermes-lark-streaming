@@ -337,7 +337,7 @@ class TestToolUseTracker:
 
     @patch("hermes_lark_streaming.streaming.tooluse.time")
     def test_step_elapsed_ms_recorded(self, mock_time: object) -> None:
-        mock_time.time.side_effect = [100.0, 100.0, 102.5]
+        mock_time.monotonic.side_effect = [100.0, 100.0, 102.5]
         tracker = ToolUseTracker()
         tracker.record_start("read", "f")
         tracker.record_end("read", output="ok")
