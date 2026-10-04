@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.8] - 2026-10-04
+
+### Fixed
+- Keep multiline tool errors compact in summary rows without flattening their folded excerpts. Whitespace-only structured errors fall through to useful plain error text.
+- Show pending tool timing as `…`, retaining observed completed zero durations and unconfirmed interrupted results as separate states.
+- Five new cases (three reproduced regressions), 1517 full local tests, Ruff and mypy pass. Preserve V1 structure and frozen designs. See [maintenance evidence](docs/MAINTENANCE-0208.md) for the three-commit Hermes update and separate deployment gates.
+
 ## [0.20.7] - 2026-10-04
 
 ### Fixed

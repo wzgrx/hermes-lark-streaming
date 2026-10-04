@@ -100,8 +100,11 @@ def _duration(value: Any) -> str:
     return f"{int(n // 60)}m {int(n % 60):02d}s" if n >= 60 else f"{n:.1f}s"
 
 
-def _tool_text(value: str, limit: int = 160) -> str:
+def _tool_text(value: str, limit: int = 160, *, single_line: bool = False) -> str:
     text = _SECRET.sub("[redacted]", redact_inline_secrets(value[: limit * 2]))
+    if single_line:
+        # Summary rows stay compact; the bounded excerpt retains line breaks.
+        text = " ".join(text.split())
     escaped = re.sub(r"([\\`*_\[\]~])", r"\\\1", html.escape(text))
     encoded = escaped.encode()
     return escaped if len(encoded) <= limit else encoded[:limit].decode(errors="ignore").rstrip("\\") + "…"
@@ -206,11 +209,12 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
         )
     for start, end, step, elapsed_s in shown:
         number = f"{prior + start + 1:02d}" if start == end else f"{prior + start + 1:02d}–{prior + end + 1:02d}"
-        name = _tool_text(_tool_title(step), 100)
+        name = _tool_text(_tool_title(step), 100, single_line=True)
         error_detail = ""
         if step["status"] == "error":
             block = step.get("error_block")
-            error_detail = _tool_text(str((block.get("content") if block else "") or step.get("error") or ""), 100)
+            content = str((block.get("content") if block else "") or "").strip() or step.get("error") or ""
+            error_detail = _tool_text(content, 100, single_line=True)
         name_content = name + (f"\n<font color='red'>{error_detail}</font>" if error_detail else "")
         copies = end - start + 1
         state = {"success": ("Succeeded", "成功", "green"), "error": ("Failed", "失败", "red")}.get(
@@ -227,7 +231,9 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
             "notation",
         )
         status_text["text_align"] = "right"
-        elapsed_label = "—" if unresolved else f"<font color='grey'>{_duration(elapsed_s)}</font>"
+        elapsed_label = ("—" if unresolved else "…") if step["status"] == "running" else (
+            f"<font color='grey'>{_duration(elapsed_s)}</font>"
+        )
         timing = markdown(elapsed_label, elapsed_label, "notation")
         timing["text_align"] = "right"
         row = {
@@ -265,9 +271,8 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
             status = "结果未确认 / Unconfirmed"
         detail = _tool_text(step.get("detail", ""), 180)
         block = step.get("error_block") or step.get("result_block")
-        output = _tool_text(
-            str((block.get("content") if block else "") or step.get("error") or step.get("output") or ""), 200
-        )
+        content = str((block.get("content") if block else "") or "").strip()
+        output = _tool_text(content or step.get("error") or step.get("output") or "", 200)
         raw.append((i,
             f"**{prior + i + 1} · {_tool_text(_tool_title(step), 70)} · {status}**\n"
             f"{detail}" + (f"\n{output}" if output else "")

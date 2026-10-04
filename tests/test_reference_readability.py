@@ -137,3 +137,34 @@ def test_live_and_sealed_continuation_keep_genuine_running_tool_status():
         panel = card["body"]["elements"][0]
         assert "运行中" in json.dumps(panel, ensure_ascii=False)
         assert "Unconfirmed" not in json.dumps(panel)
+
+
+def test_multiline_error_stays_compact_in_row_but_readable_in_excerpts():
+    item = step("error")
+    item.update(error="Failure\n  at operation\tstep\r\n  inspect details")
+    panel = build_tools({}, {"steps": [item]})
+    row = next(el for el in panel["elements"] if el["tag"] == "column_set")
+    summary = row["columns"][1]["elements"][0]["content"]
+    assert "Failure at operation step inspect details" in summary
+    assert summary.count("\n") == 1  # title + one compact error line
+    excerpts = next(el for el in panel["elements"] if el.get("element_id") == "ref_tool_records")
+    assert "Failure\n  at operation" in json.dumps(excerpts, ensure_ascii=False).replace("\\n", "\n")
+
+
+@pytest.mark.parametrize("status, expected", [("running", "…"), ("success", "0ms"), ("error", "0ms")])
+def test_running_timing_is_pending_not_a_claimed_zero_duration(status, expected):
+    item = step(status)
+    item["elapsed_ms"] = 0
+    panel = build_tools({}, {"steps": [item]})
+    row = next(el for el in panel["elements"] if el["tag"] == "column_set")
+    assert expected in row["columns"][-1]["elements"][0]["content"]
+
+
+def test_compact_error_uses_plain_error_when_structured_error_is_whitespace():
+    item = step("error")
+    item.update(error_block={"content": "\n  \t"}, error="ACTIONABLE_CAUSE")
+    panel = build_tools({}, {"steps": [item]})
+    row = next(el for el in panel["elements"] if el["tag"] == "column_set")
+    assert "ACTIONABLE" in row["columns"][1]["elements"][0]["content"]
+    excerpts = next(el for el in panel["elements"] if el.get("element_id") == "ref_tool_records")
+    assert "ACTIONABLE" in json.dumps(excerpts)
