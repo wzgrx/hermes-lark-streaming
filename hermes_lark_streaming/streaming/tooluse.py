@@ -6,6 +6,7 @@ import json
 import os
 import re
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, TypedDict
@@ -53,6 +54,7 @@ class ToolStep:
 @dataclass
 class ToolSession:
     steps: list[ToolStep] = field(default_factory=list)
+    recent_completed: deque[ToolStep] = field(default_factory=deque)
     started_at: float = 0.0
 
 
@@ -249,11 +251,21 @@ class ToolUseTracker:
     """追踪当前消息中的工具调用步骤.
 
     按 session 隔离，每个会话独立生命周期.
+
+    max_steps bounds full completed payload retention, not lifecycle records.
+    Stable record indices/counts are required by segmented cards and rollover.
+    Older records retain bounded hints, outcome and duration; running steps are
+    never discarded. Metadata still grows with the number of calls in a turn.
     """
 
     def __init__(self, max_steps: int = 128) -> None:
         self._session: ToolSession | None = None
-        self._max_steps = max_steps
+        self._max_steps = max(0, max_steps)
+
+    @property
+    def step_count(self) -> int:
+        """Stable lifecycle count without sanitizing/serializing every record."""
+        return len(self._session.steps) if self._session is not None else 0
 
     @property
     def elapsed_ms(self) -> float:
@@ -264,8 +276,6 @@ class ToolUseTracker:
     def record_start(self, name: str, detail: str = "") -> None:
         if self._session is None:
             self._session = ToolSession(started_at=time.monotonic())
-        if len(self._session.steps) >= self._max_steps:
-            return
         self._session.steps.append(
             ToolStep(
                 name=name,
@@ -291,6 +301,7 @@ class ToolUseTracker:
                     step.error_block = _build_display_block(error, "text", sanitizer=sanitizer)
                 elif output:
                     step.result_block = _build_display_block(output, "json", sanitizer=sanitizer)
+                self._retain_completed(step)
                 return
         self._session.steps.append(
             ToolStep(
@@ -304,6 +315,22 @@ class ToolUseTracker:
                 result_block=_build_display_block(output, "json", sanitizer=sanitizer) if output else None,
             )
         )
+        self._retain_completed(self._session.steps[-1])
+
+    def _retain_completed(self, step: ToolStep) -> None:
+        """Release old heavy payloads without renumbering or hiding outcomes."""
+        assert self._session is not None
+        recent = self._session.recent_completed
+        recent.append(step)
+        while len(recent) > self._max_steps:
+            old = recent.popleft()
+            # Redact BEFORE truncation: cutting a quoted credential midway can
+            # defeat the inline-secret matcher when the brief is rendered later.
+            old.detail = _archived_hint(old.detail)
+            old.error = _archived_hint(old.error)
+            old.output = ""
+            old.result_block = None
+            old.error_block = None
 
     def build_display_steps(self) -> list[ToolDisplayStep]:
         """构建用于卡片渲染的步骤列表."""
@@ -332,3 +359,10 @@ class ToolUseTracker:
                 }
             )
         return steps
+
+
+def _archived_hint(value: str) -> str:
+    raw = redact_inline_secrets(value).encode("utf-8")
+    if len(raw) <= 512:
+        return raw.decode("utf-8")
+    return raw[:509].decode("utf-8", errors="ignore") + "…"

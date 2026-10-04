@@ -4,13 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.15-blue)
+![Code version](https://img.shields.io/badge/code-0.20.16-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
-> **当前代码 · 0.20.15**：工具行直接显示脱敏、限长的命令/目标摘要；历史压缩保留未结束步骤，避免误显示全部成功。保留 V1 四列、折叠状态与全卡预算。见[维护记录](docs/MAINTENANCE-0215.md)，旧截图保留原验收版本。
+> **当前代码 · 0.20.16**：长任务超过 128 步仍保留开始事件、状态与耗时；只压缩较早已完成步骤的大段输出，保留短摘要与错误原因。计数采用轻量读取，V1 四列、折叠与卡片预算不变。见[维护记录](docs/MAINTENANCE-0216.md)，旧截图保留原验收版本。
 
 > **0.20.4 桌面增强**：修复工具面板动态开关、缺失面板恢复、真实配置文件热更新及重试后的首响应统计；历史状态更紧凑，保留 V1 三面板与单写卡通道。代码与部署证据分别记录在 [本轮修复与验证](docs/DESKTOP-HARDENING.md)。
 

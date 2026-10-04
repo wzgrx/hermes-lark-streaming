@@ -289,13 +289,14 @@ class TestToolUseTracker:
         assert steps[0]["status"] == "success"
         assert steps[1]["status"] == "error"
 
-    def test_max_steps_limit(self) -> None:
+    def test_detail_limit_does_not_discard_running_steps(self) -> None:
         tracker = ToolUseTracker(max_steps=2)
         tracker.record_start("a", "")
         tracker.record_start("b", "")
-        tracker.record_start("c", "")  # 应被丢弃
+        tracker.record_start("c", "")
         steps = tracker.build_display_steps()
-        assert len(steps) == 2
+        assert len(steps) == 3
+        assert all(step["status"] == "running" for step in steps)
 
     def test_display_steps_have_icon(self) -> None:
         tracker = ToolUseTracker()

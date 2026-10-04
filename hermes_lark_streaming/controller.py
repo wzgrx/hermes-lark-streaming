@@ -318,7 +318,7 @@ class StreamCardController(StreamingController):
                 session.state = SessionState.STREAMING
                 self._schedule_clarify_split(session)
 
-        session.segment_state.on_tool_event(len(session.tool_use.build_display_steps()))
+        session.segment_state.on_tool_event(session.tool_use.step_count)
         session.runtime_status.signal("processing")
         self._schedule_flush(session)
         return True
@@ -855,7 +855,7 @@ class StreamCardController(StreamingController):
             # Core result tokens may be session-cumulative: never label them as turn usage.
             snapshot = session.footer_state.finish()
             snapshot.setdefault("model", model)
-            snapshot["tool_calls"] = len(session.tool_use.build_display_steps())
+            snapshot["tool_calls"] = session.tool_use.step_count
             session.footer = snapshot
 
     def _complete_session(self, session: CardSession) -> None:

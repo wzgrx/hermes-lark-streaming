@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.16] - 2026-10-04
+
+### Fixed
+- Keep every tool start/end lifecycle record beyond the old 128-step boundary. Preserve command hints, measured elapsed time, ordering and segment indices.
+- Bound full completed payload retention to the most recent 128 completions (internal `max_steps`); older steps retain status/timing and redacted UTF-8-safe 512-byte hints. This is not a global memory cap or a change to stored conversation history.
+- Read tracker counts without rendering all tool records on each event. Native V1 geometry and byte/element gates stay unchanged.
+- Same-name overlapping calls still depend on the host lifecycle contract, which currently omits unique IDs; no exact concurrency-correlation claim. See [maintenance scope](docs/MAINTENANCE-0216.md).
+
 ## [0.20.15] - 2026-10-04
 
 ### Changed
