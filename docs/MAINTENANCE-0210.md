@@ -75,3 +75,33 @@ code, not a new live model turn or a fresh desktop screenshot. Existing stale
 metrics or historical unknown-delivery warnings stay visible and are not erased
 or automatically resent. Runtime publication is not claimed by this section;
 the concrete receipt is appended once completed.
+
+## Publication and runtime receipt
+
+Reviewed Card code: `db6caa69e9d67c00fa435e67388122f7b1dd9e04`.
+Exact-commit [Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37173397447)
+and [CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/runs/37173397463)
+completed successfully, including supported Python and Hermes compatibility
+matrix jobs. This paragraph is a documentation-only follow-up to that code.
+
+After two idle checks, one graceful stop/start published the reviewed Hermes
+snapshot plus local overlays (`0764e9165721`) and managed **Card 0.20.10**.
+Card/LCM plugin doctors, PM doctor, hook verify/uninstall/install/status,
+frontend freshness and local smoke passed. Gateway reports `running`, Feishu
+reports `connected`, the service and updater timer are active, and the core
+and both managed plugin checkouts are clean. LCM remains `cfa583275ed0`.
+
+Configuration and credential-file hashes match the protected pre-deploy
+backup. Read-only quick checks pass for conversation, LCM and usage databases;
+current-process logs have no traceback. Existing `metrics_stale` during idle
+and historical `delivery_unknown` warnings remain visible, without record
+deletion or automatic message resend. Backup refs, PM inputs and plugin copy
+are preserved locally for rollback.
+
+The loaded 0.20.10 package replayed saved scalar measurements from the approved
+0.20.8 test: positive partial cache remains visible, rounded lower bounds never
+overstate observations, classic exact counts and input/output totals remain
+unchanged. Additional synthetic label checks cover locale, absent duration
+and measured waiting. **Zero new provider calls, zero messages, zero historical
+row updates.** This is managed-runtime replay, not a new real-model turn or
+fresh native-client visual acceptance. Private receipts remain local.
