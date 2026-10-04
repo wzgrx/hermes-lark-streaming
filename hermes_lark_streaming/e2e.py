@@ -59,24 +59,60 @@ def _configured_final(segment: Segment) -> dict[str, Any]:
 
 async def live_run(chat_id: str) -> dict[str, Any]:
     """Create → attach → stream → close → final update in an explicit test chat."""
-    client = _configured_client()
     started = time.monotonic()
-    card = build_streaming_card_v2(show_streaming_element=True, width_mode="compact")
-    card_id = await client.cardkit_create(card)
-    message_id = await client.send_card_to_chat(chat_id, {"type": "card", "data": {"card_id": card_id}})
-    await client.cardkit_stream_element(card_id, "streaming_content", "E2E: streaming ✓", sequence=2)
-    await client.cardkit_close_streaming(card_id, sequence=3)
-    segment = Segment(SegmentType.ANSWER, "answer_e2e")
-    segment.text = "E2E: completed ✓"
-    final = _configured_final(segment)
-    await client.cardkit_update(card_id, final, sequence=4)
-    return {
-        "ok": True,
-        "mode": "live",
-        "card_id_prefix": card_id[:8],
-        "message_id_prefix": message_id[:8],
-        "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+    report: dict[str, Any] = {
+        "ok": False, "mode": "live", "entity_created": False,
+        "entity_closed": False, "attachment_status": "not_attempted",
+        "gateway_turn_verified": False, "client_visual_verified": False,
     }
+    client = None
+    card_id = ""
+    sequence = 1
+    phase = "configure"
+    try:
+        client = _configured_client()
+        card = build_streaming_card_v2(show_streaming_element=True, width_mode="compact")
+        phase = "create"
+        card_id = await client.cardkit_create(card)
+        report.update(entity_created=True, card_id_prefix=card_id[:8])
+        phase = "attach"
+        # A lost response does not prove that the server did not send the card.
+        # Do not automatically resend this externally visible operation.
+        report["attachment_status"] = "unknown"
+        message_id = await client.send_card_to_chat(chat_id, {"type": "card", "data": {"card_id": card_id}})
+        report.update(attachment_status="confirmed", message_id_prefix=message_id[:8])
+        phase = "stream"
+        sequence += 1
+        await client.cardkit_stream_element(card_id, "streaming_content", "E2E: streaming ✓", sequence=sequence)
+        phase = "close"
+        sequence += 1
+        await client.cardkit_close_streaming(card_id, sequence=sequence)
+        report["entity_closed"] = True
+        phase = "final_update"
+        segment = Segment(SegmentType.ANSWER, "answer_e2e")
+        segment.text = "E2E: completed ✓"
+        final = _configured_final(segment)
+        sequence += 1
+        await client.cardkit_update(card_id, final, sequence=sequence)
+        report["ok"] = True
+    except FeishuAPIError as exc:
+        report.update(failed_phase=phase, error_code=exc.code)
+    except Exception as exc:
+        # Transport/config errors may embed URLs or credentials; expose type only.
+        report.update(failed_phase=phase, error_type=type(exc).__name__)
+    finally:
+        if client is not None and card_id and not report["entity_closed"]:
+            try:
+                # Advance even after an uncertain response to an earlier close.
+                sequence += 1
+                await client.cardkit_close_streaming(card_id, sequence=sequence)
+                report["entity_closed"] = True
+            except FeishuAPIError as exc:
+                report["cleanup_error_code"] = exc.code
+            except Exception as exc:
+                report["cleanup_error_type"] = type(exc).__name__
+        report["elapsed_ms"] = round((time.monotonic() - started) * 1000, 2)
+    return report
 
 
 async def live_entity_probe() -> dict[str, Any]:
@@ -230,5 +266,6 @@ def run(*, execute: bool, chat_id: str = "", entity_only: bool = False,
     if not chat_id:
         print("--chat-id is required with --execute")
         return 2
-    print(json.dumps(asyncio.run(live_run(chat_id)), ensure_ascii=False, indent=2))
-    return 0
+    report = asyncio.run(live_run(chat_id))
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0 if report["ok"] else 1

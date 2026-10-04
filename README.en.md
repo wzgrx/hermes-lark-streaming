@@ -133,6 +133,8 @@ hermes --run-module hermes_lark_streaming smoke
 
 Default smoke is offline. Explicit `smoke --execute --closed-stream-probe` tests a real unattached CardKit entity; it is not a screenshot test.
 
+Real-chat smoke now attempts to close owned entities after attach/stream errors, never automatically resends an ambiguous attachment, keeps primary and cleanup errors separate, and exits nonzero on failure. See [native acceptance and smoke maintenance](docs/MAINTENANCE-0217-LIVE-ACCEPTANCE.md).
+
 Within an idle maintenance window, stop the Gateway gracefully before updating, then verify and start it:
 
 ```bash

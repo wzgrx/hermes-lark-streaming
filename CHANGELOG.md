@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Close owned smoke-test entities after attach/stream failure or cancellation. Preserve ambiguous send results without automatic resend and keep original errors separate from cleanup errors.
+- Return safe structured failure reports and a nonzero smoke CLI exit code. API success explicitly does not imply a Gateway model turn or client visual acceptance. See [native acceptance evidence](docs/MAINTENANCE-0217-LIVE-ACCEPTANCE.md).
+
 ## [0.20.16] - 2026-10-04
 
 ### Fixed

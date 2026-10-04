@@ -177,6 +177,8 @@ hermes --run-module hermes_lark_streaming smoke
 ```
 
 默认 smoke 是离线检查。显式的 `smoke --execute --closed-stream-probe` 会调用飞书 API 创建未发送到聊天的实体并测试终态更新，仍不等于客户端截图验收。
+
+真实聊天 smoke 在发送/流式异常后会尝试关闭已创建的实体；发送结果不明时不自动重发，清理错误与原始错误分别记录，失败返回非零退出码。[接口实测与测试工具维护](docs/MAINTENANCE-0217-LIVE-ACCEPTANCE.md)。
 指标须检查是否属于当前 Gateway 进程；重启后的旧快照不等于实时错误率。
 
 更新顺序：**确认空闲 → 保存回滚信息 → 平稳停止 → 托管更新/PM 同步 → doctor/verify/install/status → 启动 → 检查连接、日志、投递与客户端**。来源 pin、精确 SHA、审核提示与回滚命令统一以 [INSTALL.md](INSTALL.md) 为准。
