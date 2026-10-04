@@ -221,6 +221,13 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
     for start, end, step, elapsed_s in shown:
         number = f"{prior + start + 1:02d}" if start == end else f"{prior + start + 1:02d}–{prior + end + 1:02d}"
         name = _tool_text(_tool_title(step), 100, single_line=True)
+        # A short inline hint distinguishes identical tool names without a
+        # second expansion or another element. Full details stay in excerpts.
+        hint = _tool_text(step.get("detail") or "", 64, single_line=True)
+        # Error rows already spend their second line on the actionable cause;
+        # don't crowd it out or trade away error excerpts for optional hints.
+        if hint and hint != name and step["status"] != "error":
+            name += f" · <font color='grey'>{hint}</font>"
         error_detail = ""
         if step["status"] == "error":
             block = step.get("error_block")
@@ -294,7 +301,21 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
     # Interrupted cards also carry localized status in their footer/preview.
     # Reserve that overhead rather than letting long excerpts consume it.
     raw_limit = max(1000, min(4000, 12500 - rows_bytes - (512 if unconfirmed else 0)))
-    while len(raw) > 1 and (len(raw) > 24 or len("\n\n".join(text for _, text in raw).encode()) > raw_limit):
+    def excerpt_panel() -> dict[str, Any]:
+        return _panel(
+            f"Step excerpts · {len(raw)}/{len(steps)} · pending/errors first, bounded output",
+            f"步骤摘要 · {len(raw)}/{len(steps)} 步 · 优先保留待确认与异常，输出限长",
+            [{"tag": "markdown", "content": "\n\n".join(text for _, text in raw), "text_size": "notation"}],
+            "ref_tool_records",
+        )
+
+    while len(raw) > 1:
+        # Count the actual localized wrappers too. New inline hints must share
+        # the existing 13 KB allocation, not expand the whole-card byte budget.
+        candidate = _panel(en, zh, [*children, excerpt_panel()], TOOLS_ID)
+        if (len(raw) <= 24 and len("\n\n".join(text for _, text in raw).encode()) <= raw_limit
+                and len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":")).encode()) <= 13000):
+            break
         # The excerpt follows the same priorities as the visible rows. Keeping
         # an active row but evicting its command behind long errors is misleading.
         # Within a priority tier, retain newer entries; render chronologically.
@@ -304,14 +325,7 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted:
         ))
         raw.pop(drop)
     if raw:
-        children.append(
-            _panel(
-                f"Step excerpts · {len(raw)}/{len(steps)} · pending/errors first, bounded output",
-                f"步骤摘要 · {len(raw)}/{len(steps)} 步 · 优先保留待确认与异常，输出限长",
-                [{"tag": "markdown", "content": "\n\n".join(text for _, text in raw), "text_size": "notation"}],
-                "ref_tool_records",
-            )
-        )
+        children.append(excerpt_panel())
     if not children:
         children.append(markdown("No tool calls yet.", "尚无工具调用。", "notation"))
     return _panel(en, zh, children, TOOLS_ID)

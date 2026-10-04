@@ -3,12 +3,12 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.14-blue)
+![Code version](https://img.shields.io/badge/code-0.20.15-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **Current maintained version 0.20.14**: monotonic tool timing, unknown duration for unmatched completion events, and robust history totals with missing/invalid observations. V1 geometry and payload limits stay unchanged. See [scope and verification](docs/MAINTENANCE-0214.md); historical screenshots retain their acceptance version.
+> **Current maintained version 0.20.15**: bounded, redacted inline tool hints and preservation of unresolved steps during history compaction. Native V1 columns, folding and payload budgets remain. See [scope and verification](docs/MAINTENANCE-0215.md); old screenshots keep their original acceptance version.
 
 > **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 

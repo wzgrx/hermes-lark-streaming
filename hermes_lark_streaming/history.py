@@ -17,6 +17,8 @@ def compact_tool_steps(
     old = steps[:-keep_recent]
     recent = steps[-keep_recent:]
     errors = [step for step in old if step.get("status") == "error"]
+    pending_count = sum(step.get("status") == "running" for step in old)
+    retained = [step for step in old if step.get("status") in {"error", "running"}]
     success_count = sum(step.get("status") == "success" for step in old)
     measured = [seconds(step.get("elapsed_ms")) for step in old]
     # A partial sum is not an exact total. Keep unknown data unknown, including
@@ -26,8 +28,9 @@ def compact_tool_steps(
     summary: ToolDisplayStep = {
         "name": "history_summary",
         "title": f"Earlier tool history · {len(old)} steps",
-        "status": "success" if not errors else "error",
-        "detail": f"{success_count} succeeded · {len(errors)} failed · {duration}",
+        "status": "error" if errors else "running" if pending_count else "success",
+        "detail": f"{success_count} succeeded · {len(errors)} failed"
+        + (f" · {pending_count} pending" if pending_count else "") + f" · {duration}",
         "output": "",
         "error": "",
         "icon": "history_outlined",
@@ -35,8 +38,9 @@ def compact_tool_steps(
         "result_block": None,
         "error_block": None,
     }
-    # Preserve every old error verbatim, then the most recent full-fidelity window.
-    return [summary, *errors, *recent], len(old)
+    # A turn ending does not resolve an unfinished tool. Preserve pending work
+    # and errors in original order before the recent full-fidelity window.
+    return [summary, *retained, *recent], len(old)
 
 
 def compact_terminal_segments(

@@ -4,13 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.14-blue)
+![Code version](https://img.shields.io/badge/code-0.20.15-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
-> **当前维护版 0.20.14**：工具计时改用单调时钟；缺少开始事件的结果显示未知耗时，不冒充 `0ms`。历史步骤汇总容忍空值/异常计时，避免影响终态卡片。保持 V1 紧凑布局与大小限制。见[修复与验证记录](docs/MAINTENANCE-0214.md)。旧截图保留原验收版本。
+> **当前代码 · 0.20.15**：工具行直接显示脱敏、限长的命令/目标摘要；历史压缩保留未结束步骤，避免误显示全部成功。保留 V1 四列、折叠状态与全卡预算。见[维护记录](docs/MAINTENANCE-0215.md)，旧截图保留原验收版本。
 
 > **0.20.4 桌面增强**：修复工具面板动态开关、缺失面板恢复、真实配置文件热更新及重试后的首响应统计；历史状态更紧凑，保留 V1 三面板与单写卡通道。代码与部署证据分别记录在 [本轮修复与验证](docs/DESKTOP-HARDENING.md)。
 

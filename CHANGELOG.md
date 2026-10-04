@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.15] - 2026-10-04
+
+### Changed
+- Add a redacted, escaped, 64-byte inline command/target hint to native V1 tool rows. No new card element or panel; preserve original step data and bounded excerpts.
+- Preserve old running steps as well as errors during terminal history compaction. Summaries expose pending count instead of labeling unresolved history successful.
+- See [scope, regressions and upstream review](docs/MAINTENANCE-0215.md). Historical desktop evidence is not relabeled.
+
 ## [0.20.14] - 2026-10-04
 
 ### Fixed
