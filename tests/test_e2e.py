@@ -16,6 +16,7 @@ def test_smoke_final_exercises_configured_footer_without_fake_usage(monkeypatch)
     from hermes_lark_streaming.streaming.segments import Segment, SegmentType
     monkeypatch.setattr(e2e, "Config", lambda: SimpleNamespace(
         footer_enabled=True, footer_mode="enhanced", footer_details=True, footer_text_size="normal",
+        card_layout="classic", show_tool_use=True, reference_resources_enabled=True,
     ))
     final = e2e._configured_final(Segment(SegmentType.ANSWER, "probe"))
     text = json.dumps(final, ensure_ascii=False)
@@ -23,6 +24,27 @@ def test_smoke_final_exercises_configured_footer_without_fake_usage(monkeypatch)
     panel = next(e for e in final["body"]["elements"] if e.get("element_id") == "footer_details")
     assert len([e for e in panel["elements"] if e["tag"] == "column_set"]) == 4
     assert "↑0" not in text
+
+
+@pytest.mark.parametrize("panels_enabled", [True, False])
+def test_reference_smoke_checks_selected_layout_and_panel_toggles(monkeypatch, panels_enabled):
+    from hermes_lark_streaming.card_limits import inspect_card
+    from hermes_lark_streaming.streaming.segments import Segment, SegmentType
+
+    monkeypatch.setattr(e2e, "Config", lambda: SimpleNamespace(
+        footer_enabled=True, footer_mode="enhanced", footer_details=True, footer_text_size="normal",
+        card_layout="reference", show_tool_use=panels_enabled, reference_resources_enabled=panels_enabled,
+    ))
+    final = e2e._configured_final(Segment(SegmentType.ANSWER, "probe"))
+    ids = [node.get("element_id") for node in final["body"]["elements"]]
+    assert ("reference_tools" in ids) is panels_enabled
+    assert ("reference_resources" in ids) is panels_enabled
+    panel = next(node for node in final["body"]["elements"] if node.get("element_id") == "footer_details")
+    # V1 has three metric rows, unlike the classic enhanced footer's four.
+    assert len([node for node in panel["elements"] if node["tag"] == "column_set"]) == 3
+    text = json.dumps(final, ensure_ascii=False)
+    assert "未提供" in text and "0ms" not in text
+    assert inspect_card(final).safe
 
 
 def _entity_client(*, initial_code: int = 300313, retry_code: int = 0) -> SimpleNamespace:

@@ -46,7 +46,14 @@ def _configured_final(segment: Segment) -> dict[str, Any]:
         segments=[segment], all_tool_steps=[], width_mode="compact",
         footer_enabled=cfg.footer_enabled, footer_mode=cfg.footer_mode,
         footer_details=cfg.footer_details, footer_text_size=cfg.footer_text_size,
-        footer_data={"telemetry_missing": True},
+        footer_data={
+            "telemetry_missing": True,
+            "presentation": cfg.card_layout,
+            "reference": {
+                "show_tools": cfg.show_tool_use,
+                "resources_enabled": cfg.reference_resources_enabled,
+            },
+        },
     )
 
 

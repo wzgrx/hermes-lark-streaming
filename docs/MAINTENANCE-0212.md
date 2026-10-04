@@ -37,3 +37,19 @@ Full isolated Card suite: **1583 passed**, two existing SDK deprecation warnings
 Ruff and mypy (49 source files) pass. Nine new targeted cases pass; eight were
 red on 0.20.11 before implementation. Exact-commit hosted CI and managed
 deployment remain separate gates; this document makes no new real-turn claim.
+
+## Smoke coverage correction before deployment
+
+Further review found `_configured_final` respected enhanced Footer settings but
+omitted `presentation`, so even a reference-layout host tested the classic final
+card. It now forwards the selected layout and tool/resource panel toggles, with
+no fabricated host readings, usage or history. Two new regressions failed before
+this correction and pass afterwards; the existing classic smoke test still
+passes. The closed-stream probe creates one unattached entity, exercises the
+configured final update and closes its stream; it sends no chat message.
+
+Final full-suite and service-probe evidence is recorded separately from the
+initial 1583-test pass above. An unattached server-accepted card is not a client
+screenshot or a real model/Gateway round trip.
+
+Final isolated suite after the smoke correction: **1585 passed**, two existing SDK warnings; Ruff and mypy pass. No new dependency or hook change.
