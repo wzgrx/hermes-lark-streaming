@@ -410,6 +410,41 @@ async def test_footer_off_still_updates_reference_tools_without_missing_footer_a
     assert all(a["params"]["element_id"] != "footer_details" for a in actions)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("terminal", [SessionState.ABORTED, SessionState.FAILED])
+async def test_reference_terminal_controller_closes_card_with_honest_unfinished_tools(tmp_path, terminal):
+    ctrl = StreamCardController(tmp_path)
+    ctrl._cfg._raw = {"streaming": {"layout": "reference", "footer": {"mode": "enhanced"}}}
+    ctrl._initialized = True
+    ctrl._client = AsyncMock(spec=FeishuClient)
+    session = CardSession("terminal-fixture", "fixture-chat", asyncio.get_running_loop())
+    session.set_card(card_id="card", card_msg_id="message")
+    session.state = terminal
+    session.tool_use.record_start("command", "fixture-only")
+    assert await ctrl._do_complete_card_inner(session)
+    ctrl._client.cardkit_close_streaming.assert_awaited_once()
+    ctrl._client.cardkit_update.assert_awaited_once()
+    card = ctrl._client.cardkit_update.await_args.args[1]
+    text = json.dumps(card, ensure_ascii=False)
+    assert "结果未确认" in text and "运行中" not in text and "Done." not in text
+    assert session.tool_use.build_display_steps()[0]["status"] == "running"
+
+
+def test_terminal_unconfirmed_tools_remain_within_reference_reserve():
+    d = data(routes=["路" * 160] * 12, last_error_type="Exception", usage_partial=True, compression_observed=True)
+    d["requested_model"], d["response_model"] = "A" * 160, "B" * 160
+    d["reference"]["steps"] = [step("command", "running", "<" * 400) for _ in range(128)]
+    d["reference"]["steps"][0] = step("command", "error", "<" * 400, error="失" * 1000)
+    d["reference"]["history"] = {
+        "status": "ok", "show_models": True,
+        "models": [{"subscription": "订" * 160, "model": "模" * 160, "tokens": 50} for _ in range(3)],
+    }
+    card = build_complete_card(segments=[], all_tool_steps=d["reference"]["steps"], footer_data=d,
+                               footer_mode="enhanced", is_aborted=True)
+    check = inspect_card(card)
+    assert check.safe and check.elements <= REFERENCE_ELEMENT_RESERVE + 5, check
+
+
 PROVIDERS = json.loads((Path(__file__).parents[1] / "docs/data/providers-20261003.json").read_text())["providers"]
 
 

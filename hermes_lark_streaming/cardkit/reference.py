@@ -143,7 +143,7 @@ def _tool_groups(steps: list[ToolDisplayStep]) -> list[tuple[int, int, ToolDispl
     return groups
 
 
-def build_tools(data: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]:
+def build_tools(data: dict[str, Any], reference: dict[str, Any], *, interrupted: bool = False) -> dict[str, Any]:
     steps: list[ToolDisplayStep] = reference.get("steps", [])
     prior = count(reference.get("tools_prior")) or 0
     prior_done = count(reference.get("done_prior")) or 0
@@ -151,13 +151,25 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any]) -> dict[str, An
     total = prior + len(steps)
     done = prior_done + sum(s["status"] in {"success", "error"} for s in steps)
     failures = prior_failed + sum(s["status"] == "error" for s in steps)
+    # Ending a model turn is not evidence that a background command stopped.
+    # Keep observed counts intact; only replace a now-stale live indicator.
+    unconfirmed = sum(s["status"] == "running" for s in steps) if interrupted else 0
     elapsed = _duration(data.get("duration"))
     tail_en = f" · {failures} failed" if failures else ""
     tail_zh = f" · {failures} 失败" if failures else ""
+    if unconfirmed:
+        tail_en += f" · {unconfirmed} unconfirmed"
+        tail_zh += f" · {unconfirmed} 结果未确认"
     elapsed_part = f" · {elapsed}" if elapsed else ""
     en = f"🛠 Tools{elapsed_part} · {done}/{total} ended{tail_en}"
     zh = f"🛠 工具执行{elapsed_part} · {done}/{total} 结束{tail_zh}"
     children: list[dict[str, Any]] = []
+    if unconfirmed:
+        children.append(markdown(
+            "Turn ended without final tool results; this does not confirm that a background process stopped.",
+            "本轮已结束，但未收到部分工具的最终结果；这不代表后台进程已停止。",
+            "notation",
+        ))
     if failures:
         last_failure = max((i for i, s in enumerate(steps) if s["status"] == "error"), default=-1)
         continued = (
@@ -206,17 +218,17 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any]) -> dict[str, An
             ("Running", "运行中", "blue"),
         )
         repeat_en, repeat_zh = (f" · {copies} calls", f" · {copies} 次") if copies > 1 else ("", "")
+        unresolved = interrupted and step["status"] == "running"
+        if unresolved:
+            state = ("Unconfirmed", "结果未确认", "orange")
         status_text = markdown(
             f"<font color='{state[2]}'>{state[0]}{repeat_en}</font>",
             f"<font color='{state[2]}'>{state[1]}{repeat_zh}</font>",
             "notation",
         )
         status_text["text_align"] = "right"
-        timing = markdown(
-            f"<font color='grey'>{_duration(elapsed_s)}</font>",
-            f"<font color='grey'>{_duration(elapsed_s)}</font>",
-            "notation",
-        )
+        elapsed_label = "—" if unresolved else f"<font color='grey'>{_duration(elapsed_s)}</font>"
+        timing = markdown(elapsed_label, elapsed_label, "notation")
         timing["text_align"] = "right"
         row = {
             "tag": "column_set",
@@ -249,6 +261,8 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any]) -> dict[str, An
     for i in indices:
         step = steps[i]
         status = {"success": "成功 / Succeeded", "error": "失败 / Failed"}.get(step["status"], "运行中 / Running")
+        if interrupted and step["status"] == "running":
+            status = "结果未确认 / Unconfirmed"
         detail = _tool_text(step.get("detail", ""), 180)
         block = step.get("error_block") or step.get("result_block")
         output = _tool_text(
@@ -261,7 +275,9 @@ def build_tools(data: dict[str, Any], reference: dict[str, Any]) -> dict[str, An
     # Long escaped failures and localized status rows consume bytes before raw
     # records. Keep the complete native tools panel within its 13 KB share.
     rows_bytes = len(json.dumps(children, ensure_ascii=False, separators=(",", ":")).encode())
-    raw_limit = max(1000, min(4000, 12500 - rows_bytes))
+    # Interrupted cards also carry localized status in their footer/preview.
+    # Reserve that overhead rather than letting long excerpts consume it.
+    raw_limit = max(1000, min(4000, 12500 - rows_bytes - (512 if unconfirmed else 0)))
     while len(raw) > 1 and (len(raw) > 24 or len("\n\n".join(text for _, text in raw).encode()) > raw_limit):
         drop = next((pos for pos, (index, _) in enumerate(raw) if index not in important), 0)
         raw.pop(drop)
@@ -347,9 +363,9 @@ def build_resources(host: dict[str, Any]) -> dict[str, Any]:
     return _panel(title, title, children, RESOURCES_ID)
 
 
-def build_reference_prefix(data: dict[str, Any]) -> list[dict[str, Any]]:
+def build_reference_prefix(data: dict[str, Any], *, interrupted: bool = False) -> list[dict[str, Any]]:
     ref = data.get("reference", {})
-    elements = [build_tools(data, ref)] if ref.get("show_tools") else []
+    elements = [build_tools(data, ref, interrupted=interrupted)] if ref.get("show_tools") else []
     if ref.get("resources_enabled"):
         elements.append(build_resources(ref.get("host") or {}))
     return elements
@@ -422,9 +438,13 @@ def build_reference_footer(
         succeeded = count(ref.get("succeeded_total"))
         if succeeded is None:
             succeeded = sum(s["status"] == "success" for s in ref.get("steps", []))
+        unconfirmed = (sum(s["status"] == "running" for s in ref.get("steps", []))
+                       if is_error or is_aborted else 0)
+        pending_en = f" / {unconfirmed} unconfirmed" if unconfirmed else ""
+        pending_zh = f" / {unconfirmed} 结果未确认" if unconfirmed else ""
         tools = markdown(
-            f"<font color='grey'>Tools: {succeeded} succeeded / {failures} failed</font>",
-            f"<font color='grey'>工具：{succeeded} 成功 / {failures} 失败</font>",
+            f"<font color='grey'>Tools: {succeeded} succeeded / {failures} failed{pending_en}</font>",
+            f"<font color='grey'>工具：{succeeded} 成功 / {failures} 失败{pending_zh}</font>",
             text_size,
         )
         tools["text_align"] = "right"

@@ -3,12 +3,12 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.6-blue)
+![Code version](https://img.shields.io/badge/code-0.20.7-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **Current maintenance version: 0.20.6.** Keep the 0.20.5 V1 readability fixes and preserve known cache-read counts independently of unavailable hit rates. [This version's evidence/deployment](docs/MAINTENANCE-0206.md) and the [Hermes update](docs/MAINTENANCE-0205.md) remain separately scoped. Screenshots below now show the [0.20.6 native desktop preview](docs/DESKTOP-0206-ACCEPTANCE.md), not a new real-model turn or pixel-equality certification.
+> **Current maintenance version: 0.20.7.** Failed/stopped turns show unfinished tools as unconfirmed, not still running; empty interrupted answers no longer say Done. Preserve V1 layout, received text and observed counts. See [this version's evidence/deployment](docs/MAINTENANCE-0207.md). Installed Hermes already includes the checked official main `158fd638`. Screenshots below remain the labelled [0.20.6 native desktop preview](docs/DESKTOP-0206-ACCEPTANCE.md), not a new real-model turn or pixel-equality certification.
 
 > **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 

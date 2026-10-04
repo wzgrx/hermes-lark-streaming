@@ -495,7 +495,7 @@ def build_complete_card(
     if reference:
         from .reference import build_reference_prefix
 
-        elements.extend(build_reference_prefix(footer_data or {}))
+        elements.extend(build_reference_prefix(footer_data or {}, interrupted=is_error or is_aborted))
 
     for seg in segments:
         if seg.type == SegmentType.REASONING:
@@ -520,8 +520,11 @@ def build_complete_card(
             for chunk in _split_long_text(content):
                 elements.append({"tag": "markdown", "content": chunk, "text_size": body_text_size})
 
+    empty_key = "status_error" if is_error else "status_stopped" if is_aborted else "done"
     if not has_answer:
-        elements.append({"tag": "markdown", "content": _T["done"][0], "text_size": body_text_size})
+        # Even with header/footer hidden, interruption must not look successful.
+        elements.append({"tag": "markdown", "content": _T[empty_key][0],
+                         "i18n_content": _t(empty_key), "text_size": body_text_size})
 
     if footer_enabled and footer_mode == "enhanced":
         from ..footer.render import build_footer
@@ -572,6 +575,8 @@ def build_complete_card(
     }
     if summary:
         card["config"]["summary"] = {"content": summary}
+    elif is_error or is_aborted:
+        card["config"]["summary"] = {"content": _T[empty_key][0], "i18n_content": _t(empty_key)}
     card["body"] = {"elements": elements}
     if header_enabled:
         header_status = "error" if is_error else "stopped" if is_aborted else "completed"

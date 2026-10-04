@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.7] - 2026-10-04
+
+### Fixed
+- Finalized failed/stopped V1 cards label unfinished tools as unconfirmed rather than still running. Retain observed success/failure counts, hide unknown completion timing, and distinguish turn termination from background-process termination.
+- Empty failed/stopped cards and empty notification previews use localized terminal status instead of `Done.` even with the footer/header hidden. Keep received answer text and normal live/continuation behavior unchanged.
+- Reserve space for terminal metadata in bounded tool excerpts. Fourteen new regressions and 1512 full local tests pass; no dependency, schema, hook or frozen-design changes. See [maintenance and deployment evidence](docs/MAINTENANCE-0207.md).
+
 ## [0.20.6] - 2026-10-04
 
 ### Fixed
