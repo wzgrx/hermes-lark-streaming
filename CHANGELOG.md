@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.10] - 2026-10-04
+
+### Fixed
+- Round abbreviated partial cache lower bounds down, not up: observed 48,384 tokens display as `≥48.3k`, while normal rounded totals still use `48.4k`. Do not overstate the observed floor or invent a hit rate.
+- Label first response with additional waiting only when wall/attempt measurements establish it; missing evidence is not a retry claim. Localize pending/partial titles per native locale and omit separators for unavailable duration.
+- Eleven new cases (ten red before fix), with V1 panel/grid geometry, frozen designs, dependencies, hooks and data schemas unchanged. See [maintenance and deployment scope](docs/MAINTENANCE-0210.md).
+
 ## [0.20.9] - 2026-10-04
 
 ### Fixed

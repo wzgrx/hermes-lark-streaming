@@ -392,18 +392,19 @@ def build_reference_footer(
     routes = data.get("routes")
     if isinstance(routes, list):
         bounded["routes"] = [label(r)[:60] for r in routes[:3]]
-    model = label(data.get("model")) or "Model pending / 模型待返回"
+    model = label(data.get("model"))
     used, maximum = count(data.get("context_used")), count(data.get("context_max"))
     maximum_label = f"{maximum / 1_000_000:.1f}M" if maximum and maximum % 1_000_000 == 0 else compact(maximum or 0)
     context = (
         f"{compact(used)}/{maximum_label} ({used / maximum:.0%})"
         if used is not None and maximum
-        else "Context pending / 上下文待返回"
+        else ""
     )
-    title = f"🪙 {model} · {context}"
+    title = f"🪙 {model or 'Model pending'} · {context or 'Context pending'}"
+    title_zh = f"🪙 {model or '模型待返回'} · {context or '上下文待返回'}"
     if data.get("usage_partial"):
-        title += " · Partial / 不完整"
-    title_zh = title
+        title += " · Partial"
+        title_zh += " · 不完整"
     if is_error or is_aborted:
         title = ("✕ Failed · " if is_error else "◼ Stopped · ") + title
         title_zh = ("✕ 本轮失败 · " if is_error else "◼ 已停止 · ") + title_zh
@@ -413,10 +414,11 @@ def build_reference_footer(
         else (("Stopped", "已停止", "grey") if is_aborted else ("Answer completed", "回答已完成", "green"))
     )
     duration = _duration(data.get("duration"))
+    duration_suffix = f" · {duration}" if duration else ""
     icon = "✕" if is_error else ("◼" if is_aborted else "✓")
     status = markdown(
-        f"<font color='{color}'>{icon} {en} · {duration}</font>",
-        f"<font color='{color}'>{icon} {zh} · {duration}</font>",
+        f"<font color='{color}'>{icon} {en}{duration_suffix}</font>",
+        f"<font color='{color}'>{icon} {zh}{duration_suffix}</font>",
         text_size,
     )
     if live_status is not None:
@@ -429,6 +431,10 @@ def build_reference_footer(
         status["i18n_content"]["en_us"] = status["content"]
         status["i18n_content"]["zh_cn"] += f" · 工具失败 {failures} 次"
     first = seconds(data.get("first_response"))
+    first_attempt = seconds(data.get("first_response_attempt"))
+    # Wall time may include a previous attempt/backoff; no evidence means no
+    # retry claim. A tiny tolerance avoids float-subtraction display noise.
+    first_includes_wait = first is not None and first_attempt is not None and first - first_attempt > 1e-6
     inp, cached = count(data.get("input_tokens")), count(data.get("cache_read_tokens"))
     # The count and its ratio have separate availability. A zero denominator or
     # incomplete input must not erase a known cache count or fabricate a rate.
@@ -436,7 +442,7 @@ def build_reference_footer(
     cache_partial = bool(data.get("cache_read_partial"))
     if cached is not None and (inp is None or cached <= inp):
         hit = f"{cached / inp:.1%}" if inp and not data.get("usage_partial") and not cache_partial else "—"
-        cache = f"{'≥' if cache_partial else ''}{compact(cached)} / {hit}"
+        cache = f"{'≥' if cache_partial else ''}{compact(cached, lower_bound=cache_partial)} / {hit}"
     requests, errors = count(data.get("api_calls")), count(data.get("retries"))
     attempts = f"{requests} / {errors}" if requests is not None and errors is not None else ""
     attempts_zh = f"{requests} 次 / {errors} 次" if attempts else ""
@@ -501,7 +507,8 @@ def build_reference_footer(
                 ),
                 metric_row(
                     _metric(
-                        "First response incl. retry", "首响应（含重试）",
+                        "First response incl. wait" if first_includes_wait else "First response",
+                        "首响应（含等待）" if first_includes_wait else "首响应",
                         (f"{first:.2f}s",) * 2 if first is not None else _UNKNOWN,
                     ),
                     _metric(

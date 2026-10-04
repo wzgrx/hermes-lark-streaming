@@ -4,13 +4,13 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.9-blue)
+![Code version](https://img.shields.io/badge/code-0.20.10-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
-> **当前维护版 0.20.9**：真实 0.20.8 验收发现部分请求缺失缓存统计时，已观测缓存量也被隐藏。现保留“部分 / ≥”计数、不虚报命中率，并纳入已测试的 Cohere V2 usage 适配。见[真实测试、修复与部署证据](docs/MAINTENANCE-0209.md)。下方 0.20.6 合成截图保持原标签，冻结 V1 设计不变。
+> **当前维护版 0.20.10**：修复缓存下限缩写被四舍五入放大、首响应无额外等待却标注“含重试”、缺失字段标题中英混排及空耗时分隔符。保留 V1 三面板、紧凑双列与冻结设计；同步核验 Hermes 官方 16 个新提交。见[修复、兼容与部署记录](docs/MAINTENANCE-0210.md)。下方旧版截图保留原验收标签。
 
 > **0.20.4 桌面增强**：修复工具面板动态开关、缺失面板恢复、真实配置文件热更新及重试后的首响应统计；历史状态更紧凑，保留 V1 三面板与单写卡通道。代码与部署证据分别记录在 [本轮修复与验证](docs/DESKTOP-HARDENING.md)。
 
@@ -64,7 +64,7 @@ Hermes 负责提供商认证、模型调用、工具执行和会话；本插件�
 | 打断与审批 | `/stop`、排队、后台/Cron、审批边界适配 | 原生审批 resolver 仍由 Hermes 持有 |
 | V1 整卡 / Footer V2 | 工具、资源、正文、模型和历史；旧紧凑布局保留 | 0.20.4 修复记录单列；历史真实轮次及桌面双主题展开已验，手机不在本轮范围 |
 | 历史用量 | SQLite 持久化，按月/日/模型/服务商/订阅标签查询 | 从启用后开始收集；不是账户全局账单 |
-| 多提供商口径 | Hermes canonical + 7 类协议字段解析测试（Cohere V2 为 Unreleased） | 226 个目录入口不等于 226 家真实账号验收 |
+| 多提供商口径 | Hermes canonical + 7 类协议字段解析测试（Cohere V2 自 0.20.9 纳入） | 226 个目录入口不等于 226 家真实账号验收 |
 | 运维 | doctor、metrics、只读检查、显式 API smoke | 测试通过、服务端通过、客户端验收分别记录 |
 
 ## 兼容保留的旧 Footer 布局

@@ -18,7 +18,15 @@ def safe(value: Any) -> str:
     return re.sub(r"([\\`*_\[\]~])", r"\\\1", html.escape(label(value)))
 
 
-def compact(value: int) -> str:
+def compact(value: int, *, lower_bound: bool = False) -> str:
+    # A rounded-up "at least" count claims evidence we have not observed.
+    # Keep integer arithmetic for bounded abbreviations, including large totals.
+    if lower_bound and value >= 1_000_000:
+        units = value // 10_000
+        return f"{units // 100}.{units % 100:02d}".rstrip("0").rstrip(".") + "M"
+    if lower_bound and value >= 1_000:
+        units = value // 100
+        return f"{units // 10}.{units % 10}".rstrip("0").rstrip(".") + "k"
     if value >= 1_000_000:
         return f"{value / 1_000_000:.2f}".rstrip("0").rstrip(".") + "M"
     if value >= 1_000:

@@ -3,12 +3,12 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.9-blue)
+![Code version](https://img.shields.io/badge/code-0.20.10-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **Current maintenance version: 0.20.9.** Preserve positive cache evidence as a labelled partial lower bound without inventing a whole-turn hit rate. Found during the real 0.20.8 desktop/Gateway test; includes the tested Cohere V2 usage adapter. See [test, fix and deployment evidence](docs/MAINTENANCE-0209.md). The frozen V1 design and labelled 0.20.6 screenshots below are unchanged.
+> **Current maintenance version: 0.20.10.** Preserve the meaning of abbreviated cache lower bounds, label first-response waiting only with measured evidence, localize missing-field titles and omit empty-duration separators. V1 panel/grid geometry and frozen designs stay unchanged. Reviewed against 16 new official Hermes commits; see [fixes, compatibility and deployment](docs/MAINTENANCE-0210.md). Earlier screenshots retain their original acceptance scope.
 
 > **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 
@@ -53,7 +53,7 @@ Hermes owns credentials, inference, routing, tools, and conversations. This plug
 - Enable Footer V2 for per-turn usage, cache, last-request context, timing and collapsed details.
 - Store opt-in usage history in profile-local SQLite; query by model, provider, subscription label, day/month and timezone.
 - Keep catalog coverage, protocol fixtures, server verification and real-client acceptance separate.
-- Unreleased: the standalone usage parser adds Cohere V2 physical tokens and cached-input counts, distinct from billed units. This is offline protocol coverage, not a new Hermes transport or live Cohere account certification. See [the coverage matrix](docs/PROVIDER-COVERAGE.md).
+- Since 0.20.9, the standalone usage parser includes Cohere V2 physical tokens and cached-input counts, distinct from billed units. This is offline protocol coverage, not a new Hermes transport or live Cohere account certification. See [the coverage matrix](docs/PROVIDER-COVERAGE.md).
 
 ## Retained legacy footer structure
 
