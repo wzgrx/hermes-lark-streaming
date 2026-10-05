@@ -1,6 +1,6 @@
 # Hermes Lark Streaming
 
-> **0.20.18 · 2026-10-05**: terminal cards no longer present missing model/context/history as ongoing reads. Half-known context and API/error counts retain each known operand. Native V1 layout stays unchanged. [Scope and evidence](docs/MAINTENANCE-0218.md).
+> **0.20.19 · 2026-10-05**: clarify/approval handoffs retain earlier-card unconfirmed tool counts. Prefix and Footer agree; prior missing results stay distinct from currently running tools. Native V1 layout stays unchanged. [Scope and evidence](docs/MAINTENANCE-0219.md).
 
 
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**

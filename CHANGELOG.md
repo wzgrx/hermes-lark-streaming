@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.19] - 2026-10-05
+
+### Fixed
+- Retain unconfirmed tool counts from earlier cards after clarify/approval handoffs reset the active display tracker. Prefix and terminal Footer include both archived missing results and current unresolved steps.
+- Show earlier-card unconfirmed and currently running counts independently while the turn is live. Do not label an active turn ended or infer background process completion.
+- Annotate the existing earlier-card summary in place; preserve native panel IDs, expansion behavior, four-column tool rows and the 13 KB tools-panel budget. See [scope and regressions](docs/MAINTENANCE-0219.md).
+
 ## [0.20.18] - 2026-10-05
 
 ### Fixed

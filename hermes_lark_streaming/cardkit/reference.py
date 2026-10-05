@@ -161,6 +161,9 @@ def build_tools(
     prior = count(reference.get("tools_prior")) or 0
     prior_done = count(reference.get("done_prior")) or 0
     prior_failed = count(reference.get("failed_prior")) or 0
+    # Clarify/approval handoffs archive the tracker, not missing-result evidence.
+    # Earlier-card gaps are unknown, never proof that a tool is still running.
+    prior_unconfirmed = max(0, prior - prior_done)
     total = prior + len(steps)
     done = prior_done + sum(s["status"] in {"success", "error"} for s in steps)
     failures = prior_failed + sum(s["status"] == "error" for s in steps)
@@ -168,21 +171,21 @@ def build_tools(
     # Keep observed counts intact; only replace a now-stale live indicator.
     running = sum(s["status"] == "running" for s in steps)
     ended = interrupted or terminal
-    unconfirmed = running if ended else 0
+    unconfirmed = prior_unconfirmed + (running if ended else 0)
     elapsed = _duration(data.get("duration"))
     tail_en = f" · {failures} failed" if failures else ""
     tail_zh = f" · {failures} 失败" if failures else ""
     if unconfirmed:
         tail_en += f" · {unconfirmed} unconfirmed"
         tail_zh += f" · {unconfirmed} 结果未确认"
-    elif running:
+    if running and not ended:
         tail_en += f" · {running} running"
         tail_zh += f" · {running} 运行中"
     elapsed_part = f" · {elapsed}" if elapsed else ""
     en = f"🛠 Tools{elapsed_part} · {done}/{total} ended{tail_en}"
     zh = f"🛠 工具执行{elapsed_part} · {done}/{total} 结束{tail_zh}"
     children: list[dict[str, Any]] = []
-    if unconfirmed:
+    if unconfirmed and ended:
         children.append(markdown(
             "Turn ended without final tool results; this does not confirm that a background process stopped.",
             "本轮已结束，但未收到部分工具的最终结果；这不代表后台进程已停止。",
@@ -217,10 +220,12 @@ def build_tools(
     shown = [groups[i] for i in sorted(selected)]
     omitted = max(0, len(groups) - 8)
     if omitted or prior:
+        prior_note_en = f" ({prior_unconfirmed} unconfirmed)" if prior_unconfirmed else ""
+        prior_note_zh = f"（{prior_unconfirmed} 结果未确认）" if prior_unconfirmed else ""
         children.append(
             markdown(
-                f"{omitted} groups omitted · {prior} steps on earlier cards · {failures} total failures",
-                f"{omitted} 组未展示 · 前卡 {prior} 步 · 全轮失败 {failures} 次",
+                f"{omitted} groups omitted · {prior} steps on earlier cards{prior_note_en} · {failures} total failures",
+                f"{omitted} 组未展示 · 前卡 {prior} 步{prior_note_zh} · 全轮失败 {failures} 次",
                 "notation",
             )
         )
@@ -528,7 +533,8 @@ def build_reference_footer(
             succeeded = sum(s["status"] == "success" for s in ref.get("steps", []))
         # This branch is terminal (no live_status), including successful answers.
         # Missing tool results stay unknown; do not invent completion or failure.
-        unconfirmed = sum(s["status"] == "running" for s in ref.get("steps", []))
+        prior_unconfirmed = max(0, (count(ref.get("tools_prior")) or 0) - (count(ref.get("done_prior")) or 0))
+        unconfirmed = prior_unconfirmed + sum(s["status"] == "running" for s in ref.get("steps", []))
         pending_en = f" / {unconfirmed} unconfirmed" if unconfirmed else ""
         pending_zh = f" / {unconfirmed} 结果未确认" if unconfirmed else ""
         tools = markdown(
