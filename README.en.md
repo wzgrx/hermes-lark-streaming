@@ -1,12 +1,12 @@
 # Hermes Lark Streaming
 
-> **0.20.24 · 2026-10-05**: incomplete Footer history uses observed lower bounds such as `≥1.9k*`, never rounding up the evidence. Missing usage stays `—*`; complete counts retain compact formatting. Subscription/model groups are explicitly cumulative top-three usage. Existing scope text explains the markers without adding panels or rows; V1 geometry, storage and dependencies are unchanged. [Scope and evidence](docs/MAINTENANCE-0224.md).
+> **0.20.25 · 2026-10-05**: complete input totals now permit floored cache-hit lower bounds even when cache coverage is partial. Add an opt-in, chat-allowlisted native account panel and `accounts` CLI: Go quota windows, DeepSeek direct balance and OpenRouter key credit limits stay separate. No inferred expiry, billing backfill or automatic account switching. [Configuration, official sources and evidence boundaries](docs/ACCOUNTS-AND-QUOTAS.md).
 
 
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.24-blue)
+![Code version](https://img.shields.io/badge/code-0.20.25-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
@@ -15,7 +15,7 @@
 
 > **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 
-> **Current real acceptance · 0.20.24:** a new desktop-user request in the existing test topic completed on 2026-10-05: two terminal calls (exit 0/7), three main model requests, confirmed card delivery, and collapsed/expanded Windows inspection. Footer values were checked against the local ledger. An opaque API compatibility projection is not mistaken for client failure. See [real evidence and read-only audit tool](docs/DESKTOP-0224-ACCEPTANCE.md). Desktop only; older theme images remain historical, not pixel certification of this revision.
+> **Historical real acceptance · 0.20.24:** a new desktop-user request in the existing test topic completed on 2026-10-05: two terminal calls (exit 0/7), three main model requests, confirmed card delivery, and collapsed/expanded Windows inspection. Footer values were checked against the local ledger. An opaque API compatibility projection is not mistaken for client failure. See [real evidence and read-only audit tool](docs/DESKTOP-0224-ACCEPTANCE.md). Desktop only; older theme images remain historical, not pixel certification of this revision.
 
 ### V1 whole-card layout
 

@@ -7,13 +7,15 @@ import html
 import json
 import re
 from collections.abc import Iterator
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..footer.layout import column
 from ..footer.layout import markdown as bilingual_markdown
 from ..footer.render import compact, safe
 from ..footer.state import label, seconds
-from ..footer.usage import count
+from ..footer.usage import cache_hit, count
 from ..streaming.tooluse import ToolDisplayStep, redact_inline_secrets
 from .panels import collapsible_panel
 
@@ -558,7 +560,7 @@ def build_reference_footer(
     cache = ""
     cache_partial = bool(data.get("cache_read_partial"))
     if cached is not None and (inp is None or cached <= inp):
-        hit = f"{cached / inp:.1%}" if inp and not data.get("usage_partial") and not cache_partial else "—"
+        hit = cache_hit(data) or "—"
         cache = f"{'≥' if cache_partial else ''}{compact(cached, lower_bound=cache_partial)} / {hit}"
     requests, errors = count(data.get("api_calls")), count(data.get("retries"))
     attempts = attempts_zh = ""
@@ -620,8 +622,10 @@ def build_reference_footer(
                 ),
                 metric_row(
                     _metric(
-                        "Cache read (partial) / hit" if cache_partial else "Cache read / hit",
-                        "缓存读取（部分） / 命中率" if cache_partial else "缓存读取 / 命中率",
+                        ("Cache read (partial) / hit lower bound" if cache_hit(data).startswith("≥") else
+                         "Cache read (partial) / hit") if cache_partial else "Cache read / hit",
+                        ("缓存读取（部分） / 命中率下限" if cache_hit(data).startswith("≥") else
+                         "缓存读取（部分） / 命中率") if cache_partial else "缓存读取 / 命中率",
                         (cache, cache) if cache else _UNKNOWN,
                     ),
                     _metric(
@@ -742,6 +746,10 @@ def build_reference_footer(
                         "notation",
                     )
                 )
+        accounts = ref.get("accounts")
+        if isinstance(accounts, dict):
+            children.append(build_account_panel(accounts, ref.get("history", {}).get("timezone", "UTC")
+                                                if isinstance(ref.get("history"), dict) else "UTC"))
         # Route/error/partial/compression metadata stays visible, not erased to
         # force a polished screenshot. Context belongs in the panel header.
         annotations, note = footer_annotations(bounded, text_size)
@@ -771,3 +779,87 @@ def build_reference_badge(data: dict[str, Any]) -> list[dict[str, Any]]:
             element_id="footer_agent",
         )
     ]
+
+
+def build_account_panel(value: dict[str, Any], timezone: str) -> dict[str, Any]:
+    """Pure rendering of configured-account API snapshots, not turn identity."""
+    try:
+        tz = ZoneInfo(timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        tz = ZoneInfo("UTC")
+        timezone = "UTC"
+
+    def stamp(raw: Any) -> str:
+        if not isinstance(raw, str) or len(raw) > 40:
+            return "—"
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return dt.astimezone(tz).strftime("%m-%d %H:%M") if dt.tzinfo else "—"
+        except (ValueError, OverflowError):
+            return "—"
+
+    children = []
+    rows = value.get("accounts")
+    rows = rows[:4] if isinstance(rows, list) else []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        heading = f"**{safe(row.get('label')) or 'Account'} · {safe(row.get('provider'))}**"
+        lines_en, lines_zh = [heading], [heading]
+        if row.get("status") != "ok":
+            en, zh = {
+                "pending": ("API snapshot pending", "API 快照待返回"),
+                "unsupported": (
+                    "No verified API adapter; check provider console", "尚无已核实 API 适配；查看服务商控制台",
+                ),
+                "missing_credentials": ("Credential reference is not configured", "凭据引用未配置"),
+            }.get(label(row.get("status")), ("API snapshot unavailable", "API 快照获取失败"))
+            lines_en.append(en)
+            lines_zh.append(zh)
+        else:
+            windows = row.get("windows")
+            remaining, resets = [], []
+            for window in windows[:3] if isinstance(windows, list) else []:
+                if not isinstance(window, dict):
+                    continue
+                names = {"rolling": ("5h", "5h"), "weekly": ("Week", "周"), "monthly": ("Month", "月")}
+                en, zh = names.get(label(window.get("name")), ("", ""))
+                n = seconds(window.get("remaining_percent"))
+                if en and n is not None and n <= 100:
+                    remaining.append((f"{en} {n:g}%", f"{zh} {n:g}%"))
+                    resets.append((f"{en} {stamp(window.get('reset_at'))}", f"{zh} {stamp(window.get('reset_at'))}"))
+            if remaining:
+                lines_en.append("Remaining · " + " · ".join(a for a, _b in remaining))
+                lines_zh.append("剩余 · " + " · ".join(b for _a, b in remaining))
+                lines_en.append("Reset · " + " · ".join(a for a, _b in resets))
+                lines_zh.append("重置 · " + " · ".join(b for _a, b in resets))
+            balances = row.get("balances")
+            for balance in balances[:4] if isinstance(balances, list) else []:
+                if not isinstance(balance, dict):
+                    continue
+                en, zh = (
+                    ("Key credit remaining", "Key 限额剩余") if balance.get("kind") == "key_credit_remaining"
+                    else ("Account balance", "账户余额")
+                )
+                amount, currency = safe(balance.get("amount")), safe(balance.get("currency"))
+                lines_en.append(f"{en} · {currency} {amount}")
+                lines_zh.append(f"{zh} · {currency} {amount}")
+            if row.get("key_limit_unset"):
+                lines_en.append("Key limit unset; account balance not returned")
+                lines_zh.append("Key 未设置限额；账户余额未返回")
+            if row.get("partial"):
+                lines_en.append("Some quota windows were not reported")
+                lines_zh.append("部分额度窗口未返回")
+            checked = stamp(row.get("checked_at"))
+            lines_en.append(f"API snapshot · {checked}")
+            lines_zh.append(f"API 快照 · {checked}")
+        children.append(markdown("\n".join(lines_en), "\n".join(lines_zh), "notation"))
+    if not children:
+        children.append(markdown("No configured account snapshot", "暂无配置账户快照", "notation"))
+    if value.get("stale"):
+        children.append(markdown("Previous snapshot · refresh pending", "上次快照 · 待刷新", "notation"))
+    children.append(markdown(
+        f"Configured accounts, not turn identity · {safe(timezone)} · reset ≠ expiry; absent balance is unknown.",
+        f"配置账户概览，不推断本轮账户 · {safe(timezone)} · 重置≠到期；未返回余额保持未知。", "notation",
+    ))
+    return _panel("Subscription accounts · API snapshots", "订阅账户 · API 快照", children, "ref_accounts")

@@ -1,13 +1,13 @@
 # Hermes Lark Streaming
 
-> **0.20.24 · 2026-10-05**：Footer 历史用量不完整时显示已观测下限，例如 `≥1.9k*`；未知仍为 `—*`，完整计数保持原缩写。模型分组明确标为“累计 · 前 3 项”。复用现有说明行，不增加面板和行数；V1 布局、账本与依赖不变。[本轮维护与验收边界](docs/MAINTENANCE-0224.md)。
+> **0.20.25 · 2026-10-05**：完整输入总量下的部分缓存现在显示“命中率下限”，不再隐藏已能计算的比例。新增默认关闭、聊天白名单限制的“订阅账户”折叠区和 `accounts` CLI：Go 5h/周/月额度、DeepSeek 直连余额、OpenRouter Key 限额分别展示，不冒充订阅到期或自动换号。[配置、官方来源及验收边界](docs/ACCOUNTS-AND-QUOTAS.md)。
 
 
 **让 Hermes 的回复成为持续更新、可追溯的飞书卡片。**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.24-blue)
+![Code version](https://img.shields.io/badge/code-0.20.25-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -17,7 +17,7 @@
 
 > **0.20.4 桌面增强**：修复工具面板动态开关、缺失面板恢复、真实配置文件热更新及重试后的首响应统计；历史状态更紧凑，保留 V1 三面板与单写卡通道。代码与部署证据分别记录在 [本轮修复与验证](docs/DESKTOP-HARDENING.md)。
 
-> **当前真实验收 · 0.20.24**：2026-10-05 在既有测试话题完成新用户入站、两次工具 0/7、三个主模型请求和 Windows 折叠/展开截图核对。工具、投递、Footer 与账本分别验证；API 兼容投影不误判为客户端失效。见[真实验收和只读核对工具](docs/DESKTOP-0224-ACCEPTANCE.md)。只处理桌面飞书；旧版双主题图保持历史标签，不当作新版逐像素证明。
+> **历史真实验收 · 0.20.24**：2026-10-05 在既有测试话题完成新用户入站、两次工具 0/7、三个主模型请求和 Windows 折叠/展开截图核对。工具、投递、Footer 与账本分别验证；API 兼容投影不误判为客户端失效。见[真实验收和只读核对工具](docs/DESKTOP-0224-ACCEPTANCE.md)。只处理桌面飞书；旧版双主题图保持历史标签，不当作新版逐像素证明。
 
 ### 0.20.0：V1 整卡布局
 

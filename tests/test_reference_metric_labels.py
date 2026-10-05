@@ -18,7 +18,10 @@ def test_partial_cache_abbreviation_never_increases_the_lower_bound(value):
     multiplier = {"k": 1000, "M": 1000000}.get(displayed[-1], 1)
     numeric = displayed[:-1] if multiplier != 1 else displayed
     assert Decimal(numeric) * multiplier <= value
-    assert " / —**" in row["columns"][0]["elements"][1]["content"]
+    # A complete valid input denominator permits a cache-hit lower bound;
+    # counters outside the supported range still stay unknown.
+    expected = "≥50.0%" if value * 2 <= 10**15 else "—"
+    assert f" / {expected}**" in row["columns"][0]["elements"][1]["content"]
     # Ordinary measured totals retain existing nearest rounding.
     assert compact(48384) == "48.4k"
 

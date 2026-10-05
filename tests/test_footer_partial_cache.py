@@ -32,10 +32,10 @@ def test_positive_cache_survives_a_zero_filled_missing_or_invalid_peer(unknown, 
     assert data["cache_read_partial"] is True
     row = next(el for el in build_reference_footer(data)[0]["elements"]
                if el.get("tag") == "column_set" and "Cache read" in json.dumps(el))
-    assert row["columns"][0]["elements"][1]["content"] == "**≥40 / —**"
+    assert row["columns"][0]["elements"][1]["content"] == "**≥40 / ≥20.0%**"
     assert "partial" in row["columns"][0]["elements"][0]["content"].lower()
     regular = json.dumps(build_footer(data), ensure_ascii=False)
-    assert "≥40" in regular and "20.0%" not in regular and "Cache 20%" not in regular
+    assert "≥40" in regular and "≥20.0%" in regular and "Cache ≥20%" in regular
 
 
 def test_all_positive_cache_remains_a_complete_rate():

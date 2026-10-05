@@ -20,8 +20,10 @@ from .session import SessionState
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
+    from contextlib import AbstractContextManager
 
     from ..config import Config
+    from ..footer.accounts import AccountsSummary
     from ..footer.history_summary import HistorySummary
     from ..footer.host import HostSampler
     from .session import CardSession
@@ -34,6 +36,8 @@ class RuntimeFooterController:
     _profile_home: Path
     _reference_host: HostSampler | None
     _reference_history: HistorySummary | None
+    _reference_accounts: AccountsSummary | None
+    _credential_scope: Callable[[], AbstractContextManager[None]]
 
     @staticmethod
     def _remember_runtime_panels(session: CardSession, card: dict[str, Any], card_id: str) -> None:
@@ -75,6 +79,20 @@ class RuntimeFooterController:
         )
         if history is not None:
             history["show_models"] = self._cfg.footer_history.get("show_models") is True
+        accounts = None
+        settings = getattr(self._cfg, "footer_accounts", {})
+        allowed_chats = settings.get("allowed_chats")
+        if (settings.get("enabled") is True and self._cfg.footer_enabled and self._cfg.footer_details
+                and isinstance(allowed_chats, list) and session.chat_id in allowed_chats):
+            from ..config import _get_secret
+            from ..footer.accounts import AccountsSummary
+
+            if self._reference_accounts is None:
+                self._reference_accounts = AccountsSummary()
+            if not session.state.is_terminal:
+                with self._credential_scope():
+                    self._reference_accounts.request(settings, _get_secret)
+            accounts = self._reference_accounts.snapshot()
         data.update(
             presentation="reference",
             reference={
@@ -90,6 +108,7 @@ class RuntimeFooterController:
                 "resources_enabled": self._cfg.reference_resources_enabled,
                 "host": self._reference_host.snapshot(),
                 "history": history,
+                "accounts": accounts,
                 "agent_name": self._cfg.reference_agent_name,
                 "footer_enabled": self._cfg.footer_enabled,
             },

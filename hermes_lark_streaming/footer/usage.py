@@ -26,6 +26,22 @@ def mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def cache_hit(data: dict[str, Any], *, decimals: int = 1) -> str:
+    """Exact rate, or a floored lower bound with a fully measured denominator."""
+    prompt, read = count(data.get("input_tokens")), count(data.get("cache_read_tokens"))
+    if not prompt or read is None or read > prompt or data.get("usage_partial"):
+        return ""
+    decimals = 0 if decimals == 0 else 1
+    if not data.get("cache_read_partial"):
+        return f"{read / prompt:.{decimals}%}"
+    # Unknown cache buckets can only add hits, but missing input would change
+    # the denominator. Never round a lower bound up or treat canonical 0 as
+    # proof that a provider explicitly reported zero cache hits.
+    units = read * 100 * (10 ** decimals) // prompt
+    value = f"{units // 10}.{units % 10}" if decimals else str(units)
+    return f"≥{value}%"
+
+
 @dataclass(frozen=True)
 class Usage:
     prompt: int | None = None

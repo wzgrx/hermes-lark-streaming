@@ -55,6 +55,7 @@ class StreamCardController(StreamingController):
         self._unscoped_enabled: bool | None = None
         self._reference_host = None
         self._reference_history = None
+        self._reference_accounts = None
 
     @property
     def enabled(self) -> bool:

@@ -150,7 +150,7 @@ class Config:
         if self.card_layout == "reference":
             from .cardkit.reference import REFERENCE_ELEMENT_RESERVE
 
-            return REFERENCE_ELEMENT_RESERVE
+            return REFERENCE_ELEMENT_RESERVE + (12 if self.footer_accounts.get("enabled") is True else 0)
         if self.footer_mode == "enhanced":
             from .footer.layout import DETAIL_ELEMENT_RESERVE, SUMMARY_ELEMENT_RESERVE
 
@@ -192,6 +192,13 @@ class Config:
         sec = self._reload().get("streaming", {})
         footer = sec.get("footer", {}) if isinstance(sec, dict) else {}
         value = footer.get("history", {}) if isinstance(footer, dict) else {}
+        return value if isinstance(value, dict) else {}
+
+    @property
+    def footer_accounts(self) -> dict[str, Any]:
+        """Account/credential references are startup-scoped; no plaintext keys."""
+        footer = self._streaming_sec().get("footer", {})
+        value = footer.get("accounts", {}) if isinstance(footer, dict) else {}
         return value if isinstance(value, dict) else {}
 
     @property

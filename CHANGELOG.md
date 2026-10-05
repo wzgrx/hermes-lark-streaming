@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.25] - 2026-10-05
+
+### Fixed
+- Display a floored cache-hit lower bound when input usage is complete but cache coverage is partial. Missing/partial input, zero denominators and inconsistent counts stay unknown; never round a lower bound upward or backfill historical fields.
+
+### Added
+- Opt-in native subscription-account panel and read-only `accounts` CLI. OpenCode Go quota windows use its official bearer API; DeepSeek direct account balance and OpenRouter key credit remaining have separate adapter semantics. Unreported cash balance and subscription expiry remain unknown.
+- Require an explicit chat allowlist before querying/rendering account snapshots. Coalesce bounded official HTTPS reads at a 300-second interval, discard rotated-credential results, mark stale/partial snapshots, and preserve the existing CardKit writer and panel expansion. No new dependencies, databases, daemons or account routing.
+- Document official accounting capabilities separately from the inference-provider catalog, including SiliconFlow's retired balance endpoint and future management-plane adapters. See [account configuration and evidence](docs/ACCOUNTS-AND-QUOTAS.md).
+
 ## [0.20.24] - 2026-10-05
 
 ### Fixed

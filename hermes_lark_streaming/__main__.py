@@ -38,6 +38,7 @@ def _commands() -> dict[str, Callable[[], int]]:
         "doctor": _cmd_doctor,
         "metrics": _cmd_metrics,
         "history": _cmd_history,
+        "accounts": _cmd_accounts,
         "smoke": _cmd_smoke,
         "lark-cli-smoke": _cmd_lark_cli_smoke,
         "repair-sdk": _cmd_repair_sdk,
@@ -57,6 +58,7 @@ def _print_usage() -> None:
     print("  doctor     Run structured configuration/runtime diagnostics [--json]")
     print("  metrics    Show gateway metrics [--json]; add --sidecar for the sidecar process")
     print("  history    Query local usage ledger [--month YYYY-MM] [--group-by provider-model] [--json]")
+    print("  accounts   Inspect configured accounts; --refresh queries official read-only APIs [--json]")
     print("  smoke      CardKit dry-run; add --execute --chat-id CHAT, --entity-only, or --closed-stream-probe")
     print("  lark-cli-smoke  Inspect optional lark-cli; add --execute for read-only checks")
     print("  repair-sdk  Explicitly repair lark-oapi in the active Hermes interpreter")
@@ -65,6 +67,12 @@ def _print_usage() -> None:
 
 def _cmd_history() -> int:
     from .footer.history import cli
+
+    return cli(sys.argv[2:])
+
+
+def _cmd_accounts() -> int:
+    from .footer.accounts import cli
 
     return cli(sys.argv[2:])
 
