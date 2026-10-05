@@ -62,8 +62,8 @@ class RuntimeFooterController:
         if self._reference_host is None:
             self._reference_host = HostSampler()
         history_enabled = self._cfg.footer_history.get("enabled") is True
+        timezone = getattr(self._cfg, "reference_history_timezone", "UTC")
         if history_enabled:
-            timezone = self._cfg.reference_history_timezone
             if self._reference_history is None:
                 self._reference_history = HistorySummary(self._profile_home / "state/card-usage.sqlite3", timezone)
             else:
@@ -135,6 +135,7 @@ class RuntimeFooterController:
                 "host": self._reference_host.snapshot(),
                 "history": history,
                 "accounts": accounts,
+                "account_timezone": timezone,
                 "agent_name": self._cfg.reference_agent_name,
                 "footer_enabled": self._cfg.footer_enabled,
             },

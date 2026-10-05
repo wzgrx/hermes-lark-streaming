@@ -34,7 +34,7 @@ def build_current_account_panel(value: dict[str, Any], timezone: str) -> dict[st
     }.get(provider, provider or "—")
     try:
         tz = ZoneInfo(timezone)
-    except (ValueError, ZoneInfoNotFoundError):
+    except (TypeError, ValueError, ZoneInfoNotFoundError):
         tz, timezone = ZoneInfo("UTC"), "UTC"
 
     def stamp(raw: Any, year: bool = False) -> str:
@@ -109,7 +109,7 @@ def build_current_account_panel(value: dict[str, Any], timezone: str) -> dict[st
             ]
         )
         quota = []
-        for name in names[:3]:
+        for name in names[:4]:
             window = next((w for w in windows if isinstance(w, dict) and w.get("name") == name), {})
             n = window.get("remaining_percent")
             known = isinstance(n, (int, float)) and not isinstance(n, bool) and 0 <= n <= 100 and math.isfinite(n)
@@ -130,12 +130,14 @@ def build_current_account_panel(value: dict[str, Any], timezone: str) -> dict[st
                     f"<font color='grey'>重置 {reset}</font>",
                 )
             )
-        if quota:
-            children.append(grid(quota))
+        for start in range(0, len(quota), 3):
+            children.append(grid(quota[start : start + 3]))
         expires = stamp(row.get("subscription_expires_at"), True)
         expiry_en, expiry_zh, expiry_note_en, expiry_note_zh = "Subscription expiry", "订阅到期", unknown_en, unknown_zh
         if row.get("subscription_source") == "manual" and expires != "—":
             expiry_note_en, expiry_note_zh = "Manual record", "手动记录"
+        elif expires != "—":
+            expiry_note_en, expiry_note_zh = "API timestamp", "API 时间"
         elif row.get("subscription_expires_on"):
             expires = safe(row.get("subscription_expires_on"))
             expiry_en, expiry_zh = "Plan period ends", "套餐有效期"

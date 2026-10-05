@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.5] - 2026-10-05
+
+### Fixed
+- Keep account reset/expiry clocks in the configured timezone even when local-history display is disabled; malformed timezone values fall back explicitly to UTC.
+- Retain a fourth MCP quota window in a second compact row instead of silently truncating it.
+- Display explicit provider API expiry timestamps with API provenance instead of erasing them or labeling them as manual dates.
+- Add ten current-runtime regressions; current-provider-only scope, native panel IDs, collapsed defaults, credentials and the single-writer lifecycle remain unchanged.
+
 ## [0.21.4] - 2026-10-05
 
 ### Fixed

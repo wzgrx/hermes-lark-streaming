@@ -771,8 +771,7 @@ def _build_reference_footer_v1(
                 )
         accounts = ref.get("accounts")
         if isinstance(accounts, dict):
-            children.append(build_account_panel(accounts, ref.get("history", {}).get("timezone", "UTC")
-                                                if isinstance(ref.get("history"), dict) else "UTC"))
+            children.append(build_account_panel(accounts, account_timezone(ref)))
         # Route/error/partial/compression metadata stays visible, not erased to
         # force a polished screenshot. Context belongs in the panel header.
         annotations, note = footer_annotations(bounded, text_size)
@@ -804,6 +803,15 @@ def build_reference_badge(data: dict[str, Any]) -> list[dict[str, Any]]:
             element_id="footer_agent",
         )
     ]
+
+
+def account_timezone(ref: dict[str, Any]) -> str:
+    """Account clock survives disabled/pending local-history snapshots."""
+    raw = ref.get("account_timezone")
+    if raw is None:
+        history = ref.get("history")
+        raw = history.get("timezone", "UTC") if isinstance(history, dict) else "UTC"
+    return raw if isinstance(raw, str) else "UTC"
 
 
 def build_account_panel(value: dict[str, Any], timezone: str) -> dict[str, Any]:

@@ -10,7 +10,7 @@ from ..footer.layout import column
 from ..footer.render import footer_annotations, safe
 from ..footer.state import label, seconds
 from ..footer.usage import mapping
-from .reference import _history_tokens, _panel, build_account_panel, markdown
+from .reference import _history_tokens, _panel, account_timezone, build_account_panel, markdown
 
 
 def _chrome(panel: dict[str, Any]) -> dict[str, Any]:
@@ -137,7 +137,7 @@ def compact_footer(elements: list[dict[str, Any]], data: dict[str, Any], *, deta
             children.append(_history_panel(history))
         accounts = ref.get("accounts")
         if isinstance(accounts, dict):
-            timezone = history.get("timezone", "UTC") if isinstance(history, dict) else "UTC"
+            timezone = account_timezone(ref)
             children.append(_chrome(build_account_panel(accounts, timezone)))
         bounded = dict(data)
         routes = data.get("routes")

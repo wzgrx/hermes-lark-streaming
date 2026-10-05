@@ -1,5 +1,7 @@
 # Hermes Lark Streaming
 
+V2 0.21.5: account clocks survive disabled history; a fourth MCP quota stays visible; explicit API expiry timestamps retain their source; only the observed provider appears.
+
 > **0.21.4 · Current provider, compact facts**: show only the provider observed in this turn. Align quota/reset cells and separate expiry/balance facts; isolate concurrent/fallback caches and retain explicit unknowns. All-provider discovery stays in the owner CLI. Do not rewrite historical real replies.
 
 > **0.21.3 · Account reliability**: deduplicate explicit key aliases, drain the latest manually changed identity without another delta, and distinguish pending/unsupported/missing-reference/HTTP failures. Preserve last-good timestamps and label retired official endpoints. No new daemon or automatic account switching; source/native checks and real client acceptance remain separate.

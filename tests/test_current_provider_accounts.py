@@ -268,3 +268,51 @@ def test_subscription_lookup_failure_or_no_active_plan_is_not_generic_missing(st
     value = snapshot()
     value["accounts"][0]["subscription_status"] = status
     assert expected in json.dumps(build_account_panel(value, "UTC"), ensure_ascii=False)
+
+
+
+def test_four_quota_windows_are_not_silently_truncated():
+    value = snapshot("zai")
+    row = dict(value["accounts"][0], provider="zai", windows=[
+        {"name":name, "remaining_percent":n, "reset_at":"2026-10-05T06:00:00Z"}
+        for name,n in (("rolling",70), ("weekly",80), ("monthly",90), ("mcp_monthly",40))
+    ])
+    value["accounts"] = [row]
+    panel = build_account_panel(value, "UTC")
+    text = json.dumps(panel, ensure_ascii=False)
+    assert "MCP 剩余" in text and "40%" in text
+    grids = [r for r in panel["elements"] if r.get("tag") == "column_set"]
+    assert [len(r["columns"]) for r in grids] == [3,1,2]
+
+
+def test_explicit_api_subscription_timestamp_is_not_erased_or_marked_manual():
+    value = snapshot()
+    value["accounts"][0].update(subscription_expires_at="2026-12-01T00:00:00Z", subscription_source="provider_api")
+    panel = build_account_panel(value, "Asia/Shanghai")
+    facts = [r for r in panel["elements"] if r.get("tag")=="column_set" and len(r["columns"])==2][-1]
+    expiry = json.dumps(facts["columns"][0], ensure_ascii=False)
+    assert "2026-12-01 08:00" in expiry and "手动记录" not in expiry
+    assert "API 时间" in expiry and "API 未返回" not in expiry
+
+
+def test_account_timezone_is_independent_of_history_toggle(monkeypatch,tmp_path):
+    ctrl = controller(monkeypatch,tmp_path)
+    ctrl._cfg.reference_history_timezone = "Asia/Shanghai"
+    result = ctrl._reference_snapshot(session(),{})
+    assert result["reference"]["history"] is None
+    assert result["reference"]["account_timezone"] == "Asia/Shanghai"
+
+
+@pytest.mark.parametrize("version",[1,2])
+def test_frozen_account_panel_resets_keep_configured_timezone_without_history(version):
+    from hermes_lark_streaming.cardkit.reference import build_reference_footer
+    data={"provider":"opencode-go","presentation":"reference","reference":{
+        "design_version":version,"history":None,"account_timezone":"Asia/Shanghai","accounts":snapshot()}}
+    text=json.dumps(build_reference_footer(data),ensure_ascii=False)
+    assert "重置 10-20 14:26" in text and "Asia/Shanghai" in text
+
+
+@pytest.mark.parametrize("bad",[None,{},[],7,""])
+def test_invalid_account_timezone_is_displayed_as_utc_not_a_render_failure(bad):
+    text=json.dumps(build_account_panel(snapshot(),bad),ensure_ascii=False)
+    assert "重置 10-20 06:26" in text and "UTC" in text
