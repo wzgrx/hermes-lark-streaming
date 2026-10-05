@@ -813,12 +813,12 @@ def build_account_panel(value: dict[str, Any], timezone: str) -> dict[str, Any]:
         tz = ZoneInfo("UTC")
         timezone = "UTC"
 
-    def stamp(raw: Any) -> str:
+    def stamp(raw: Any, *, year: bool = False) -> str:
         if not isinstance(raw, str) or len(raw) > 40:
             return "—"
         try:
             dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            return dt.astimezone(tz).strftime("%m-%d %H:%M") if dt.tzinfo else "—"
+            return dt.astimezone(tz).strftime("%Y-%m-%d %H:%M" if year else "%m-%d %H:%M") if dt.tzinfo else "—"
         except (ValueError, OverflowError):
             return "—"
 
@@ -829,12 +829,16 @@ def build_account_panel(value: dict[str, Any], timezone: str) -> dict[str, Any]:
         if not isinstance(row, dict):
             continue
         heading = f"**{safe(row.get('label')) or 'Account'} · {safe(row.get('provider'))}**"
-        lines_en, lines_zh = [heading], [heading]
+        heading_en, heading_zh = heading, heading
+        if row.get("discovered"):
+            heading_en += " · discovered candidate"
+            heading_zh += " · 自动候选"
+        lines_en, lines_zh = [heading_en], [heading_zh]
         if row.get("status") != "ok":
             en, zh = {
                 "pending": ("API snapshot pending", "API 快照待返回"),
                 "unsupported": (
-                    "No verified API adapter; check provider console", "尚无已核实 API 适配；查看服务商控制台",
+                    "Account API adapter pending", "账户 API 待接入",
                 ),
                 "missing_credentials": ("Credential reference is not configured", "凭据引用未配置"),
             }.get(label(row.get("status")), ("API snapshot unavailable", "API 快照获取失败"))
@@ -846,11 +850,13 @@ def build_account_panel(value: dict[str, Any], timezone: str) -> dict[str, Any]:
             for window in windows[:3] if isinstance(windows, list) else []:
                 if not isinstance(window, dict):
                     continue
-                names = {"rolling": ("5h", "5h"), "weekly": ("Week", "周"), "monthly": ("Month", "月")}
+                names = {"rolling": ("5h", "5h"), "weekly": ("Week", "周"),
+                         "monthly": ("Month", "月"), "mcp_monthly": ("MCP month", "MCP 月")}
                 en, zh = names.get(label(window.get("name")), ("", ""))
                 n = seconds(window.get("remaining_percent"))
                 if en and n is not None and n <= 100:
-                    remaining.append((f"{en} {n:g}%", f"{zh} {n:g}%"))
+                    number = f"{n:.1f}".rstrip("0").rstrip(".")
+                    remaining.append((f"{en} {number}%", f"{zh} {number}%"))
                     resets.append((f"{en} {stamp(window.get('reset_at'))}", f"{zh} {stamp(window.get('reset_at'))}"))
             if remaining:
                 lines_en.append("Remaining · " + " · ".join(a for a, _b in remaining))
@@ -861,13 +867,18 @@ def build_account_panel(value: dict[str, Any], timezone: str) -> dict[str, Any]:
             for balance in balances[:4] if isinstance(balances, list) else []:
                 if not isinstance(balance, dict):
                     continue
-                en, zh = (
-                    ("Key credit remaining", "Key 限额剩余") if balance.get("kind") == "key_credit_remaining"
-                    else ("Account balance", "账户余额")
-                )
+                en, zh = {
+                    "key_credit_remaining":("Key credit remaining","Key 限额剩余"),
+                    "account_credit_balance":("Account credits","账户积分余额"),
+                    "account_available":("Available balance","可用余额"),
+                    "cash_balance":("Cash balance","现金余额"),
+                    "voucher_balance":("Voucher balance","代金券"),
+                    "debt":("Amount owed","欠费"),
+                }.get(label(balance.get("kind")), ("Account balance","账户余额"))
                 amount, currency = safe(balance.get("amount")), safe(balance.get("currency"))
-                lines_en.append(f"{en} · {currency} {amount}")
-                lines_zh.append(f"{zh} · {currency} {amount}")
+                unit_en, unit_zh = (currency,currency) if currency else ("unit not reported","币种未标明")
+                lines_en.append(f"{en} · {unit_en} {amount}")
+                lines_zh.append(f"{zh} · {unit_zh} {amount}")
             if row.get("key_limit_unset"):
                 lines_en.append("Key limit unset; account balance not returned")
                 lines_zh.append("Key 未设置限额；账户余额未返回")
@@ -877,6 +888,38 @@ def build_account_panel(value: dict[str, Any], timezone: str) -> dict[str, Any]:
             checked = stamp(row.get("checked_at"))
             lines_en.append(f"API snapshot · {checked}")
             lines_zh.append(f"API 快照 · {checked}")
+        known_balance = any(isinstance(b, dict) and b.get("kind") != "key_credit_remaining"
+                            for b in row.get("balances", []) or [])
+        expiry_unknown = not row.get("subscription_expires_on")
+        expiry = stamp(row.get("subscription_expires_at"), year=True)
+        if row.get("subscription_source") == "manual" and expiry != "—":
+            expiry_unknown = False
+            lines_en.append(f"Subscription expiry · {expiry} · manual record")
+            lines_zh.append(f"订阅到期 · {expiry} · 手动记录")
+        elif row.get("subscription_expires_on"):
+            date = safe(row.get("subscription_expires_on"))
+            lines_en.append(f"Plan period ends · {date} · API date, timezone unspecified")
+            lines_zh.append(f"套餐有效期至 · {date} · API 日期，时区未标注")
+        else:
+            if known_balance:
+                lines_en.append("Subscription expiry · — (not reported)")
+                lines_zh.append("订阅到期 · —（接口未返回）")
+            else:
+                lines_en.append("Subscription expiry / account balance · — / — (not reported)")
+                lines_zh.append("订阅到期 / 账户余额 · — / —（接口未返回）")
+        if not known_balance and not expiry_unknown:
+            lines_en.append("Account balance · — (not reported)")
+            lines_zh.append("账户余额 · —（接口未返回）")
+        if row.get("key_expires_at"):
+            lines_en.append(f"API key expiry · {stamp(row['key_expires_at'], year=True)} (not subscription expiry)")
+            lines_zh.append(f"Key 到期 · {stamp(row['key_expires_at'], year=True)}（不是订阅到期）")
+        if row.get("subscription_renews_on"):
+            date=safe(row.get("subscription_renews_on"))
+            lines_en.append(f"Auto-renewal date · {date} (not final expiry)")
+            lines_zh.append(f"自动续费日期 · {date}（不是最终到期）")
+        if row.get("stale"):
+            lines_en.append("Retained last successful snapshot; latest read failed")
+            lines_zh.append("保留上次成功快照；本次读取失败")
         children.append(markdown("\n".join(lines_en), "\n".join(lines_zh), "notation"))
     if not children:
         children.append(markdown("No configured account snapshot", "暂无配置账户快照", "notation"))

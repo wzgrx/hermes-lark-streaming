@@ -58,7 +58,7 @@ def _print_usage() -> None:
     print("  doctor     Run structured configuration/runtime diagnostics [--json]")
     print("  metrics    Show gateway metrics [--json]; add --sidecar for the sidecar process")
     print("  history    Query local usage ledger [--month YYYY-MM] [--group-by provider-model] [--json]")
-    print("  accounts   Inspect configured accounts; --refresh queries official read-only APIs [--json]")
+    print("  accounts   Account status; --catalog / --discover; --refresh queries read-only APIs [--json]")
     print("  smoke      CardKit dry-run; add --execute --chat-id CHAT, --entity-only, or --closed-stream-probe")
     print("  lark-cli-smoke  Inspect optional lark-cli; add --execute for read-only checks")
     print("  repair-sdk  Explicitly repair lark-oapi in the active Hermes interpreter")

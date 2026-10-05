@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import math
+import os
 import re
 import time
 import urllib.error
@@ -14,19 +15,15 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from .account_adapters import money as _money
+from .account_adapters import parse_extra, parse_subscription
+from .account_catalog import ENDPOINTS as _ENDPOINTS
+from .account_catalog import PREFIXES as _PREFIXES
+from .account_catalog import catalog
 from .state import label
 from .usage import mapping
-
-_ENDPOINTS = {
-    "opencode-go": "https://opencode.ai/zen/go/v1/usage",
-    "deepseek": "https://api.deepseek.com/user/balance",
-    "openrouter": "https://openrouter.ai/api/v1/key",
-}
-_PREFIXES = {"opencode-go": "OPENCODE_GO_API_KEY", "deepseek": "DEEPSEEK_API_KEY",
-             "openrouter": "OPENROUTER_API_KEY"}
 
 
 @dataclass(frozen=True)
@@ -35,6 +32,8 @@ class Account:
     name: str
     provider: str
     key_env: str
+    discovered: bool = False
+    subscription_expires_at: str | None = None
 
 
 def configured(settings: Any) -> tuple[Account, ...]:
@@ -53,7 +52,15 @@ def configured(settings: Any) -> tuple[Account, ...]:
         if prefix and (not isinstance(env, str) or not re.fullmatch(re.escape(prefix) + r"(?:_[A-Z0-9_]+)?", env)):
             continue
         # Unsupported providers never resolve or transmit any credential.
-        result.append(Account(ident, label(row.get("label"))[:48] or ident, provider, env if prefix else ""))
+        result.append(
+            Account(
+                ident,
+                label(row.get("label"))[:48] or ident,
+                provider,
+                env if prefix else "",
+                subscription_expires_at=_timestamp(row.get("subscription_expires_at")),
+            )
+        )
         seen.add(ident)
     return tuple(result)
 
@@ -68,19 +75,6 @@ def _timestamp(value: Any) -> str | None:
         return None
 
 
-def _money(value: Any) -> str | None:
-    if type(value) not in (str, int, float) or len(str(value)) > 48:
-        return None
-    try:
-        amount = Decimal(str(value))
-        if not amount.is_finite() or not 0 <= amount <= 10**12:
-            return None
-        text = format(amount, "f")
-        return text if len(text) <= 64 else None
-    except (InvalidOperation, ValueError):
-        return None
-
-
 def parse_account(provider: str, value: Any) -> dict[str, Any]:
     data = mapping(value)
     result: dict[str, Any] = {"status": "unavailable", "windows": [], "balances": []}
@@ -91,12 +85,21 @@ def parse_account(provider: str, value: Any) -> dict[str, Any]:
             percent = row.get("percent")
             if not isinstance(percent, (int, float)) or isinstance(percent, bool):
                 continue
-            if (not 0 <= percent <= 10**6 or not math.isfinite(percent)
-                    or row.get("status") not in {"ok", "rate-limited"}):
+            if (
+                not 0 <= percent <= 10**6
+                or not math.isfinite(percent)
+                or row.get("status") not in {"ok", "rate-limited"}
+            ):
                 continue
-            result["windows"].append({"name": name, "used_percent": percent,
-                "remaining_percent": max(0, 100-percent), "reset_at": _timestamp(row.get("resetsAt")),
-                "limited": row["status"] == "rate-limited"})
+            result["windows"].append(
+                {
+                    "name": name,
+                    "used_percent": percent,
+                    "remaining_percent": max(0, 100 - percent),
+                    "reset_at": _timestamp(row.get("resetsAt")),
+                    "limited": row["status"] == "rate-limited",
+                }
+            )
     elif provider == "deepseek":
         rows = data.get("balance_infos")
         for row in rows[:4] if isinstance(rows, list) else []:
@@ -111,11 +114,77 @@ def parse_account(provider: str, value: Any) -> dict[str, Any]:
             result["balances"].append({"kind": "key_credit_remaining", "currency": "USD", "amount": amount})
         elif row.get("limit") is None and "limit" in row:
             result["key_limit_unset"] = True  # not an unlimited account balance
-    if result["windows"] or result["balances"] or result.get("key_limit_unset"):
+    if provider == "openrouter":
+        expires = _timestamp(mapping(data.get("data")).get("expires_at"))
+        if expires:
+            result["key_expires_at"] = expires
+    parse_extra(provider, data, result)
+    if result["windows"] or result["balances"] or result.get("key_limit_unset") or result.get("key_expires_at"):
         result["status"] = "ok"
     if provider == "opencode-go":
         result["partial"] = len(result["windows"]) != 3
     return result
+
+
+def discover(
+    settings: Any, resolve: Callable[[str], str], *, env_names: tuple[str, ...] | None = None, limit: int = 4
+) -> tuple[Account, ...]:
+    """Explicit rows first, opt-in known local names only; never print secrets."""
+    explicit = configured(settings)
+    if mapping(settings).get("auto_detect") is not True:
+        return explicit
+    result = list(explicit)
+    seen_credentials = {
+        (a.provider, hashlib.sha256(resolve(a.key_env).encode()).digest())
+        for a in explicit
+        if a.key_env and resolve(a.key_env)
+    }
+    seen_refs = {(a.provider, a.key_env) for a in explicit}
+    seen_ids = {a.id for a in explicit}
+    names = tuple(os.environ) if env_names is None else env_names
+    # Bounded local suffix discovery; no scanning browsers/keychains/files.
+    names = tuple(sorted(n for n in names if re.fullmatch(r"[A-Z][A-Z0-9_]{0,95}", n)))[:256]
+    records = catalog()["products"]
+    priority = {name: index for index, name in enumerate(_ENDPOINTS)}
+    records.sort(key=lambda r: priority.get(r["id"], len(priority)))
+    checked: set[str] = set()
+    for row in records:
+        provider = row["id"]
+        prefixes = [_PREFIXES[provider]] if provider in _PREFIXES else row.get("env", [])[:3]
+        for prefix in prefixes:
+            if not isinstance(prefix, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,95}", prefix):
+                continue
+            candidates = [prefix] + [n for n in names if n.startswith(prefix + "_")]
+            for name in candidates[:8]:
+                if (provider, name) in seen_refs or name in checked:
+                    continue
+                if len(checked) >= 128:
+                    return tuple(result[:limit])
+                checked.add(name)
+                key = resolve(name)
+                if not key:
+                    continue
+                credential = (provider, hashlib.sha256(key.encode()).digest())
+                if credential in seen_credentials:
+                    continue
+                seen_credentials.add(credential)
+                ident = "auto-" + hashlib.sha256((provider + ":" + name).encode()).hexdigest()[:12]
+                if ident in seen_ids:
+                    continue
+                result.append(
+                    Account(
+                        ident,
+                        label(row.get("name"))[:48] or provider,
+                        provider,
+                        name if provider in _ENDPOINTS else "",
+                        discovered=True,
+                    )
+                )
+                seen_ids.add(ident)
+                seen_refs.add((provider, name))
+                if len(result) >= limit:
+                    return tuple(result[:limit])
+    return tuple(result[:limit])
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -124,21 +193,51 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def fetch_account(account: Account, key: str) -> dict[str, Any]:
-    result: dict[str, Any] = {"id": account.id, "label": account.name, "provider": account.provider,
-                             "source": "provider_api", "checked_at": datetime.now(UTC).isoformat()}
+    result: dict[str, Any] = {
+        "id": account.id,
+        "label": account.name,
+        "provider": account.provider,
+        "source": "provider_api",
+        "checked_at": datetime.now(UTC).isoformat(),
+        "discovered": account.discovered,
+    }
+    if account.subscription_expires_at:
+        result.update(subscription_expires_at=account.subscription_expires_at, subscription_source="manual")
     endpoint = _ENDPOINTS.get(account.provider)
     if endpoint is None:
         return {**result, "source": "none", "status": "unsupported"}
     if not key or len(key) > 4096 or any(c in key for c in "\r\n"):
         return {**result, "status": "missing_credentials"}
-    request = urllib.request.Request(endpoint, headers={"Authorization": "Bearer " + key,
-        "Accept": "application/json", "User-Agent": "hermes-lark-streaming/account-status"})
+    if account.provider in {"minimax", "minimax-cn"} and key.startswith("sk-api-"):
+        endpoint = endpoint.replace("/v1/token_plan/remains", "/account/query_balance")
+    authorization = key if account.provider in {"zai", "bigmodel"} else "Bearer " + key
+    request = urllib.request.Request(
+        endpoint,
+        headers={
+            "Authorization": authorization,
+            "Accept": "application/json",
+            "User-Agent": "hermes-lark-streaming/account-status",
+        },
+    )
     try:
         with urllib.request.build_opener(_NoRedirect()).open(request, timeout=4) as response:
             raw = response.read(65537)
             if len(raw) > 65536:
                 return {**result, "status": "unavailable", "error_type": "ResponseTooLarge"}
-            return {**result, **parse_account(account.provider, json.loads(raw))}
+            result.update(parse_account(account.provider, json.loads(raw)))
+        if account.provider in {"zai", "bigmodel"}:
+            subscription_url = endpoint.replace("/api/monitor/usage/quota/limit", "/api/biz/subscription/list")
+            try:
+                query = urllib.request.Request(
+                    subscription_url, headers={"Authorization": authorization, "Accept": "application/json"}
+                )
+                with urllib.request.build_opener(_NoRedirect()).open(query, timeout=4) as response:
+                    payload = response.read(65537)
+                    if len(payload) <= 65536:
+                        result.update(parse_subscription(json.loads(payload)))
+            except Exception:
+                result["subscription_status"] = "unavailable"
+        return result
     except urllib.error.HTTPError as exc:
         return {**result, "status": "unavailable", "http_status": exc.code}
     except Exception as exc:
@@ -148,9 +247,11 @@ def fetch_account(account: Account, key: str) -> dict[str, Any]:
 
 
 def fetch_accounts(accounts: tuple[Account, ...], keys: tuple[str, ...]) -> dict[str, Any]:
-    return {"status": "snapshot", "scope": "configured_accounts", "accounts": [
-        fetch_account(account, key) for account, key in zip(accounts, keys, strict=True)
-    ]}
+    return {
+        "status": "snapshot",
+        "scope": "configured_accounts",
+        "accounts": [fetch_account(account, key) for account, key in zip(accounts, keys, strict=True)],
+    }
 
 
 class AccountsSummary:
@@ -161,6 +262,9 @@ class AccountsSummary:
         self._signature: tuple[Any, ...] = ()
         self._at = float("-inf")
         self._task: asyncio.Task[None] | None = None
+        self._specs: tuple[Account, ...] = ()
+        self._spec_identity: tuple[Any, ...] = ()
+        self._spec_at = float("-inf")
 
     def snapshot(self) -> dict[str, Any]:
         value = deepcopy(self._cached)
@@ -168,15 +272,30 @@ class AccountsSummary:
         return value
 
     def request(self, settings: dict[str, Any], resolve: Callable[[str], str]) -> None:
-        specs = configured(settings)
+        identity = (configured(settings), settings.get("auto_detect") is True, tuple(os.environ))
+        if identity != self._spec_identity or time.monotonic() - self._spec_at >= 60:
+            self._specs = discover(settings, resolve)
+            self._spec_identity, self._spec_at = identity, time.monotonic()
+        specs = self._specs
         keys = tuple(resolve(a.key_env) if a.key_env else "" for a in specs)
         # Digests remain in process memory only; never persisted or rendered.
         signature = tuple((a, hashlib.sha256(k.encode()).digest()) for a, k in zip(specs, keys, strict=True))
         if signature != self._signature:
             self._signature, self._at = signature, float("-inf")
-            self._cached = {"status": "pending", "scope": "configured_accounts", "accounts": [
-                {"id": a.id, "label": a.name, "provider": a.provider, "status": "pending"} for a in specs
-            ]}
+            self._cached = {
+                "status": "pending",
+                "scope": "configured_accounts",
+                "accounts": [
+                    {
+                        "id": a.id,
+                        "label": a.name,
+                        "provider": a.provider,
+                        "status": "pending",
+                        "discovered": a.discovered,
+                    }
+                    for a in specs
+                ],
+            }
         if self._task is None and time.monotonic() - self._at >= 300:
             self._task = asyncio.create_task(self._read(specs, keys, signature))
 
@@ -184,6 +303,13 @@ class AccountsSummary:
         try:
             result = await asyncio.to_thread(fetch_accounts, specs, keys)
             if signature == self._signature:
+                old = {r.get("id"): r for r in self._cached.get("accounts", [])}
+                for index, row in enumerate(result.get("accounts", [])):
+                    previous = old.get(row.get("id"), {})
+                    if row.get("status") != "ok" and previous.get("status") == "ok":
+                        retained = deepcopy(previous)
+                        retained.update(stale=True, last_error_status=row.get("status"))
+                        result["accounts"][index] = retained
                 self._cached = result
         except Exception:
             if signature == self._signature:
@@ -202,19 +328,42 @@ def cli(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Configured account status; no routing or credential changes")
     parser.add_argument("--refresh", action="store_true", help="Make bounded read-only official API requests")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--catalog", action="store_true", help="Provider inventory and reviewed capabilities; no network"
+    )
+    parser.add_argument(
+        "--discover", action="store_true", help="Inspect known local credential references; no network unless --refresh"
+    )
     args = parser.parse_args(argv)
-    settings = Config().footer_accounts
-    specs = configured(settings)
+    if args.catalog:
+        print(json.dumps(catalog(), ensure_ascii=False))
+        return 0
+    from ..__main__ import _load_hermes_environment
+
+    _load_hermes_environment()
+    settings = dict(Config().footer_accounts)
+    if args.discover:
+        settings["auto_detect"] = True
+    specs = discover(settings, _get_secret, limit=16 if args.discover and not args.refresh else 4)
     if args.refresh:
         from ..__main__ import _load_hermes_environment
 
         _load_hermes_environment()
         result = fetch_accounts(specs, tuple(_get_secret(a.key_env) if a.key_env else "" for a in specs))
     else:
-        result = {"status": "not_refreshed", "accounts": [
-            {"id": a.id, "label": a.name, "provider": a.provider} for a in specs
-        ]}
-    result.update(network_requested=args.refresh, automatic_account_switch=False,
-                  request_account_attribution=False, enabled=settings.get("enabled") is True)
+        result = {
+            "status": "not_refreshed",
+            "accounts": [
+                {"id": a.id, "label": a.name, "provider": a.provider, "discovered": a.discovered} for a in specs
+            ],
+        }
+    result.update(
+        network_requested=args.refresh,
+        automatic_account_switch=False,
+        request_account_attribution=False,
+        enabled=settings.get("enabled") is True,
+        auto_detect=settings.get("auto_detect") is True,
+        queried_accounts_limit=4,
+    )
     print(json.dumps(result, ensure_ascii=False))
     return 0 if all(a.get("status", "ok") == "ok" for a in result["accounts"]) else 1

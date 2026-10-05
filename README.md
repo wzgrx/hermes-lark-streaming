@@ -1,6 +1,8 @@
 # Hermes Lark Streaming
 
-> **0.21.1 · 原生卡片 V2**：同行双列指标、相同模型去重、独立折叠的历史与账户快照、资源摘要和红色工具失败。修复真实截图发现的资源百分比精度不一致。V2 **0.21.0** 已完成一次真实用户聊天、两次终端 0/7、三个模型请求、单卡投递及 Windows 展开/折叠验收；证据与后续修复版本分别记录。[设计、计划与真实验收](docs/REFERENCE-V2.md)。
+> **0.21.2 · V2 账户增强**：新增 226 个目录入口、十个只读产品适配、已有凭据自动发现与去重、订阅有效期/续费/Key 到期分层、失败保留过期快照。目录≠余额全适配；未知字段不补造。本轮代码/接口与真实聊天分别验收。[任务计划、完整能力矩阵和配置](docs/ACCOUNT-V2-PLAN.md)。
+
+> **历史基线 0.21.1 · 原生卡片 V2**：同行双列指标、相同模型去重、独立折叠的历史与账户快照、资源摘要和红色工具失败。修复真实截图发现的资源百分比精度不一致。V2 **0.21.0** 已完成一次真实用户聊天、两次终端 0/7、三个模型请求、单卡投递及 Windows 展开/折叠验收；证据与后续修复版本分别记录。[设计、计划与真实验收](docs/REFERENCE-V2.md)。
 
 ![V2 信息分组结构，合成数据，非客户端截图](docs/assets/reference-v2-structure.svg)
 
@@ -13,7 +15,7 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.21.1-blue)
+![Code version](https://img.shields.io/badge/code-0.21.2-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 

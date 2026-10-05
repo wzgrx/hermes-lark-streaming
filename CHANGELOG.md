@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-10-05
+
+### Added
+- Versioned provider inventory with explicit implemented/not-implemented management capabilities, ten reviewed read-only products, and `accounts --catalog / --discover`. Keep discovery opt-in and local; never derive arbitrary billing endpoints from inference URLs.
+- Moonshot domestic/global balances, OpenRouter management-wallet credits and normal-key expiry, MiniMax official key-type/region routes, and Z.ai/BigModel coding quotas plus personal subscription calendar facts. Preserve distinct money, key limit, quota reset, plan period, renewal and key-expiry semantics.
+- Bounded existing-key discovery/deduplication with explicit-account priority, per-chat visibility, separate management credentials and one owned polling task. Cache discovery rather than repeating it per delta; key rotation still discards previous identity data.
+
+### Fixed
+- Preserve labeled last-good snapshots on same-identity read failure. Surface absent subscription/balance facts instead of silently omitting requested fields. Never turn a reset into an expiry, a key limit into a wallet, or ambiguous MiniMax counts into a guessed percentage.
+- Bound Decimal exponent before context operations or fixed formatting; preserve documented signed cash debt and regional currency, while unspecified currency/timezone remains explicit.
+
+### Documentation
+- Record the plan, exact official source contracts, capability limits and independent current-runtime/native/Gateway/client acceptance gates in [ACCOUNT-V2-PLAN.md](docs/ACCOUNT-V2-PLAN.md). No new SDKs, data stores, daemons or billing writes.
+
 ## [0.21.1] - 2026-10-05
 
 ### Fixed

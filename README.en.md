@@ -1,6 +1,8 @@
 # Hermes Lark Streaming
 
-> **0.21.1 · Native card design V2**: compact inline pairs, verified equal model-ID deduplication, nested history/accounts, resource summaries and visible tool failures. Fix resource percentage precision found in real screenshots. V2 **0.21.0** completed one actual user-origin Gateway turn: two sequential terminal calls (exit 0/7), three model requests, one delivered card, and Windows panel inspection. Evidence stays version-bound; follow-up patch checks are separate. [Design, plan and real acceptance](docs/REFERENCE-V2.md).
+> **0.21.2 · V2 account expansion**: a 226-entry inventory, ten reviewed read-only products, opt-in local credential discovery/deduplication, separate plan validity/renewal/key-expiry facts, and labeled last-good snapshots. Inventory is not universal billing support; unknowns remain explicit. Source/API and real user-turn evidence are separate. [Plan, capability matrix and configuration](docs/ACCOUNT-V2-PLAN.md).
+
+> **Historical 0.21.1 · Native card design V2**: compact inline pairs, verified equal model-ID deduplication, nested history/accounts, resource summaries and visible tool failures. Fix resource percentage precision found in real screenshots. V2 **0.21.0** completed one actual user-origin Gateway turn: two sequential terminal calls (exit 0/7), three model requests, one delivered card, and Windows panel inspection. Evidence stays version-bound; follow-up patch checks are separate. [Design, plan and real acceptance](docs/REFERENCE-V2.md).
 
 ![V2 structural illustration, synthetic data, not a client screenshot](docs/assets/reference-v2-structure.svg)
 
@@ -12,7 +14,7 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.21.1-blue)
+![Code version](https://img.shields.io/badge/code-0.21.2-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)

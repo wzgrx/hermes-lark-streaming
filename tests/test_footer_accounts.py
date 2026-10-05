@@ -128,7 +128,7 @@ def test_nested_panel_preserves_expansion_and_has_no_fake_expiry_or_balance():
     panel = build_account_panel({"accounts": [account]}, "Asia/Shanghai")
     text = json.dumps(panel, ensure_ascii=False)
     assert "53%" in text and "10-20 14:26" in text and "Go 1" in text
-    assert "Account balance ·" not in text and "expires_at" not in text
+    assert "Subscription expiry / account balance · — / — (not reported)" in text and "expires_at" not in text
     card = build_reference_footer({"reference": {"accounts": {"accounts": [account]}}})[0]
     actions = json.dumps(runtime_actions([card], reference=True))
     assert "ref_accounts" in actions and '"expanded"' not in actions
