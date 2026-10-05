@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.20] - 2026-10-05
+
+### Fixed
+- Restrict compact-heading, blank-line and invalid-image normalization to prose. Preserve literal fenced code without collision-prone placeholder substitution, including LF/CRLF, tilde/backtick fences, longer closers and unfinished streaming blocks.
+- Do not upload, strip or cache-substitute image examples inside fenced code. Real prose images keep the existing asynchronous upload/cache behavior.
+- Count Markdown tables only in prose regions, preserving original offsets and avoiding table-quota consumption or extra fences inside code examples. V1 panel/grid geometry, delivery hooks and data schemas stay unchanged. See [scope and regressions](docs/MAINTENANCE-0220.md).
+
 ## [0.20.19] - 2026-10-05
 
 ### Fixed

@@ -1,6 +1,6 @@
 # Hermes Lark Streaming
 
-> **0.20.19 · 2026-10-05**: clarify/approval handoffs retain earlier-card unconfirmed tool counts. Prefix and Footer agree; prior missing results stay distinct from currently running tools. Native V1 layout stays unchanged. [Scope and evidence](docs/MAINTENANCE-0219.md).
+> **0.20.20 · 2026-10-05**: preserve blank lines, headings, images and table examples inside fenced code, including unfinished streaming fences. Example URLs never trigger image uploads; real prose images and compact headings still work. Native V1 layout stays unchanged. [Scope and evidence](docs/MAINTENANCE-0220.md).
 
 
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**

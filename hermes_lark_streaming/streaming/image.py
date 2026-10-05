@@ -8,6 +8,8 @@ import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from ..cardkit.markdown import _map_outside_fenced_code
+
 if TYPE_CHECKING:
     from ..feishu import FeishuClient
 
@@ -38,7 +40,7 @@ class ImageResolver:
     def resolve_images(self, text: str) -> str:
         """同步解析图片：缓存命中替换、新 URL strip 并触发异步上传.
 
-        返回替换后的文本（未完成的 URL 被 strip）.
+        返回替换后的文本（未完成的 URL 被 strip）；围栏代码中的示例不上传、不替换.
         """
         if "![" not in text:
             return text
@@ -67,7 +69,7 @@ class ImageResolver:
             self._start_upload(url)
             return ""
 
-        return _IMG_PATTERN.sub(_replace, text)
+        return _map_outside_fenced_code(text, lambda prose: _IMG_PATTERN.sub(_replace, prose))
 
     async def resolve_await(self, text: str) -> str:
         """带超时的批量解析 — 等待所有 pending 上传完成后再替换.
