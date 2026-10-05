@@ -21,7 +21,7 @@ from .account_adapters import money as _money
 from .account_adapters import parse_extra, parse_subscription
 from .account_catalog import ENDPOINTS as _ENDPOINTS
 from .account_catalog import PREFIXES as _PREFIXES
-from .account_catalog import catalog
+from .account_catalog import UNAVAILABLE, catalog
 from .state import label
 from .usage import mapping
 
@@ -131,16 +131,29 @@ def discover(
 ) -> tuple[Account, ...]:
     """Explicit rows first, opt-in known local names only; never print secrets."""
     explicit = configured(settings)
-    if mapping(settings).get("auto_detect") is not True:
-        return explicit
-    result = list(explicit)
-    seen_credentials = {
-        (a.provider, hashlib.sha256(resolve(a.key_env).encode()).digest())
-        for a in explicit
-        if a.key_env and resolve(a.key_env)
-    }
-    seen_refs = {(a.provider, a.key_env) for a in explicit}
-    seen_ids = {a.id for a in explicit}
+    result: list[Account] = []
+    seen_credentials: set[tuple[str, bytes]] = set()
+    seen_refs: set[tuple[str, str]] = set()
+    seen_ids: set[str] = set()
+    # Explicit aliases also need deduplication, even with discovery disabled.
+    # Resolve each reference once here; keep the first label/source record.
+    for account in explicit:
+        ref = (account.provider, account.key_env)
+        if account.key_env and ref in seen_refs:
+            continue
+        if account.key_env:
+            seen_refs.add(ref)
+        key = resolve(account.key_env) if account.key_env else ""
+        credential = (account.provider, hashlib.sha256(key.encode()).digest()) if key else None
+        if credential is not None and credential in seen_credentials:
+            continue
+        result.append(account)
+        seen_refs.add(ref)
+        seen_ids.add(account.id)
+        if credential is not None:
+            seen_credentials.add(credential)
+    if mapping(settings).get("auto_detect") is not True or len(result) >= limit:
+        return tuple(result[:limit])
     names = tuple(os.environ) if env_names is None else env_names
     # Bounded local suffix discovery; no scanning browsers/keychains/files.
     names = tuple(sorted(n for n in names if re.fullmatch(r"[A-Z][A-Z0-9_]{0,95}", n)))[:256]
@@ -205,7 +218,7 @@ def fetch_account(account: Account, key: str) -> dict[str, Any]:
         result.update(subscription_expires_at=account.subscription_expires_at, subscription_source="manual")
     endpoint = _ENDPOINTS.get(account.provider)
     if endpoint is None:
-        return {**result, "source": "none", "status": "unsupported"}
+        return {**result, **UNAVAILABLE.get(account.provider, {}), "source": "none", "status": "unsupported"}
     if not key or len(key) > 4096 or any(c in key for c in "\r\n"):
         return {**result, "status": "missing_credentials"}
     if account.provider in {"minimax", "minimax-cn"} and key.startswith("sk-api-"):
@@ -265,6 +278,7 @@ class AccountsSummary:
         self._specs: tuple[Account, ...] = ()
         self._spec_identity: tuple[Any, ...] = ()
         self._spec_at = float("-inf")
+        self._pending_query: tuple[tuple[Account, ...], tuple[str, ...], tuple[Any, ...]] | None = None
 
     def snapshot(self) -> dict[str, Any]:
         value = deepcopy(self._cached)
@@ -281,6 +295,10 @@ class AccountsSummary:
         # Digests remain in process memory only; never persisted or rendered.
         signature = tuple((a, hashlib.sha256(k.encode()).digest()) for a, k in zip(specs, keys, strict=True))
         if signature != self._signature:
+            if self._task is not None:
+                # Coalesce to the latest identity; do not cancel an in-flight
+                # stdlib HTTP worker or require another token/message delta.
+                self._pending_query = (specs, keys, signature)
             self._signature, self._at = signature, float("-inf")
             self._cached = {
                 "status": "pending",
@@ -301,22 +319,38 @@ class AccountsSummary:
 
     async def _read(self, specs: tuple[Account, ...], keys: tuple[str, ...], signature: tuple[Any, ...]) -> None:
         try:
-            result = await asyncio.to_thread(fetch_accounts, specs, keys)
-            if signature == self._signature:
-                old = {r.get("id"): r for r in self._cached.get("accounts", [])}
-                for index, row in enumerate(result.get("accounts", [])):
-                    previous = old.get(row.get("id"), {})
-                    if row.get("status") != "ok" and previous.get("status") == "ok":
-                        retained = deepcopy(previous)
-                        retained.update(stale=True, last_error_status=row.get("status"))
-                        result["accounts"][index] = retained
-                self._cached = result
-        except Exception:
-            if signature == self._signature:
-                self._cached = {"status": "unavailable", "accounts": []}
+            while True:
+                try:
+                    result = await asyncio.to_thread(fetch_accounts, specs, keys)
+                    if signature == self._signature:
+                        old = {r.get("id"): r for r in self._cached.get("accounts", [])}
+                        for index, row in enumerate(result.get("accounts", [])):
+                            previous = old.get(row.get("id"), {})
+                            if row.get("status") != "ok" and previous.get("status") == "ok":
+                                retained = deepcopy(previous)
+                                retained.update(
+                                    stale=True, last_error_status=row.get("status"),
+                                    last_attempt_at=row.get("checked_at"),
+                                )
+                                code = row.get("http_status")
+                                if type(code) is int and 100 <= code <= 599:
+                                    retained["last_http_status"] = code
+                                else:
+                                    retained.pop("last_http_status", None)
+                                result["accounts"][index] = retained
+                        self._cached = result
+                except Exception:
+                    if signature == self._signature:
+                        self._cached = {"status": "unavailable", "accounts": []}
+                if signature == self._signature:
+                    self._at = time.monotonic()
+                    break
+                pending, self._pending_query = self._pending_query, None
+                if pending is None:
+                    break
+                specs, keys, signature = pending
         finally:
-            if signature == self._signature:
-                self._at = time.monotonic()
+            self._pending_query = None
             self._task = None
 
 

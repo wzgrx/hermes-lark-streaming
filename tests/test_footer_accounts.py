@@ -114,10 +114,9 @@ async def test_refresh_coalesces_and_rotation_discards_old_identity(monkeypatch)
     assert summary.snapshot()["status"] == "pending"
     release.set()
     await first
-    assert summary.snapshot()["status"] == "pending"  # old result is never published under new key
-    summary.request(settings(), lambda env: "new")
-    await summary._task
+    # The same owned task drains the latest identity without a new delta.
     assert summary.snapshot()["accounts"][0]["label"] == "new"
+    assert summary._pending_query is None
     summary.request(settings(), lambda env: "new")
     assert summary._task is None and len(calls) == 2
 

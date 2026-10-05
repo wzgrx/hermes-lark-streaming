@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.3] - 2026-10-05
+
+### Fixed
+- Deduplicate explicit same-provider credential aliases even with automatic discovery disabled; keep the first configured label and avoid unrelated credential scans once the display capacity is full.
+- Drain the latest manually changed account identity in the existing owned read task. Discard old/intermediate results without requiring another token or message delta; do not change routes or select another account automatically.
+- Distinguish unqueried, missing-reference, unsupported and failed account states. Show bounded HTTP authentication/rate-limit/read errors and the most recent failed-check time while preserving the original successful snapshot timestamp.
+- Treat malformed balance payloads as unknown and preserve documented signed wallet balances. Keep both locale text and native panel IDs stable.
+
+### Documentation
+- Explain SiliconFlow's officially retired account endpoint using its current release notice, not residual OpenAPI files. Keep its key local and the adapter not implemented; vendor inventory/implemented/live-verified counts remain separate.
+
 ## [0.21.2] - 2026-10-05
 
 ### Added

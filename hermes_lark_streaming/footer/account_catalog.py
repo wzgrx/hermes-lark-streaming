@@ -58,6 +58,17 @@ SOURCES = {
 }
 
 
+# Preserve documented deprecation instead of treating old specifications as
+# proof of a working account endpoint. No retired URL is registered for GET.
+UNAVAILABLE = {
+    "siliconflow": {
+        "reason": "endpoint_retired",
+        "retired_on": "2026-08-14",
+        "source_url": "https://docs.siliconflow.cn/docs/release-notes/overview",
+    },
+}
+
+
 @lru_cache(maxsize=1)
 def inventory() -> dict[str, Any]:
     value = json.loads(files(__package__).joinpath("account_catalog.json").read_text(encoding="utf-8"))
@@ -69,6 +80,7 @@ def catalog() -> dict[str, Any]:
     rows = {
         r["id"]: {
             **r,
+            **UNAVAILABLE.get(r["id"], {}),
             "adapter": "not_implemented",
             "capabilities": [],
             "credential_plane": "provider-specific; no speculative network probes",
