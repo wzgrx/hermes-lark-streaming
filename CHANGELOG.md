@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.21] - 2026-10-05
+
+### Fixed
+- Keep small top-level fenced blocks atomic across final-card Markdown elements. Split oversized blocks into independently fenced display pieces, retaining their language/info string and body characters instead of exposing later fragments as prose.
+- Preserve prose/code chunk-boundary newlines and avoid cutting CRLF pairs where the budget permits. Reserve marker overhead within the existing 2400-character policy; lengthen wrappers when literal marker runs could become closing fences after a hard cut.
+- Use offset-based splitting rather than repeatedly copying the remaining suffix. Reject nonpositive limits; pathological fence metadata retains bounded raw text instead of looping or dropping content. No native V1 geometry, live-stream ownership or storage change. See [scope and regressions](docs/MAINTENANCE-0221.md).
+
 ## [0.20.20] - 2026-10-05
 
 ### Fixed

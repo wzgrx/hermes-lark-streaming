@@ -126,20 +126,89 @@ def optimize_markdown_style(text: str) -> str:
         return text
 
 
+def _split_plain_text(text: str, limit: int) -> list[str]:
+    """Lossless paragraph/newline-preferred splitting; do not strip boundaries."""
+    chunks: list[str] = []
+    offset = 0
+    while offset < len(text):
+        if len(text) - offset <= limit:
+            chunks.append(text[offset:])
+            break
+        boundary = text.rfind("\n\n", offset, offset + limit)
+        cut = boundary + 2 if boundary >= 0 else offset
+        if cut - offset < limit // 2:
+            boundary = text.rfind("\n", offset, offset + limit)
+            cut = boundary + 1 if boundary >= 0 else offset
+        if cut - offset < limit // 2 or cut == offset:
+            cut = offset + limit
+        if cut - offset > 1 and text[cut - 1 : cut + 1] == "\r\n":
+            cut -= 1
+        chunks.append(text[offset:cut])
+        offset = cut
+    return chunks
+
+
+def _split_fenced_block(block: str, limit: int) -> list[str]:
+    """Split oversized top-level code into independently fenced display pieces.
+
+    Added delimiters/line endings are presentation scaffolding, not stored text.
+    Preserve all body characters and the language/info string. A fence longer
+    than any same-character run in the body prevents a hard cut from turning
+    an inline literal run into a closing fence in the next display piece.
+    """
+    opening_end = block.find("\n") + 1
+    if not opening_end:
+        return _split_plain_text(block, limit)
+    opening = block[:opening_end]
+    match = _FENCE_LINE.fullmatch(opening.rstrip("\r\n"))
+    assert match is not None
+    marker, info = match.groups()
+    newline = "\r\n" if opening.endswith("\r\n") else "\n"
+    last_start = block.rfind("\n", 0, len(block.rstrip("\r\n"))) + 1
+    closing = _FENCE_LINE.fullmatch(block[last_start:].rstrip("\r\n"))
+    closed = bool(
+        closing and closing[1][0] == marker[0] and len(closing[1]) >= len(marker) and not closing[2].strip(" \t")
+    )
+    body = block[opening_end:last_start] if closed else block[opening_end:]
+    longest = max((len(run[0]) for run in re.finditer(re.escape(marker[0]) + "+", body)), default=0)
+    marker = marker[0] * max(len(marker), longest + 1)
+    prefix = opening[: match.start(1)] + marker + info + newline
+    capacity = limit - len(prefix) - len(newline) - len(marker)
+    if capacity < 2:
+        # Pathological metadata/fence runs leave no room for a balanced wrapper.
+        # Keep content bounded and lossless, rather than looping or dropping it.
+        _logger.debug("Fence metadata exceeds chunk budget; retaining bounded raw text")
+        return _split_plain_text(block, limit)
+    pieces = _split_plain_text(body, capacity) or [""]
+    return [prefix + piece + ("" if piece.endswith("\n") else newline) + marker for piece in pieces]
+
+
 def _split_long_text(text: str, limit: int = _MAX_CHUNK_CHARS) -> list[str]:
-    """将超长文本按段落/换行拆分为多个不超过 limit 字符的块."""
+    """Bound final Markdown elements, keeping small fences atomic and large ones balanced.
+
+    Prose separators and code body characters are retained. This is final-card
+    presentation only, not a stream/rollover state change or a Markdown parser.
+    """
+    if limit <= 0:
+        raise ValueError("Markdown chunk limit must be positive")
     if len(text) <= limit:
         return [text]
     chunks: list[str] = []
-    while text:
-        if len(text) <= limit:
-            chunks.append(text)
-            break
-        cut = text.rfind("\n\n", 0, limit)
-        if cut < limit // 2:
-            cut = text.rfind("\n", 0, limit)
-        if cut < limit // 2:
-            cut = limit
-        chunks.append(text[:cut])
-        text = text[cut:].lstrip("\n")
+    pending = ""
+    for start, end, code in _markdown_regions(text):
+        region = text[start:end]
+        if code and len(region) > limit:
+            if pending:
+                chunks.append(pending)
+                pending = ""
+            chunks.extend(_split_fenced_block(region, limit))
+            continue
+        pieces = [region] if code else _split_plain_text(region, limit)
+        for piece in pieces:
+            if pending and len(pending) + len(piece) > limit:
+                chunks.append(pending)
+                pending = ""
+            pending += piece
+    if pending:
+        chunks.append(pending)
     return chunks

@@ -1,6 +1,6 @@
 # Hermes Lark Streaming
 
-> **0.20.20 · 2026-10-05**: preserve blank lines, headings, images and table examples inside fenced code, including unfinished streaming fences. Example URLs never trigger image uploads; real prose images and compact headings still work. Native V1 layout stays unchanged. [Scope and evidence](docs/MAINTENANCE-0220.md).
+> **0.20.21 · 2026-10-05**: final cards keep small code fences atomic and split large blocks into independently fenced display pieces with their language/info string retained. Chunk boundaries no longer discard blank lines. The 2400-character policy, native V1 layout and stored conversation text stay unchanged. [Scope and evidence](docs/MAINTENANCE-0221.md).
 
 
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
