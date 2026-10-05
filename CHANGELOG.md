@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.24] - 2026-10-05
+
+### Fixed
+- Express incomplete V1 history observations as lower bounds (`≥1.9k*` for 1,999 measured tokens), using integer-based downward abbreviation for both period totals and subscription/model rows. Missing usage remains `—*`, not a fabricated zero or lower bound; complete-count formatting is unchanged.
+- Identify subscription/model groups as cumulative top-three usage, distinct from the adjacent today/month totals. Explain partial/lower-bound markers in the existing bilingual scope line without adding panels or rows. Preserve V1 geometry, ledger/SQL semantics and current-runtime-only acceptance. See [scope and regressions](docs/MAINTENANCE-0224.md).
+
 ## [0.20.23] - 2026-10-05
 
 ### Fixed

@@ -1,13 +1,13 @@
 # Hermes Lark Streaming
 
-> **0.20.23 · 2026-10-05**：工具名称、命令提示和错误摘要按完整转义单元截断，不再露出半截 `&lt` / Markdown 转义。省略号计入原字节上限；折叠单行空白后再判断显示预算，避免丢掉后续可见命令。V1 四列、面板顺序、折叠 ID 和卡片预算不变，只使用当前 Hermes/PM 进行本地验收。[本轮维护与验收边界](docs/MAINTENANCE-0223.md)。
+> **0.20.24 · 2026-10-05**：Footer 历史用量不完整时显示已观测下限，例如 `≥1.9k*`；未知仍为 `—*`，完整计数保持原缩写。模型分组明确标为“累计 · 前 3 项”。复用现有说明行，不增加面板和行数；V1 布局、账本与依赖不变。[本轮维护与验收边界](docs/MAINTENANCE-0224.md)。
 
 
 **让 Hermes 的回复成为持续更新、可追溯的飞书卡片。**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.23-blue)
+![Code version](https://img.shields.io/badge/code-0.20.24-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 

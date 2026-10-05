@@ -92,6 +92,16 @@ def _number(data: dict[str, Any], key: str, *, short: bool = True) -> tuple[str,
     return result, result
 
 
+def _history_tokens(bucket: dict[str, Any]) -> str:
+    """Incomplete observations are lower bounds; unknown is not measured zero."""
+    n = count(bucket.get("tokens"))
+    partial = bool(bucket.get("partial"))
+    if n is None:
+        return "—*" if partial else "—"
+    value = compact(n, lower_bound=partial)
+    return f"≥{value}*" if partial else value
+
+
 def _duration(value: Any) -> str:
     n = seconds(value)
     if n is None:
@@ -660,10 +670,8 @@ def build_reference_footer(
                     ("total", "Total", "累计"),
                 ):
                     bucket = history.get(key, {})
-                    n = count(bucket.get("tokens"))
-                    v = compact(n) if n is not None else "—"
-                    partial = "*" if bucket.get("partial") else ""
-                    periods.append((f"{en_label} {v}{partial}", f"{zh_label} {v}{partial}"))
+                    value = _history_tokens(bucket)
+                    periods.append((f"{en_label} {value}", f"{zh_label} {value}"))
                 children.append({"tag": "hr"})
                 children.append(
                     markdown(
@@ -673,7 +681,10 @@ def build_reference_footer(
                     )
                 )
                 history_partial = any(history.get(k, {}).get("partial") for k in ("today", "month", "total"))
-                partial_en, partial_zh = (" · * partial", " · * 不完整") if history_partial else ("", "")
+                partial_en, partial_zh = (
+                    (" · * partial; ≥ observed lower bound", " · * 不完整；≥ 已观测下限")
+                    if history_partial else ("", "")
+                )
                 children.append(
                     markdown(
                         f"<font color='grey'>Main requests · input + output · since "
@@ -685,15 +696,15 @@ def build_reference_footer(
                     )
                 )
                 if history.get("show_models") and history.get("models"):
-                    rows = [markdown("By subscription / model", "按订阅商 / 模型复盘", text_size)]
+                    rows = [markdown(
+                        "Cumulative by subscription / model · top 3", "按订阅商 / 模型累计 · 前 3 项", text_size,
+                    )]
                     for item in history["models"][:3]:
                         subscription = label(item.get("subscription"))
                         model_label = label(item.get("model"))
                         name = safe(subscription[:32]) + ("…" if len(subscription) > 32 else "")
                         model_value = safe(model_label[:48]) + ("…" if len(model_label) > 48 else "")
-                        tokens = compact(item["tokens"]) if count(item.get("tokens")) is not None else "—"
-                        if item.get("partial"):
-                            tokens += "*"
+                        tokens = _history_tokens(item)
                         total_text = markdown(tokens, tokens, text_size)
                         total_text["text_align"] = "right"
                         rows.append(
