@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-05
+
+### Added
+- Opt-in native design V2 (`streaming.layout: reference-v2`), with compact metric pairs, separate history/account folding, short resource headings and explicit tool-failure emphasis. Preserve V1 (`reference`), audited measurements and the existing single CardKit writer.
+- Omit duplicate model identity only when both requested and returned IDs are reported and equal; retain model differences, missing-result warnings, stop/error state, partial-cache bounds, route changes and compression annotations.
+- Regression coverage for all ten live phases, native ID stability, shallow containers, adverse retained-tool/account budgets, immutable input and configuration rollback. Record current-runtime-only tests and real native create/batch/close/update probes separately from client screenshots.
+
 ## [0.20.25] - 2026-10-05
 
 ### Fixed

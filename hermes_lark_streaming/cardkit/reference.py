@@ -488,10 +488,32 @@ def build_reference_prefix(
     elements = [build_tools(data, ref, interrupted=interrupted, terminal=terminal)] if ref.get("show_tools") else []
     if ref.get("resources_enabled"):
         elements.append(build_resources(ref.get("host") or {}))
+    if ref.get("design_version") == 2:
+        from .reference_v2 import compact_prefix
+
+        return compact_prefix(elements, data)
     return elements
 
 
 def build_reference_footer(
+    data: dict[str, Any],
+    *,
+    text_size: str = "notation",
+    is_error: bool = False,
+    is_aborted: bool = False,
+    details: bool = True,
+    live_status: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    elements = _build_reference_footer_v1(data, text_size=text_size, is_error=is_error,
+        is_aborted=is_aborted, details=details, live_status=live_status)
+    if data.get("reference", {}).get("design_version") == 2:
+        from .reference_v2 import compact_footer
+
+        return compact_footer(elements, data, details=details)
+    return elements
+
+
+def _build_reference_footer_v1(
     data: dict[str, Any],
     *,
     text_size: str = "notation",
@@ -769,6 +791,8 @@ def build_reference_badge(data: dict[str, Any]) -> list[dict[str, Any]]:
     name = safe(data.get("reference", {}).get("agent_name"))
     if not name:
         return []
+    if data.get("reference", {}).get("design_version") == 2:
+        name += " · V2"
     return [
         dict(
             markdown(

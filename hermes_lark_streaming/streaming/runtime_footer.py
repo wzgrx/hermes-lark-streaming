@@ -96,6 +96,7 @@ class RuntimeFooterController:
         data.update(
             presentation="reference",
             reference={
+                "design_version": getattr(self._cfg, "reference_design_version", 1),
                 "steps": steps,
                 "tools_prior": session.tool_calls_prior,
                 "done_prior": session.tools_done_prior,

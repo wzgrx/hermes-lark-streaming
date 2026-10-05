@@ -1,12 +1,16 @@
 # Hermes Lark Streaming
 
+> **0.21.0 · Native card design V2**: compact inline metric pairs, verified equal model-ID deduplication, separate nested history/account groups, short resource headings and visible tool failures. Keep V1 rollback, unknown-value semantics, single-writer delivery and existing dependencies. **1,899 tests** in the current Hermes PM runtime plus **nine unattached native API states** passed; real Gateway/desktop evidence is separate. [Design, plan and configuration](docs/REFERENCE-V2.md).
+
+![V2 structural illustration, synthetic data, not a client screenshot](docs/assets/reference-v2-structure.svg)
+
 > **0.20.25 · 2026-10-05**: complete input totals now permit floored cache-hit lower bounds even when cache coverage is partial. Add an opt-in, chat-allowlisted native account panel and `accounts` CLI: Go quota windows, DeepSeek direct balance and OpenRouter key credit limits stay separate. No inferred expiry, billing backfill or automatic account switching. [Configuration, official sources and evidence boundaries](docs/ACCOUNTS-AND-QUOTAS.md).
 
 
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.25-blue)
+![Code version](https://img.shields.io/badge/code-0.21.0-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)

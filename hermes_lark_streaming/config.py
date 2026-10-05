@@ -160,8 +160,12 @@ class Config:
     @property
     def card_layout(self) -> str:
         """Screenshot V1 layout is opt-in and requires enhanced telemetry."""
-        return ("reference" if self._streaming_sec().get("layout") == "reference"
+        return ("reference" if self._streaming_sec().get("layout") in ("reference", "reference-v2")
                 and self.footer_mode == "enhanced" else "classic")
+
+    @property
+    def reference_design_version(self) -> int:
+        return 2 if self.card_layout == "reference" and self._streaming_sec().get("layout") == "reference-v2" else 1
 
     @property
     def reference_resources_enabled(self) -> bool:
