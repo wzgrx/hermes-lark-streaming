@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-10-05
+
+### Fixed
+- Bound collapsed CPU/GPU percentages to the same one-decimal presentation as expanded host metrics. Preserve measured values, missing/invalid handling and V1; do not alter collection or ledger data.
+
+### Documentation
+- Record the separate 0.21.0 real desktop-user acceptance: two sequential terminal calls (exit 0/7), three main model requests, one confirmed card and native collapsed/expanded panels. Publish only a controlled tool-output crop; account/history captures remain private. Keep compatibility projection, short-turn and platform-scope limitations explicit.
+
 ## [0.21.0] - 2026-10-05
 
 ### Added

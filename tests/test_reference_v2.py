@@ -145,3 +145,25 @@ def test_v2_worst_retained_tool_account_and_history_card_fits_budget():
         footer_data=data,footer_mode='enhanced')
     assert inspect_card(card).safe
     assert 'red-50' in json.dumps(card)
+
+
+
+@pytest.mark.parametrize('value,expected',[
+    (2.50862,'2.5%'), (17,'17%'), (17.12345,'17.1%'), (99.96,'100%'),
+    (0,'0%'), (None,None), (-1,None), (float('nan'),None),
+    (float('inf'),None), (True,None), ('2.50862',None),
+])
+def test_v2_collapsed_resource_precision_matches_expanded_metric(value,expected):
+    data = fixture()
+    data['reference']['host']['cpu_percent'] = value
+    before = deepcopy(data)
+    resource = build_reference_prefix(data)[1]
+    titles = [resource['header']['title']['content'],
+              resource['header']['title']['i18n_content']['zh_cn']]
+    assert data == before
+    if expected is None:
+        assert all('CPU ' not in title for title in titles)
+    else:
+        assert all('CPU '+expected in title for title in titles)
+        assert expected in json.dumps(resource['elements'])
+    assert '2.50862%' not in json.dumps(resource)

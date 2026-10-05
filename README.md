@@ -1,8 +1,10 @@
 # Hermes Lark Streaming
 
-> **0.21.0 · 原生卡片 V2**：紧凑同行双列指标、请求/返回模型去重、独立折叠的本机历史与账户快照、简洁资源标题和红色工具失败提示。保持单写卡通道、未知数据、投递和 V1 回滚。当前 Hermes PM 环境 **1,899 测试**及真实未挂聊天 CardKit **9 状态**通过；新真实聊天/截图独立验收，不以示意图冒充。[设计、计划与配置](docs/REFERENCE-V2.md)。
+> **0.21.1 · 原生卡片 V2**：同行双列指标、相同模型去重、独立折叠的历史与账户快照、资源摘要和红色工具失败。修复真实截图发现的资源百分比精度不一致。V2 **0.21.0** 已完成一次真实用户聊天、两次终端 0/7、三个模型请求、单卡投递及 Windows 展开/折叠验收；证据与后续修复版本分别记录。[设计、计划与真实验收](docs/REFERENCE-V2.md)。
 
 ![V2 信息分组结构，合成数据，非客户端截图](docs/assets/reference-v2-structure.svg)
+
+![真实 V2 0.21.0 工具验收：成功一次、预期失败一次；仅受控命令局部截图](docs/assets/reference-v2-0210-real-tools.png)
 
 > **0.20.25 · 2026-10-05**：完整输入总量下的部分缓存现在显示“命中率下限”，不再隐藏已能计算的比例。新增默认关闭、聊天白名单限制的“订阅账户”折叠区和 `accounts` CLI：Go 5h/周/月额度、DeepSeek 直连余额、OpenRouter Key 限额分别展示，不冒充订阅到期或自动换号。[配置、官方来源及验收边界](docs/ACCOUNTS-AND-QUOTAS.md)。
 
@@ -11,7 +13,7 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.21.0-blue)
+![Code version](https://img.shields.io/badge/code-0.21.1-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 

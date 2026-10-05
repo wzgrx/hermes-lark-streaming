@@ -70,7 +70,8 @@ def compact_prefix(elements: list[dict[str, Any]], data: dict[str, Any]) -> list
             for key, name in (("gpu_percent", "GPU"), ("cpu_percent", "CPU")):
                 value = seconds(host.get(key))
                 if value is not None:
-                    pairs.append((f"{name} {value:g}%",) * 2)
+                    number = f"{value:.1f}".rstrip("0").rstrip(".")
+                    pairs.append((f"{name} {number}%",) * 2)
             for prefix, en, zh in (("gpu", "VRAM", "显存"), ("ram", "RAM", "内存")):
                 used, total = seconds(host.get(prefix+"_used_gib")), seconds(host.get(prefix+"_total_gib"))
                 if used is not None and total and used <= total:
