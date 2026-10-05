@@ -1,6 +1,6 @@
 # Hermes Lark Streaming
 
-> **0.20.21 · 2026-10-05**: final cards keep small code fences atomic and split large blocks into independently fenced display pieces with their language/info string retained. Chunk boundaries no longer discard blank lines. The 2400-character policy, native V1 layout and stored conversation text stay unchanged. [Scope and evidence](docs/MAINTENANCE-0221.md).
+> **0.20.22 · 2026-10-05**: total-card compaction retains a balanced wrapper and normal language/info string around code tails, keeping omission notices outside literal code. Native V1 geometry, the 28 KB/200-element policy and stored source conversations are unchanged. Local acceptance uses only the running Hermes and its selected PM dependencies; no additional Hermes compatibility environment. [Scope and evidence](docs/MAINTENANCE-0222.md).
 
 
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.22] - 2026-10-05
+
+### Fixed
+- Retain balanced display fences and ordinary language/info strings when total-card compaction cuts inside code; put the omission notice outside literal code. Apply the same tail policy to normal trimming, minimal-card reconstruction and final shrinking.
+- Bound pathological fence metadata and literal marker runs without loops. Preserve plain-text handling, newest-answer priority, source immutability and the existing 28 KB/200-element limits; no V1 layout, dependency, delivery or database change.
+- Mark local tests as a package so test-helper imports do not resolve an unrelated dependency's `tests` package. Local acceptance uses the existing running Hermes's PM-selected Python/dependencies, with isolated test data and borrowed existing test tools, not an extra Hermes snapshot. See [scope and regressions](docs/MAINTENANCE-0222.md).
+
 ## [0.20.21] - 2026-10-05
 
 ### Fixed

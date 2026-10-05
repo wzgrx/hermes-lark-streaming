@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
+
+from .cardkit.markdown import _FENCE_LINE, _markdown_regions
 
 MAX_TABLES = 5
 MAX_ELEMENTS = 200
@@ -77,6 +80,65 @@ def _text_slots(value: Any) -> list[tuple[dict[str, Any], str]]:
     return slots
 
 
+def _shorten_content(text: str, limit: int, *, markdown: bool = True) -> str:
+    """Retain a bounded tail, restoring its code wrapper when the cut is inside code.
+
+    The omission notice stays outside literal code. Closed and unfinished source
+    blocks get a balanced terminal display wrapper; retained body bytes/newlines
+    are unchanged. This is presentation compaction, not source reconstruction.
+    Pathological fence metadata is dropped if it alone exceeds the display cap.
+    """
+    if len(text) <= limit:
+        return text
+    notice = "…\n" if markdown else "… "
+    if limit <= len(notice):
+        return notice[:limit]
+    cut = len(text) - (limit - len(notice))
+    if not markdown:
+        return notice + text[cut:]
+    for start, end, code in _markdown_regions(text):
+        if not start <= cut < end:
+            continue
+        if not code:
+            break
+        block = text[start:end]
+        opening_end = block.find("\n") + 1
+        if not opening_end:
+            break
+        opening = block[:opening_end]
+        match = _FENCE_LINE.fullmatch(opening.rstrip("\r\n"))
+        assert match is not None
+        fence, info = match.groups()
+        indent = opening[:match.start(1)]
+        newline = "\r\n" if opening.endswith("\r\n") else "\n"
+        last_start = block.rfind("\n", 0, len(block.rstrip("\r\n"))) + 1
+        closing = _FENCE_LINE.fullmatch(block[last_start:].rstrip("\r\n"))
+        closed = bool(closing and closing[1][0] == fence[0]
+                      and len(closing[1]) >= len(fence) and not closing[2].strip(" \t"))
+        body_end = start + last_start if closed else end
+        body = text[max(cut, start + opening_end):body_end]
+        suffix = text[end:]
+        width = len(fence)
+        if len(notice + indent + info + newline * 3 + suffix) + width * 2 >= limit:
+            # Huge info strings/delimiters are not useful retained source code.
+            indent, info, width = "", "", 3
+        while True:
+            longest = max((len(run[0]) for run in re.finditer(re.escape(fence[0]) + "+", body)), default=0)
+            marker = fence[0] * max(width, longest + 1)
+            result = notice + indent + marker + info + newline + body
+            if not body.endswith("\n"):
+                result += newline
+            result += marker + (newline if suffix else "") + suffix
+            if len(result) <= limit:
+                return result
+            if not body:
+                return notice + suffix[-(limit - len(notice)):]
+            body = body[max(1, len(result) - limit):]
+            if body.startswith("\n") and newline == "\r\n":
+                body = body[1:]
+    return notice + text[cut:]
+
+
 def _trim_verbose_text(card: dict[str, Any], max_bytes: int) -> bool:
     changed = False
     while not _fits(card, max_bytes):
@@ -88,11 +150,9 @@ def _trim_verbose_text(card: dict[str, Any], max_bytes: int) -> bool:
         if not candidates:
             break
         length, parent, key = max(candidates, key=lambda item: item[0])
-        prefix = "… "
         target_length = max(_MIN_TEXT_CHARS, length // 2)
-        keep = max(0, target_length - len(prefix))
         original = str(parent[key])
-        parent[key] = prefix + original[-keep:] if keep else prefix.rstrip()
+        parent[key] = _shorten_content(original, target_length, markdown=parent.get("tag") in {"markdown", "lark_md"})
         changed = True
     return changed
 
@@ -176,7 +236,7 @@ def _minimal_card(card: dict[str, Any], answer: str) -> dict[str, Any]:
         "body": {"elements": [_compaction_marker()]},
     }
     if answer:
-        result["body"]["elements"].append({"tag": "markdown", "content": answer[-4096:]})
+        result["body"]["elements"].append({"tag": "markdown", "content": _shorten_content(answer, 4096)})
     if isinstance(card.get("header"), dict):
         result["header"] = copy.deepcopy(card["header"])
     return result
@@ -227,7 +287,7 @@ def compact_card(card: dict[str, Any], *, max_bytes: int = MAX_JSON_BYTES) -> di
             if len(answer) <= _MIN_TEXT_CHARS:
                 answer_elements.pop()
                 break
-            answer_elements[-1]["content"] = answer[-max(_MIN_TEXT_CHARS, len(answer) // 2) :]
+            answer_elements[-1]["content"] = _shorten_content(answer, max(_MIN_TEXT_CHARS, len(answer) // 2))
         if not _fits(result, max_bytes):
             result = {"schema": "2.0", "body": {"elements": [_compaction_marker()]}}
     return result
