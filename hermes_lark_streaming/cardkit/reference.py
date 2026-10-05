@@ -6,6 +6,7 @@ from __future__ import annotations
 import html
 import json
 import re
+from collections.abc import Iterator
 from typing import Any
 
 from ..footer.layout import column
@@ -100,17 +101,47 @@ def _duration(value: Any) -> str:
     return f"{int(n // 60)}m {int(n % 60):02d}s" if n >= 60 else f"{n:.1f}s"
 
 
+def _tool_characters(text: str, single_line: bool) -> Iterator[str]:
+    """Fold row whitespace lazily, without dropping later visible text first."""
+    if not single_line:
+        yield from text
+        return
+    seen = pending = False
+    for char in text:
+        if char.isspace():
+            pending = seen
+        else:
+            if pending:
+                yield " "
+            yield char
+            seen, pending = True, False
+
+
 def _tool_text(value: str, limit: int = 160, *, single_line: bool = False) -> str:
     # Keep complete quoted assignments/flags/JSON values visible to the
     # redactor. Cutting first can remove their closing quote and expose a
     # credential fragment in both the compact row and the expanded excerpt.
-    text = _SECRET.sub("[redacted]", redact_inline_secrets(value))[: limit * 2]
-    if single_line:
-        # Summary rows stay compact; the bounded excerpt retains line breaks.
-        text = " ".join(text.split())
-    escaped = re.sub(r"([\\`*_\[\]~])", r"\\\1", html.escape(text))
-    encoded = escaped.encode()
-    return escaped if len(encoded) <= limit else encoded[:limit].decode(errors="ignore").rstrip("\\") + "…"
+    if limit <= 0:
+        return ""
+    text = _SECRET.sub("[redacted]", redact_inline_secrets(value))
+    # Each source character emits one whole HTML/Markdown escape unit. Reserve
+    # the omission marker only when needed, and count it in the same byte cap.
+    units: list[tuple[str, int]] = []
+    size = 0
+    for char in _tool_characters(text, single_line):
+        unit = html.escape(char)
+        if char in "\\`*_[]~":
+            unit = "\\" + unit
+        cost = len(unit.encode())
+        if size + cost > limit:
+            marker = "…" if limit >= 3 else "." * limit
+            marker_cost = len(marker.encode())
+            while units and size + marker_cost > limit:
+                size -= units.pop()[1]
+            return "".join(value for value, _ in units) + marker
+        units.append((unit, cost))
+        size += cost
+    return "".join(value for value, _ in units)
 
 
 def _tool_title(step: ToolDisplayStep) -> str:

@@ -1,17 +1,17 @@
 # Hermes Lark Streaming
 
-> **0.20.22 · 2026-10-05**: total-card compaction retains a balanced wrapper and normal language/info string around code tails, keeping omission notices outside literal code. Native V1 geometry, the 28 KB/200-element policy and stored source conversations are unchanged. Local acceptance uses only the running Hermes and its selected PM dependencies; no additional Hermes compatibility environment. [Scope and evidence](docs/MAINTENANCE-0222.md).
+> **0.20.23 · 2026-10-05**: tool titles, command hints and error excerpts truncate only at whole HTML/Markdown escape units. Omission markers share the existing byte cap; single-line whitespace is folded before deciding what fits. Native V1 columns, panel order, expansion IDs and card limits are unchanged. Local acceptance uses only the running Hermes/PM. [Scope and evidence](docs/MAINTENANCE-0223.md).
 
 
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.20.16-blue)
+![Code version](https://img.shields.io/badge/code-0.20.23-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)
 
-> **Current maintained version 0.20.16**: preserve lifecycle records beyond 128 tools while bounding old completed payload retention. Cheap counters avoid unnecessary full-history rendering. V1 geometry and payload gates stay unchanged. See [scope and verification](docs/MAINTENANCE-0216.md); historical screenshots are not new acceptance evidence.
+> **Historical maintenance 0.20.16**: preserve lifecycle records beyond 128 tools while bounding old completed payload retention. Cheap counters avoid unnecessary full-history rendering. V1 geometry and payload gates stay unchanged. See [scope and verification](docs/MAINTENANCE-0216.md); historical screenshots are not new acceptance evidence.
 
 > **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 

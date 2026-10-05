@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.23] - 2026-10-05
+
+### Fixed
+- Truncate tool titles, command hints and error/excerpt text only at whole HTML entity, Markdown escape and UTF-8 character boundaries. Include the omission marker in the same byte budget rather than exceeding it by three bytes.
+- Fold single-line whitespace lazily before determining the visible prefix; do not silently discard later visible text after a preliminary character slice. Keep full-value secret redaction before presentation truncation and preserve excerpt newlines.
+- Synchronize README code badges and mark the old 0.20.16 overview as historical rather than current. Preserve V1 geometry, panel IDs, data/receipt schemas and dependencies. See [scope and regressions](docs/MAINTENANCE-0223.md).
+
 ## [0.20.22] - 2026-10-05
 
 ### Fixed

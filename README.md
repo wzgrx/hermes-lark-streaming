@@ -1,19 +1,19 @@
 # Hermes Lark Streaming
 
-> **0.20.22 · 2026-10-05**：整卡超限压缩时，保留下来的代码尾部继续使用独立闭合、保留正常语言标记的围栏，省略提示放在代码外，避免代码变成普通正文。原生 V1 布局、28 KB/200 元素策略与源会话内容不变。本轮本地验收只使用正在运行的 Hermes 及其实际 PM 依赖，不另建 Hermes 兼容环境。[本轮维护与验收边界](docs/MAINTENANCE-0222.md)。
+> **0.20.23 · 2026-10-05**：工具名称、命令提示和错误摘要按完整转义单元截断，不再露出半截 `&lt` / Markdown 转义。省略号计入原字节上限；折叠单行空白后再判断显示预算，避免丢掉后续可见命令。V1 四列、面板顺序、折叠 ID 和卡片预算不变，只使用当前 Hermes/PM 进行本地验收。[本轮维护与验收边界](docs/MAINTENANCE-0223.md)。
 
 
 **让 Hermes 的回复成为持续更新、可追溯的飞书卡片。**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.20.16-blue)
+![Code version](https://img.shields.io/badge/code-0.20.23-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.en.md) · [安装](INSTALL.md) · [V1 整卡设计与实测](docs/REFERENCE-V1.md) · [历史用量](docs/USAGE-HISTORY.md) · [计划状态](docs/FOOTER-V2-PLAN.md)
 
-> **当前代码 · 0.20.16**：长任务超过 128 步仍保留开始事件、状态与耗时；只压缩较早已完成步骤的大段输出，保留短摘要与错误原因。计数采用轻量读取，V1 四列、折叠与卡片预算不变。见[维护记录](docs/MAINTENANCE-0216.md)，旧截图保留原验收版本。
+> **历史维护 · 0.20.16**：长任务超过 128 步仍保留开始事件、状态与耗时；只压缩较早已完成步骤的大段输出，保留短摘要与错误原因。计数采用轻量读取，V1 四列、折叠与卡片预算不变。见[维护记录](docs/MAINTENANCE-0216.md)，旧截图保留原验收版本。
 
 > **0.20.4 桌面增强**：修复工具面板动态开关、缺失面板恢复、真实配置文件热更新及重试后的首响应统计；历史状态更紧凑，保留 V1 三面板与单写卡通道。代码与部署证据分别记录在 [本轮修复与验证](docs/DESKTOP-HARDENING.md)。
 
