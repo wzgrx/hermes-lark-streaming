@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.4] - 2026-10-05
+
+### Fixed
+- Scope the message account panel and read-only credential discovery to the provider observed in this turn's request telemetry. Do not infer a vendor from model names, default configuration or unused local credentials; retain all-provider discovery in the owner CLI.
+- Isolate a bounded cache per active provider to prevent concurrent sessions/fallbacks from displaying another provider's snapshot. Validate terminal identity without starting another read; allow at most 0.6 seconds for an already-owned query before freezing an explicit pending snapshot.
+- Replace multiline account dumps with three aligned quota/reset cells and separate two-column expiry/balance facts. Preserve unknowns, cash/key-credit distinctions, manual/API date sources, signed balances, failure/stale labels and independent folding.
+
+### Documentation
+- Old real reply cards remain immutable. Missing Go balance/expiry fields are visible unknowns, not zero balances or inferred billing dates. Synthetic native/client preview and new user Gateway turns have separate acceptance evidence.
+
 ## [0.21.3] - 2026-10-05
 
 ### Fixed

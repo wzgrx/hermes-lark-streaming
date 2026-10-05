@@ -1,5 +1,7 @@
 # Hermes Lark Streaming
 
+> **0.21.4 · 当前订阅商与紧凑布局**：主卡片仅展示本轮请求实际提供商，隐藏未使用的本机候选；5h/周/月配额与重置三列对齐，到期/余额双列分开。并发与切换分商缓存，缺字段明确显示未知。全厂商发现保留在诊断 CLI，不占主卡片；旧回复不重写。
+
 > **0.21.3 · 账户可靠性修复**：显式同 Key 去重、查询中换 Key 自动跟进最新身份、区分待查询/待接入/缺凭据/HTTP 失败，保留旧快照原时间并显示最近失败时间。官方退役接口明确标注；不新增后台进程或自动换号。代码/原生接口与真实聊天分别验收。
 
 > **0.21.2 · V2 账户增强**：新增 226 个目录入口、十个只读产品适配、已有凭据自动发现与去重、订阅有效期/续费/Key 到期分层、失败保留过期快照。目录≠余额全适配；未知字段不补造。本轮代码/接口与真实聊天分别验收。[任务计划、完整能力矩阵和配置](docs/ACCOUNT-V2-PLAN.md)。
@@ -17,7 +19,7 @@
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
 [![CodeQL](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/codeql.yml)
-![Code version](https://img.shields.io/badge/code-0.21.3-blue)
+![Code version](https://img.shields.io/badge/code-0.21.4-blue)
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-blue)
 [![License MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 

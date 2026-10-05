@@ -166,8 +166,9 @@ def test_runtime_account_visibility_requires_explicit_chat_allowlist(
 
     calls = []
     class Reader:
-        def request(self, settings, resolve):
-            calls.append(settings)
+        def request(self, settings, resolve, *, allow_read=True):
+            if allow_read:
+                calls.append(settings)
         def snapshot(self):
             return {"status": "pending", "accounts": []}
     monkeypatch.setattr("hermes_lark_streaming.footer.accounts.AccountsSummary", Reader)
@@ -184,7 +185,7 @@ def test_runtime_account_visibility_requires_explicit_chat_allowlist(
         state=SessionState.COMPLETED if terminal else SessionState.STREAMING,
         tool_use=SimpleNamespace(build_display_steps=lambda: []), tool_calls_prior=0,
         tools_done_prior=0, tools_failed_prior=0)
-    data = ctrl._reference_snapshot(session, {})
+    data = ctrl._reference_snapshot(session, {"provider": "opencode-go"})
     assert (data["reference"]["accounts"] is not None) is visible
     assert len(calls) == polls
 

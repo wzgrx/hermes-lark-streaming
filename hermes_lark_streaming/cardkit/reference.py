@@ -808,6 +808,10 @@ def build_reference_badge(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 def build_account_panel(value: dict[str, Any], timezone: str) -> dict[str, Any]:
     """Pure rendering of configured-account API snapshots, not turn identity."""
+    if value.get("scope") == "active_provider":
+        from .account_panel_v2 import build_current_account_panel
+
+        return build_current_account_panel(value, timezone)
     try:
         tz = ZoneInfo(timezone)
     except (ZoneInfoNotFoundError, ValueError):

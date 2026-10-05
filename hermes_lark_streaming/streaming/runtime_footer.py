@@ -37,6 +37,7 @@ class RuntimeFooterController:
     _reference_host: HostSampler | None
     _reference_history: HistorySummary | None
     _reference_accounts: AccountsSummary | None
+    _reference_accounts_by_provider: dict[str, AccountsSummary]
     _credential_scope: Callable[[], AbstractContextManager[None]]
 
     @staticmethod
@@ -85,14 +86,38 @@ class RuntimeFooterController:
         if (settings.get("enabled") is True and self._cfg.footer_enabled and self._cfg.footer_details
                 and isinstance(allowed_chats, list) and session.chat_id in allowed_chats):
             from ..config import _get_secret
-            from ..footer.accounts import AccountsSummary
+            from ..footer.accounts import (
+                AccountsSummary,
+                current_provider_settings,
+                current_provider_snapshot,
+                provider_products,
+            )
 
-            if self._reference_accounts is None:
-                self._reference_accounts = AccountsSummary()
-            if not session.state.is_terminal:
-                with self._credential_scope():
-                    self._reference_accounts.request(settings, _get_secret)
-            accounts = self._reference_accounts.snapshot()
+            provider = label(data.get("provider"))
+            if provider_products(provider):
+                # A bounded reader per provider avoids a process-wide 'latest
+                # provider' cache leaking across concurrent sessions/routes.
+                readers = getattr(self, "_reference_accounts_by_provider", None)
+                if readers is None:
+                    readers = self._reference_accounts_by_provider = {}
+                if provider not in readers and len(readers) >= 4:
+                    idle = next((key for key, reader in readers.items() if reader._task is None), None)
+                    if idle is not None:
+                        del readers[idle]
+                if provider not in readers and len(readers) < 4:
+                    readers[provider] = AccountsSummary()
+                reader = readers.get(provider)
+                if reader is not None:
+                    self._reference_accounts = reader
+                    with self._credential_scope():
+                        reader.request(current_provider_settings(settings, provider), _get_secret,
+                                       allow_read=not session.state.is_terminal)
+                    accounts = current_provider_snapshot(
+                        reader.snapshot(), provider, terminal=session.state.is_terminal,
+                    )
+                else:
+                    accounts = current_provider_snapshot({"status": "unavailable", "accounts": []}, provider,
+                                                         terminal=session.state.is_terminal)
         data.update(
             presentation="reference",
             reference={
@@ -119,8 +144,14 @@ class RuntimeFooterController:
     async def _finish_reference_snapshot(self, session: CardSession) -> None:
         if self._cfg.card_layout != "reference":
             return
-        self._reference_snapshot(session, {})
+        footer_state = getattr(session, "footer_state", None)
+        data = footer_state.snapshot() if footer_state is not None else {}
+        self._reference_snapshot(session, data)
         waits = []
+        readers = getattr(self, "_reference_accounts_by_provider", {})
+        reader = readers.get(label(data.get("provider")))
+        if reader is not None:
+            waits.append(reader.finish())
         if self._cfg.reference_resources_enabled and self._reference_host is not None:
             waits.append(self._reference_host.finish())
         if self._cfg.footer_history.get("enabled") is True and self._reference_history is not None:

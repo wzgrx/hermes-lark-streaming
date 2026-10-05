@@ -1,5 +1,7 @@
 # Hermes Lark Streaming
 
+> **0.21.4 · Current provider, compact facts**: show only the provider observed in this turn. Align quota/reset cells and separate expiry/balance facts; isolate concurrent/fallback caches and retain explicit unknowns. All-provider discovery stays in the owner CLI. Do not rewrite historical real replies.
+
 > **0.21.3 · Account reliability**: deduplicate explicit key aliases, drain the latest manually changed identity without another delta, and distinguish pending/unsupported/missing-reference/HTTP failures. Preserve last-good timestamps and label retired official endpoints. No new daemon or automatic account switching; source/native checks and real client acceptance remain separate.
 
 > **0.21.2 · V2 account expansion**: a 226-entry inventory, ten reviewed read-only products, opt-in local credential discovery/deduplication, separate plan validity/renewal/key-expiry facts, and labeled last-good snapshots. Inventory is not universal billing support; unknowns remain explicit. Source/API and real user-turn evidence are separate. [Plan, capability matrix and configuration](docs/ACCOUNT-V2-PLAN.md).
@@ -16,7 +18,7 @@
 **Streaming Feishu/Lark cards, per-turn telemetry, and persistent usage history for Hermes.**
 
 [![Tests](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml/badge.svg)](https://github.com/wzgrx/hermes-lark-streaming/actions/workflows/test.yml)
-![Code version](https://img.shields.io/badge/code-0.21.3-blue)
+![Code version](https://img.shields.io/badge/code-0.21.4-blue)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [中文](README.md) · [Install](INSTALL.md) · [V1 design and evidence](docs/REFERENCE-V1.md) · [History](docs/USAGE-HISTORY.md)

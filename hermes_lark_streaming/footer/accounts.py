@@ -12,6 +12,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -126,6 +127,34 @@ def parse_account(provider: str, value: Any) -> dict[str, Any]:
     return result
 
 
+def provider_products(provider: Any) -> tuple[str, ...]:
+    """Only reviewed billing product aliases; never infer provider from model."""
+    if not isinstance(provider, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", provider):
+        return ()
+    return ("openrouter", "openrouter-credits") if provider == "openrouter" else (provider,)
+
+
+def current_provider_settings(settings: dict[str, Any], provider: str) -> dict[str, Any]:
+    products = provider_products(provider)
+    rows = settings.get("accounts")
+    return {
+        **settings,
+        "accounts": [row for row in rows if isinstance(row, dict) and row.get("provider") in products]
+        if isinstance(rows, list) else [],
+        "_provider_products": products,
+    }
+
+
+def current_provider_snapshot(value: dict[str, Any], provider: str, *, terminal: bool = False) -> dict[str, Any]:
+    products = provider_products(provider)
+    rows = value.get("accounts")
+    return {
+        **value, "scope": "active_provider", "active_provider": provider, "terminal": terminal,
+        "accounts": [row for row in rows if isinstance(row, dict) and row.get("provider") in products]
+        if isinstance(rows, list) else [],
+    }
+
+
 def discover(
     settings: Any, resolve: Callable[[str], str], *, env_names: tuple[str, ...] | None = None, limit: int = 4
 ) -> tuple[Account, ...]:
@@ -158,6 +187,9 @@ def discover(
     # Bounded local suffix discovery; no scanning browsers/keychains/files.
     names = tuple(sorted(n for n in names if re.fullmatch(r"[A-Z][A-Z0-9_]{0,95}", n)))[:256]
     records = catalog()["products"]
+    scope = mapping(settings).get("_provider_products")
+    if isinstance(scope, tuple):
+        records = [row for row in records if row["id"] in scope]
     priority = {name: index for index, name in enumerate(_ENDPOINTS)}
     records.sort(key=lambda r: priority.get(r["id"], len(priority)))
     checked: set[str] = set()
@@ -285,8 +317,9 @@ class AccountsSummary:
         value["stale"] = value.get("status") == "snapshot" and time.monotonic() - self._at >= 300
         return value
 
-    def request(self, settings: dict[str, Any], resolve: Callable[[str], str]) -> None:
-        identity = (configured(settings), settings.get("auto_detect") is True, tuple(os.environ))
+    def request(self, settings: dict[str, Any], resolve: Callable[[str], str], *, allow_read: bool = True) -> None:
+        identity = (configured(settings), settings.get("auto_detect") is True,
+                    settings.get("_provider_products"), tuple(os.environ))
         if identity != self._spec_identity or time.monotonic() - self._spec_at >= 60:
             self._specs = discover(settings, resolve)
             self._spec_identity, self._spec_at = identity, time.monotonic()
@@ -298,7 +331,7 @@ class AccountsSummary:
             if self._task is not None:
                 # Coalesce to the latest identity; do not cancel an in-flight
                 # stdlib HTTP worker or require another token/message delta.
-                self._pending_query = (specs, keys, signature)
+                self._pending_query = (specs, keys, signature) if allow_read else None
             self._signature, self._at = signature, float("-inf")
             self._cached = {
                 "status": "pending",
@@ -314,8 +347,14 @@ class AccountsSummary:
                     for a in specs
                 ],
             }
-        if self._task is None and time.monotonic() - self._at >= 300:
+        if allow_read and self._task is None and time.monotonic() - self._at >= 300:
             self._task = asyncio.create_task(self._read(specs, keys, signature))
+
+    async def finish(self, timeout: float = 0.6) -> None:
+        """A bounded final-snapshot wait, never cancel the owned HTTP read."""
+        if self._task is not None:
+            with suppress(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(self._task), timeout=max(0.0, min(timeout, 0.6)))
 
     async def _read(self, specs: tuple[Account, ...], keys: tuple[str, ...], signature: tuple[Any, ...]) -> None:
         try:
