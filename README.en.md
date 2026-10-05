@@ -15,7 +15,7 @@
 
 > **0.20.4 desktop hardening:** fix dynamic tool panels, bounded missing-panel recovery, real-file configuration reload and first-response timing after retries. Compact history states retain the V1 native layout and single writer. Source, CI, server probe and deployment evidence are separate in [this audit](docs/DESKTOP-HARDENING.md).
 
-> **Acceptance scope:** desktop Feishu only, per the operator. Mobile is out of scope, not a release blocker. Real-turn and desktop-theme evidence for 0.20.2 keeps its original version label; it is not pixel certification of this revision. See [V1 evidence](docs/REFERENCE-V1.md) and [changelog](CHANGELOG.md).
+> **Current real acceptance · 0.20.24:** a new desktop-user request in the existing test topic completed on 2026-10-05: two terminal calls (exit 0/7), three main model requests, confirmed card delivery, and collapsed/expanded Windows inspection. Footer values were checked against the local ledger. An opaque API compatibility projection is not mistaken for client failure. See [real evidence and read-only audit tool](docs/DESKTOP-0224-ACCEPTANCE.md). Desktop only; older theme images remain historical, not pixel certification of this revision.
 
 ### V1 whole-card layout
 
