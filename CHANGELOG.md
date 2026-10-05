@@ -7,18 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+## [0.20.18] - 2026-10-05
+
+### Fixed
+- Use unreported labels for missing terminal model/context, while live cards retain pending labels. Keep known context operands without inventing the missing denominator or a percentage.
+- Frozen history snapshots no longer promise an in-place read/retry; live cards keep their real loading/retry state. Preserve the separate no-history state.
+- Keep known API-attempt/error counts even when the other field is missing. Preserve measured zero and reject boolean counts. V1 panels, grids, expansion IDs and card budgets are unchanged.
+- Close owned smoke-test entities on failure/cancellation; report uncertain attachment without probe-layer resend and return safe structured failure exits. See [smoke maintenance](docs/MAINTENANCE-0217-LIVE-ACCEPTANCE.md).
+- See [0.20.18 scope and regressions](docs/MAINTENANCE-0218.md).
+
 ## 0.20.17 — 2026-10-05
 
 - Completed V1 cards no longer leave missing tool results looking live. Normal completion, failure and stop share an honest unconfirmed state; real success/failure counts, timing and background process ownership stay unchanged.
 - Keep the collapsed tools header, rows, excerpts and footer consistent. Streaming cards still show running work; V1 geometry and native expansion state are preserved.
 - Redact complete quoted flags, assignments and JSON values before excerpt truncation, so a removed closing quote does not expose a credential fragment.
 - See [maintenance scope and evidence](docs/MAINTENANCE-0217.md). No dependency, provider, hook or ledger changes.
-
-## [Unreleased]
-
-### Fixed
-- Close owned smoke-test entities after attach/stream failure or cancellation. Preserve ambiguous send results without automatic resend and keep original errors separate from cleanup errors.
-- Return safe structured failure reports and a nonzero smoke CLI exit code. API success explicitly does not imply a Gateway model turn or client visual acceptance. See [native acceptance evidence](docs/MAINTENANCE-0217-LIVE-ACCEPTANCE.md).
 
 ## [0.20.16] - 2026-10-04
 

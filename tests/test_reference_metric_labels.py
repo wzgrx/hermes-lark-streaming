@@ -26,8 +26,8 @@ def test_partial_cache_abbreviation_never_increases_the_lower_bound(value):
 def test_unknown_fields_have_native_locale_titles_and_no_trailing_separator():
     panel = build_reference_footer({})[0]
     title = panel["header"]["title"]
-    assert title["content"] == "🪙 Model pending · Context pending"
-    assert title["i18n_content"]["zh_cn"] == "🪙 模型待返回 · 上下文待返回"
+    assert title["content"] == "🪙 Model not reported · Context not reported"
+    assert title["i18n_content"]["zh_cn"] == "🪙 模型未提供 · 上下文未提供"
     assert " · </font>" not in panel["elements"][1]["content"]
     partial = build_reference_footer({"usage_partial": True})[0]["header"]["title"]
     assert partial["content"].endswith(" · Partial")

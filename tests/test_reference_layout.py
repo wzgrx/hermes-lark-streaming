@@ -172,7 +172,7 @@ def test_unknown_cache_cost_and_identity_are_not_invented():
     panel = build_reference_footer({})[0]
     s = json.dumps(panel, ensure_ascii=False)
     assert "未提供" in s and "费用" in s and "¥" not in s and "0%" not in s
-    assert "上下文待返回" in s
+    assert "上下文未提供" in s
 
 
 def test_raw_detail_redacts_credentials_html_and_does_not_duplicate_title_time():

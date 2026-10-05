@@ -462,13 +462,17 @@ def build_reference_footer(
     model = label(data.get("model"))
     used, maximum = count(data.get("context_used")), count(data.get("context_max"))
     maximum_label = f"{maximum / 1_000_000:.1f}M" if maximum and maximum % 1_000_000 == 0 else compact(maximum or 0)
-    context = (
-        f"{compact(used)}/{maximum_label} ({used / maximum:.0%})"
-        if used is not None and maximum
-        else ""
-    )
-    title = f"🪙 {model or 'Model pending'} · {context or 'Context pending'}"
-    title_zh = f"🪙 {model or '模型待返回'} · {context or '上下文待返回'}"
+    context = ""
+    if used is not None or maximum:
+        # Missing one operand must not erase the other or invent a percentage.
+        context = f"{compact(used) if used is not None else '—'}/{maximum_label if maximum else '—'}"
+        if used is not None and maximum:
+            context += f" ({used / maximum:.0%})"
+    live = live_status is not None
+    unknown_model = ("Model pending", "模型待返回") if live else ("Model not reported", "模型未提供")
+    unknown_context = ("Context pending", "上下文待返回") if live else ("Context not reported", "上下文未提供")
+    title = f"🪙 {model or unknown_model[0]} · {context or unknown_context[0]}"
+    title_zh = f"🪙 {model or unknown_model[1]} · {context or unknown_context[1]}"
     if data.get("usage_partial"):
         title += " · Partial"
         title_zh += " · 不完整"
@@ -511,8 +515,13 @@ def build_reference_footer(
         hit = f"{cached / inp:.1%}" if inp and not data.get("usage_partial") and not cache_partial else "—"
         cache = f"{'≥' if cache_partial else ''}{compact(cached, lower_bound=cache_partial)} / {hit}"
     requests, errors = count(data.get("api_calls")), count(data.get("retries"))
-    attempts = f"{requests} / {errors}" if requests is not None and errors is not None else ""
-    attempts_zh = f"{requests} 次 / {errors} 次" if attempts else ""
+    attempts = attempts_zh = ""
+    if requests is not None or errors is not None:
+        attempts = f"{requests if requests is not None else '—'} / {errors if errors is not None else '—'}"
+        attempts_zh = (
+            f"{str(requests) + ' 次' if requests is not None else '—'} / "
+            f"{str(errors) + ' 次' if errors is not None else '—'}"
+        )
     if live_status is None and failures is not None:
         succeeded = count(ref.get("succeeded_total"))
         if succeeded is None:
@@ -595,6 +604,16 @@ def build_reference_footer(
                     "unavailable": ("History read failed or timed out; retrying later", "历史读取失败或超时，稍后重试"),
                     "no_history": ("No recorded main requests yet", "尚无已记录的主请求"),
                 }[history_status]
+                if not live and history_status in {"pending", "unavailable"}:
+                    # Terminal cards have no refresh timer. A background read
+                    # finishing later does not update this frozen snapshot.
+                    en_status, zh_status = (
+                        ("History snapshot not ready; a later message can retry",
+                         "本轮历史快照尚未就绪；后续消息可重试")
+                        if history_status == "pending" else
+                        ("History snapshot read failed or timed out; a later message can retry",
+                         "本轮历史快照读取失败或超时；后续消息可重试")
+                    )
                 children.append(markdown(f"◷ {en_status}", f"◷ {zh_status}", text_size))
             if history_status not in {"pending", "unavailable", "no_history"}:
                 periods = []

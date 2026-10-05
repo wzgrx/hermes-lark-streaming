@@ -281,8 +281,11 @@ def test_first_response_uses_earliest_observed_chunk_not_callback_order():
     assert state.snapshot()["first_response_attempt"] == 2
 
 
-@pytest.mark.parametrize("status, text", [("pending", "正在读取本机历史"), ("unavailable", "历史读取失败或超时"),
-                                         ("no_history", "尚无已记录的主请求")])
+@pytest.mark.parametrize("status, text", [
+    ("pending", "本轮历史快照尚未就绪"),
+    ("unavailable", "本轮历史快照读取失败或超时"),
+    ("no_history", "尚无已记录的主请求"),
+])
 def test_history_statuses_are_distinct(status, text):
     rendered = json.dumps(build_reference_footer({"reference": {"history": {"status": status}}}), ensure_ascii=False)
     assert text in rendered
