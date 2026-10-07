@@ -1,0 +1,471 @@
+[
+  {
+    "name": "actual",
+    "aliases": [
+      "actual-computer",
+      "actualcomputer",
+      "aci"
+    ],
+    "display_name": "Actual Computer",
+    "api_mode": "chat_completions",
+    "source": "plugins/model-providers/actual/__init__.py"
+  },
+  {
+    "name": "ai-gateway",
+    "aliases": [
+      "vercel",
+      "vercel-ai-gateway",
+      "ai_gateway",
+      "aigateway"
+    ],
+    "base_url": "https://ai-gateway.vercel.sh/v1",
+    "source": "plugins/model-providers/ai-gateway/__init__.py"
+  },
+  {
+    "name": "alibaba",
+    "aliases": [
+      "dashscope",
+      "alibaba-cloud",
+      "qwen-dashscope",
+      "aliyun"
+    ],
+    "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    "source": "plugins/model-providers/alibaba/__init__.py"
+  },
+  {
+    "name": "alibaba-cn",
+    "aliases": [
+      "dashscope-cn",
+      "alibaba-cloud-cn"
+    ],
+    "display_name": "Alibaba Cloud DashScope (China)",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "source": "plugins/model-providers/alibaba/__init__.py"
+  },
+  {
+    "name": "alibaba-token-plan",
+    "aliases": [
+      "dashscope-token-plan"
+    ],
+    "display_name": "Alibaba Cloud (Token Plan)",
+    "base_url": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+    "source": "plugins/model-providers/alibaba/__init__.py"
+  },
+  {
+    "name": "alibaba-token-plan-cn",
+    "aliases": [
+      "dashscope-token-plan-cn"
+    ],
+    "display_name": "Alibaba Cloud (Token Plan, China)",
+    "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+    "source": "plugins/model-providers/alibaba/__init__.py"
+  },
+  {
+    "name": "alibaba-coding-plan",
+    "aliases": [
+      "alibaba_coding",
+      "alibaba-coding",
+      "dashscope-coding"
+    ],
+    "display_name": "Alibaba Cloud (Coding Plan)",
+    "base_url": "https://coding-intl.dashscope.aliyuncs.com/v1",
+    "source": "plugins/model-providers/alibaba-coding-plan/__init__.py"
+  },
+  {
+    "name": "alibaba-coding-plan-cn",
+    "aliases": [
+      "alibaba-coding-cn",
+      "dashscope-coding-cn"
+    ],
+    "display_name": "Alibaba Cloud (Coding Plan, China)",
+    "base_url": "https://coding.dashscope.aliyuncs.com/v1",
+    "source": "plugins/model-providers/alibaba-coding-plan/__init__.py"
+  },
+  {
+    "name": "anthropic",
+    "aliases": [
+      "claude",
+      "claude-oauth",
+      "claude-code"
+    ],
+    "api_mode": "anthropic_messages",
+    "base_url": "https://api.anthropic.com",
+    "source": "plugins/model-providers/anthropic/__init__.py"
+  },
+  {
+    "name": "arcee",
+    "aliases": [
+      "arcee-ai",
+      "arceeai"
+    ],
+    "base_url": "https://api.arcee.ai/api/v1",
+    "source": "plugins/model-providers/arcee/__init__.py"
+  },
+  {
+    "name": "azure-foundry",
+    "aliases": [
+      "azure",
+      "azure-ai-foundry",
+      "azure-ai"
+    ],
+    "display_name": "Azure Foundry",
+    "base_url": "",
+    "source": "plugins/model-providers/azure-foundry/__init__.py"
+  },
+  {
+    "name": "bedrock",
+    "aliases": [
+      "aws",
+      "aws-bedrock",
+      "amazon-bedrock",
+      "amazon"
+    ],
+    "api_mode": "bedrock_converse",
+    "base_url": "https://bedrock-runtime.us-east-1.amazonaws.com",
+    "source": "plugins/model-providers/bedrock/__init__.py"
+  },
+  {
+    "name": "commandcode",
+    "aliases": [
+      "commandcode-chat"
+    ],
+    "api_mode": "chat_completions",
+    "display_name": "CommandCode",
+    "source": "plugins/model-providers/commandcode/__init__.py"
+  },
+  {
+    "name": "commandcode-anthropic",
+    "aliases": [
+      "commandcode-claude"
+    ],
+    "api_mode": "anthropic_messages",
+    "display_name": "CommandCode (Anthropic)",
+    "source": "plugins/model-providers/commandcode/__init__.py"
+  },
+  {
+    "name": "copilot",
+    "aliases": [
+      "github-copilot",
+      "github-models",
+      "github-model",
+      "github"
+    ],
+    "base_url": "https://api.githubcopilot.com",
+    "source": "plugins/model-providers/copilot/__init__.py"
+  },
+  {
+    "name": "copilot-acp",
+    "aliases": [
+      "github-copilot-acp",
+      "copilot-acp-agent"
+    ],
+    "api_mode": "chat_completions",
+    "base_url": "acp://copilot",
+    "source": "plugins/model-providers/copilot-acp/__init__.py"
+  },
+  {
+    "name": "custom",
+    "aliases": [
+      "ollama",
+      "local",
+      "vllm",
+      "llamacpp",
+      "llama.cpp",
+      "llama-cpp"
+    ],
+    "base_url": "",
+    "source": "plugins/model-providers/custom/__init__.py"
+  },
+  {
+    "name": "deepinfra",
+    "aliases": [
+      "deep-infra",
+      "deepinfra-ai"
+    ],
+    "display_name": "DeepInfra",
+    "base_url": "https://api.deepinfra.com/v1/openai",
+    "source": "plugins/model-providers/deepinfra/__init__.py"
+  },
+  {
+    "name": "deepseek",
+    "aliases": [
+      "deepseek-chat",
+      "deep-seek"
+    ],
+    "display_name": "DeepSeek",
+    "base_url": "https://api.deepseek.com/v1",
+    "source": "plugins/model-providers/deepseek/__init__.py"
+  },
+  {
+    "name": "fireworks",
+    "aliases": [
+      "fireworks-ai",
+      "fw"
+    ],
+    "display_name": "Fireworks AI",
+    "base_url": "https://api.fireworks.ai/inference/v1",
+    "source": "plugins/model-providers/fireworks/__init__.py"
+  },
+  {
+    "name": "gemini",
+    "aliases": [
+      "google",
+      "google-gemini",
+      "google-ai-studio"
+    ],
+    "api_mode": "chat_completions",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta",
+    "source": "plugins/model-providers/gemini/__init__.py"
+  },
+  {
+    "name": "gmi",
+    "aliases": [
+      "gmi-cloud",
+      "gmicloud"
+    ],
+    "display_name": "GMI Cloud",
+    "base_url": "https://api.gmi-serving.com/v1",
+    "source": "plugins/model-providers/gmi/__init__.py"
+  },
+  {
+    "name": "huggingface",
+    "aliases": [
+      "hf",
+      "hugging-face",
+      "huggingface-hub"
+    ],
+    "display_name": "HuggingFace",
+    "base_url": "https://router.huggingface.co/v1",
+    "source": "plugins/model-providers/huggingface/__init__.py"
+  },
+  {
+    "name": "kilocode",
+    "aliases": [
+      "kilo-code",
+      "kilo",
+      "kilo-gateway"
+    ],
+    "base_url": "https://api.kilo.ai/api/gateway",
+    "source": "plugins/model-providers/kilocode/__init__.py"
+  },
+  {
+    "name": "meta-ai",
+    "aliases": [
+      "meta",
+      "muse",
+      "muse-spark",
+      "model-api",
+      "msl"
+    ],
+    "display_name": "Meta Model API",
+    "api_mode": "codex_responses",
+    "source": "plugins/model-providers/meta-ai/__init__.py"
+  },
+  {
+    "name": "minimax",
+    "aliases": [
+      "mini-max"
+    ],
+    "api_mode": "anthropic_messages",
+    "base_url": "https://api.minimax.io/anthropic",
+    "source": "plugins/model-providers/minimax/__init__.py"
+  },
+  {
+    "name": "minimax-cn",
+    "aliases": [
+      "minimax-china",
+      "minimax_cn"
+    ],
+    "api_mode": "anthropic_messages",
+    "base_url": "https://api.minimaxi.com/anthropic",
+    "source": "plugins/model-providers/minimax/__init__.py"
+  },
+  {
+    "name": "minimax-oauth",
+    "aliases": [
+      "minimax_oauth",
+      "minimax-portal",
+      "minimax-global",
+      "minimax-oauth-io"
+    ],
+    "api_mode": "anthropic_messages",
+    "display_name": "MiniMax (OAuth)",
+    "base_url": "https://api.minimax.io/anthropic",
+    "source": "plugins/model-providers/minimax/__init__.py"
+  },
+  {
+    "name": "nebius-token-factory",
+    "aliases": [
+      "nebius",
+      "nebius-tokenfactory",
+      "nebius-tf",
+      "token-factory",
+      "tokenfactory"
+    ],
+    "display_name": "Nebius Token Factory",
+    "base_url": "https://api.tokenfactory.nebius.com/v1",
+    "source": "plugins/model-providers/nebius-token-factory/__init__.py"
+  },
+  {
+    "name": "nous",
+    "aliases": [
+      "nous-portal",
+      "nousresearch"
+    ],
+    "display_name": "Nous Research",
+    "base_url": "https://inference-api.nousresearch.com/v1",
+    "source": "plugins/model-providers/nous/__init__.py"
+  },
+  {
+    "name": "novita",
+    "aliases": [
+      "novita-ai",
+      "novitaai"
+    ],
+    "display_name": "NovitaAI",
+    "base_url": "https://api.novita.ai/openai/v1",
+    "source": "plugins/model-providers/novita/__init__.py"
+  },
+  {
+    "name": "nvidia",
+    "aliases": [
+      "nvidia-nim",
+      "nim",
+      "build-nvidia",
+      "nemotron"
+    ],
+    "display_name": "NVIDIA NIM",
+    "base_url": "https://integrate.api.nvidia.com/v1",
+    "source": "plugins/model-providers/nvidia/__init__.py"
+  },
+  {
+    "name": "ollama-cloud",
+    "aliases": [
+      "ollama_cloud"
+    ],
+    "base_url": "https://ollama.com/v1",
+    "source": "plugins/model-providers/ollama-cloud/__init__.py"
+  },
+  {
+    "name": "openai-codex",
+    "aliases": [
+      "codex",
+      "openai_codex"
+    ],
+    "api_mode": "codex_responses",
+    "base_url": "https://chatgpt.com/backend-api/codex",
+    "source": "plugins/model-providers/openai-codex/__init__.py"
+  },
+  {
+    "name": "opencode-zen",
+    "aliases": [
+      "opencode",
+      "opencode_zen",
+      "zen"
+    ],
+    "base_url": "https://opencode.ai/zen/v1",
+    "source": "plugins/model-providers/opencode-zen/__init__.py"
+  },
+  {
+    "name": "opencode-go",
+    "aliases": [
+      "opencode_go",
+      "go",
+      "opencode-go-sub"
+    ],
+    "base_url": "https://opencode.ai/zen/go/v1",
+    "source": "plugins/model-providers/opencode-zen/__init__.py"
+  },
+  {
+    "name": "openrouter",
+    "aliases": [
+      "or"
+    ],
+    "display_name": "OpenRouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "source": "plugins/model-providers/openrouter/__init__.py"
+  },
+  {
+    "name": "qwen-oauth",
+    "aliases": [
+      "qwen",
+      "qwen-portal",
+      "qwen-cli"
+    ],
+    "base_url": "https://portal.qwen.ai/v1",
+    "source": "plugins/model-providers/qwen-oauth/__init__.py"
+  },
+  {
+    "name": "router",
+    "aliases": [
+      "ramp-router",
+      "ramp",
+      "router.com"
+    ],
+    "api_mode": "codex_responses",
+    "display_name": "Ramp Router",
+    "source": "plugins/model-providers/router/__init__.py"
+  },
+  {
+    "name": "stepfun",
+    "aliases": [
+      "step",
+      "stepfun-coding-plan"
+    ],
+    "base_url": "https://api.stepfun.ai/step_plan/v1",
+    "source": "plugins/model-providers/stepfun/__init__.py"
+  },
+  {
+    "name": "upstage",
+    "aliases": [
+      "solar"
+    ],
+    "display_name": "Upstage Solar",
+    "base_url": "https://api.upstage.ai/v1",
+    "source": "plugins/model-providers/upstage/__init__.py"
+  },
+  {
+    "name": "vertex",
+    "aliases": [
+      "google-vertex",
+      "vertex-ai",
+      "gcp-vertex",
+      "vertexai"
+    ],
+    "api_mode": "chat_completions",
+    "base_url": "https://aiplatform.googleapis.com",
+    "source": "plugins/model-providers/vertex/__init__.py"
+  },
+  {
+    "name": "xai",
+    "aliases": [
+      "grok",
+      "x-ai",
+      "x.ai"
+    ],
+    "api_mode": "codex_responses",
+    "base_url": "https://api.x.ai/v1",
+    "source": "plugins/model-providers/xai/__init__.py"
+  },
+  {
+    "name": "xiaomi",
+    "aliases": [
+      "mimo",
+      "xiaomi-mimo"
+    ],
+    "base_url": "https://api.xiaomimimo.com/v1",
+    "source": "plugins/model-providers/xiaomi/__init__.py"
+  },
+  {
+    "name": "zai",
+    "aliases": [
+      "glm",
+      "z-ai",
+      "z.ai",
+      "zhipu"
+    ],
+    "display_name": "Z.AI (GLM)",
+    "base_url": "https://api.z.ai/api/paas/v4",
+    "source": "plugins/model-providers/zai/__init__.py"
+  }
+]

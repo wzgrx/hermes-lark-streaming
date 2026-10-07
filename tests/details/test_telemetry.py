@@ -13,7 +13,7 @@ from hermes_lark_streaming.card.model import Footer
 from hermes_lark_streaming.details.reasoning import requested_reasoning
 from hermes_lark_streaming.details.telemetry import TurnTelemetry
 
-DATA = Path(__file__).parents[2] / "docs/data"
+DATA = Path(__file__).parents[1] / "fixtures"
 
 
 def event(provider="opencode-go", **extra):
