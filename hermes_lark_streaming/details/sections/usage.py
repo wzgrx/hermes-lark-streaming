@@ -10,7 +10,7 @@ from typing import Any
 from ...card.model import Metric, Section
 from ..usage import cache_ratio
 from ..values import count, label, mapping, seconds
-from .fmt import UNKNOWN, compact, number, percent, ratio_of
+from .fmt import UNKNOWN, compact, number, percent
 
 _HISTORY_NOTES = {
     "pending": "正在读取本机历史",
@@ -25,43 +25,29 @@ def _seconds(value: Any, digits: int) -> str:
 
 
 def _turn_metrics(data: Mapping[str, Any]) -> tuple[Metric, ...]:
+    """The few turn figures worth a second look; model, context and wall time are already in the footer and status."""
     partial_cache = bool(data.get("cache_read_partial"))
     ratio, floor = cache_ratio(dict(data))
-    used, maximum = count(data.get("context_used")), count(data.get("context_max"))
     calls, errors = count(data.get("api_calls")), count(data.get("retries"))
-    attempts = UNKNOWN if calls is None else f"{calls}" + (f" · 错误 {errors}" if errors else "")
-    reasoning = label(data.get("reasoning"))
-    if not reasoning and data.get("reasoning_missing_reason") == "request_truncated":
-        reasoning_value, reasoning_hint = UNKNOWN, "请求字段已裁剪"
-    else:
-        reasoning_value, reasoning_hint = (reasoning, "请求值") if reasoning else (UNKNOWN, "")
-    provider = label(data.get("provider"))
-    return (
-        Metric("总耗时", _seconds(data.get("duration"), 1), label_en="Wall time"),
-        Metric("首响应", _seconds(data.get("first_response"), 2), label_en="First response"),
+    metrics = [
         Metric("输入（含缓存）", number(count(data.get("input_tokens"))), label_en="Input incl. cache"),
         Metric("输出", number(count(data.get("output_tokens"))), label_en="Output"),
-        Metric(
-            "缓存读取（部分）" if partial_cache else "缓存读取",
-            number(count(data.get("cache_read_tokens")), lower_bound=partial_cache),
-            label_en="Cache read",
-        ),
         Metric(
             "命中率下限" if floor else "命中率",
             percent(ratio, floor=floor),
             ratio=ratio,
             label_en="Cache hit lower bound" if floor else "Cache hit",
         ),
-        Metric(
-            "上下文（末次）",
-            f"{compact(used)} / {compact(maximum)}" if used is not None and maximum else UNKNOWN,
-            ratio=ratio_of(used, maximum) if maximum else None,
-            label_en="Context",
-        ),
-        Metric("请求尝试", attempts, label_en="Attempts"),
-        Metric("服务商", provider or UNKNOWN, hint=label(data.get("api_mode")), label_en="Provider"),
-        Metric("思考强度", reasoning_value, hint=reasoning_hint, label_en="Reasoning"),
-    )
+        Metric("首响应", _seconds(data.get("first_response"), 2), label_en="First response"),
+    ]
+    if partial_cache:
+        metrics.append(Metric("缓存读取（部分）", number(count(data.get("cache_read_tokens")), lower_bound=True)))
+    if calls is not None and (calls > 1 or errors):
+        metrics.append(Metric("请求", f"{calls}" + (f" · 错误 {errors}" if errors else ""), label_en="Requests"))
+    reasoning = label(data.get("reasoning"))
+    if reasoning:
+        metrics.append(Metric("思考强度", reasoning, label_en="Reasoning"))
+    return tuple(metrics)
 
 
 def _history_tokens(bucket: Mapping[str, Any]) -> str:
@@ -93,7 +79,7 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
             row = mapping(item)
             name = label(row.get("model"))[:48] or UNKNOWN
             metrics.append(Metric(name, _history_tokens(row), hint=label(row.get("subscription"))[:32] + " · 累计"))
-    notes = [f"累计为主请求 输入＋输出 · {label(history.get('timezone')) or 'UTC'} · 本机账本，不等于服务商账单"]
+    notes: list[str] = []
     if any(mapping(history.get(k)).get("partial") for k in ("today", "month", "total")):
         notes.append("* 部分请求缺少用量，≥ 表示已观测下限")
     return tuple(metrics), notes
@@ -118,7 +104,6 @@ def usage_section(
         notes.append("服务商路径 " + " → ".join(label(r) for r in routes[:12]))
     if label(data.get("last_error_type")):
         notes.append(f"最近 API 错误类型 {label(data.get('last_error_type'))}")
-    notes.append("主请求累计；费用未提供")
     if history is not None:
         rows, history_notes = _history(history, terminal=terminal, show_models=show_models)
         metrics.extend(rows)

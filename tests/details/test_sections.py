@@ -63,11 +63,12 @@ def test_turn_metrics_from_telemetry():
     section = usage_section(state.snapshot(), None)
     assert (section.key, section.title, section.title_en, section.layout) == ("usage", "用量", "Usage", "grid")
     m = by_label(section)
-    assert m["输入（含缓存）"].value == "100" and m["输出"].value == "7" and m["缓存读取"].value == "70"
+    assert m["输入（含缓存）"].value == "100" and m["输出"].value == "7"
     assert m["命中率"].value == "70.0%" and m["命中率"].ratio == pytest.approx(0.7)
-    assert m["上下文（末次）"].value == "100 / 1k" and m["上下文（末次）"].ratio == pytest.approx(0.1)
-    assert m["思考强度"].value == "max" and m["服务商"].value == "opencode-go"
-    assert "统计不完整" not in section.notes and "主请求累计；费用未提供" in section.notes
+    assert m["思考强度"].value == "max"
+    # model, context, provider and wall time live in the footer and status line, not here
+    assert not {"上下文（末次）", "服务商", "总耗时", "缓存读取", "请求"} & set(m)
+    assert "统计不完整" not in section.notes
 
 
 def test_partial_turn_shows_floor_and_partial_note():
@@ -83,7 +84,7 @@ def test_partial_turn_shows_floor_and_partial_note():
     assert m["命中率"].value == "未知" and m["命中率"].ratio is None  # count known, rate not
     assert m["缓存读取（部分）"].value == "≥70"
     assert "统计不完整" in section.notes and "服务商路径 opencode-go → other" in section.notes
-    assert m["请求尝试"].value == "2 · 错误 1"
+    assert m["请求"].value == "2 · 错误 1"
 
 
 def test_cache_hit_lower_bound_is_labelled_and_never_rounded_up():
@@ -117,7 +118,6 @@ def test_history_rows_partial_models_and_status_notes():
     assert m["总累计"].hint == "自 2026-09-01 起"
     models = [x for x in section.metrics if x.hint == "Go plan · 累计"]
     assert len(models) == 3 and models[0].label == "m" * 48  # top three, bounded
-    assert any("Asia/Shanghai" in n and "不等于服务商账单" in n for n in section.notes)
     assert any("下限" in n for n in section.notes)
     assert not [x for x in usage_section({}, history, show_models=False).metrics if x.hint == "Go plan · 累计"]
     assert "尚无已记录的主请求" in usage_section({}, {"status": "no_history"}).notes
@@ -155,7 +155,7 @@ def test_resources_have_ratios_where_meaningful_and_unknown_elsewhere():
     assert m["显存"].value == "2.0 GiB / 8.0 GiB" and m["显存"].ratio == 0.25
     assert m["内存"].ratio == 0.5 and m["磁盘"].ratio == 0.25 and m["GPU"].ratio == pytest.approx(0.4)
     assert m["GPU 温度"].value == "61°C" and m["GPU 温度"].ratio is None
-    assert any("WSL" in n for n in section.notes) and any("2026-10-20" in n for n in section.notes)
+    assert "WSL" in section.title and section.notes == ()  # sampled and complete: nothing to explain
 
 
 @pytest.mark.parametrize("host", [None, {}, {"unavailable": True}, {"gpu_percent": True, "ram_total_gib": 0}])
@@ -181,10 +181,10 @@ def test_quota_windows_are_bars_with_value_ratio_and_reset_hint():
     assert (m["5小时"].value, m["5小时"].ratio, m["5小时"].hint) == ("38%", pytest.approx(0.38), "2h14m 后重置")
     assert m["每周"].value == "0%" and m["每月"].value == "47%"
     assert "siliconflow" not in text(section).lower() and "Never show" not in text(section)
-    assert "进度条表示已用额度" in section.notes and "账户：Go Primary" in section.notes
+    assert "账户：Go Primary" in section.notes
     assert "订阅到期：未知（API 未返回）" in section.notes
     assert "API 快照 · 10-05 16:46" in section.notes
-    assert any("重置≠到期" in n and "Asia/Shanghai" in n for n in section.notes)
+    assert section.notes[-1] == "Asia/Shanghai"  # reset clocks are in this zone
 
 
 def test_far_resets_show_the_account_clock_in_the_configured_timezone():

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 import tempfile
@@ -32,8 +33,6 @@ def load_env(home: Path) -> None:
 
 def report(card: dict) -> None:
     """Print one line per top-level element of the final card, so a run can be eyeballed."""
-    import json
-
     from hermes_lark_streaming.card.render import count_elements
 
     size = len(json.dumps(card, ensure_ascii=False).encode())
@@ -44,7 +43,7 @@ def report(card: dict) -> None:
         print("  ", element.get("element_id") or element.get("tag"), "->", str(text)[:110])
 
 
-async def main(chat_id: str, home: Path) -> int:
+async def main(chat_id: str, home: Path, *, ok_only: bool = False) -> int:
     load_env(home)
     from hermes_lark_streaming.session.controller import Controller
     from hermes_lark_streaming.transport import DeliveryLedger
@@ -92,9 +91,11 @@ async def main(chat_id: str, home: Path) -> int:
     for chunk in chunks:
         ctl.on_answer(message_id=mid, text=chunk)
         await asyncio.sleep(1.0)
-    ctl.on_tool_update(message_id=mid, tool_name="terminal", status="started", detail="sh -c 'exit 7'")
+    code = 0 if ok_only else 7
+    ctl.on_tool_update(message_id=mid, tool_name="terminal", status="started", detail=f"sh -c 'exit {code}'")
     await asyncio.sleep(0.8)
-    failed = '{"exit_code": 7, "output": "V1_EXPECTED_FAILURE\\nline two"}'
+    output = "" if ok_only else "V1_EXPECTED_FAILURE\\nline two"
+    failed = json.dumps({"exit_code": code, "output": output})
     ctl.on_tool_update(message_id=mid, tool_name="terminal", status="completed", result=failed)
     usage = {"prompt_tokens": 70300, "output_tokens": 1200, "cache_read_tokens": 58000}
     done = {**payload, "ended_at": time.time(), "first_chunk_at": now + 0.4, "context_length": 1_000_000,
@@ -115,6 +116,7 @@ async def main(chat_id: str, home: Path) -> int:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("chat_id")
+    parser.add_argument("--ok", action="store_true", help="make every tool succeed (the common case)")
     parser.add_argument("--hermes-home", type=Path, default=Path.home() / ".hermes")
     args = parser.parse_args()
-    sys.exit(asyncio.run(main(args.chat_id, args.hermes_home)))
+    sys.exit(asyncio.run(main(args.chat_id, args.hermes_home, ok_only=args.ok)))

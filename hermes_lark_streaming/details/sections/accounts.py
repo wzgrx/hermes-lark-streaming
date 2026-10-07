@@ -225,16 +225,14 @@ def accounts_section(
         notes.append(
             ("本轮快照未就绪；后续消息刷新" if terminal else "快照未就绪") if pending else "当前订阅商暂无配置账户快照"
         )
-    if any(_window_names(str(r.get("provider")), _windows(r)) for r in rows):
-        notes.append("进度条表示已用额度")
     for row in rows:
         row_metrics, row_notes = _row(row, tz, clock, terminal=terminal, multi=len(rows) > 1)
         metrics += row_metrics
         notes += row_notes
     if snapshot.get("stale"):
         notes.append("上次快照 · 待刷新")
-    scope = "仅当前订阅商的配置账户" if snapshot.get("scope") == "active_provider" else "配置账户概览，不推断本轮账户"
-    notes.append(f"{scope}；重置≠到期 · {tz.key}")
+    if metrics:
+        notes.append(tz.key)  # reset clocks are shown in this zone
     title = _TITLES.get(provider, provider)
     return Section(
         "accounts",

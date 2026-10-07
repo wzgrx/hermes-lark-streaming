@@ -1,6 +1,5 @@
 """The 资源 section: GPU / VRAM / RAM / disk of the machine running Hermes."""
 
-# ruff: noqa: RUF001
 
 from __future__ import annotations
 
@@ -10,8 +9,6 @@ from typing import Any
 from ...card.model import Metric, Section
 from ..values import label
 from .fmt import UNKNOWN, gib, percent_value, ratio_of
-
-_SCOPES = {"WSL": "WSL（Linux 子系统视角）", "Linux": "Linux 主机", "Host": "本机"}
 
 
 def _percent(data: Mapping[str, Any], key: str, name: str, en: str) -> Metric:
@@ -42,11 +39,9 @@ def resources_section(host: Mapping[str, Any] | None) -> Section:
         Metric("GPU 温度", temp_text, label_en="GPU temp"),
     )
     notes: list[str] = []
-    scope = label(data.get("scope"))
-    if scope:
-        notes.append(f"范围：{_SCOPES.get(scope, scope)}")
     sampled = label(data.get("sampled_at"))
-    notes.append(f"采样于 {sampled}" if sampled else "资源采样未就绪；缺失项显示为未知")
-    if data.get("unavailable") and sampled:
-        notes.append("部分资源不可读（如无 NVIDIA 驱动）")
-    return Section("resources", "资源", metrics, tuple(notes), title_en="Resources")
+    if not sampled:
+        notes.append("资源采样未就绪")  # unreadable cells already say 未知 themselves
+    scope = label(data.get("scope"))
+    title = f"资源 · {scope}" if scope else "资源"
+    return Section("resources", title, metrics, tuple(notes), title_en=f"Resources · {scope}" if scope else "Resources")

@@ -19,3 +19,4 @@ python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 - 进入卡片的外部文本先 `redact` 再 `esc`;缺失数据显示“未知”,不补造。
 - 面向用户的字符串用中文,双语文案用 `Bi(zh, en)`。
 - 提交信息正文用无序列表。
+- 真实验收:`scripts/live_acceptance.py <chat_id>` 走一轮模拟对话(`--ok` 为全部成功),再用 `scripts/windows/feishu_shot.ps1` 从 WSL 截取飞书桌面端,看卡片的真实渲染。

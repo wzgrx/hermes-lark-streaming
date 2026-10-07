@@ -79,6 +79,13 @@ def esc(value: str) -> str:
     return out
 
 
+def code(value: str) -> str:
+    """Inline code span; text with markup characters stays escaped plain text, since entities would show literally."""
+    if not value or any(ch in value for ch in "<>&`"):
+        return esc(value.replace("`", "'"))
+    return f"`{value}`"
+
+
 def clip(value: str, limit: int, *, single_line: bool = True) -> str:
     """Redact, fold whitespace, and cut at ``limit`` characters (escaping happens afterwards)."""
     text = redact(value)
@@ -158,7 +165,7 @@ def status_text(view: TurnView) -> Bi:
 
 
 def status_element(view: TurnView, opts: RenderOptions) -> dict[str, Any]:
-    return _markdown(status_text(view), "notation", element_id=STATUS_ID)
+    return _markdown(status_text(view), opts.text_size, element_id=STATUS_ID)
 
 
 # --------------------------------------------------------------------------- process
@@ -174,7 +181,7 @@ _STEP_ICON = {
 def _step_line(step: Step) -> str:
     parts = [_STEP_ICON[step.status], f"**{esc(clip(step.name, 40))}**"]
     if step.summary:
-        parts.append("· " + esc(clip(step.summary, _STEP_SUMMARY_CHARS)))
+        parts.append("· " + code(clip(step.summary, _STEP_SUMMARY_CHARS)))
     timing = step_time(step.elapsed_ms)
     if timing:
         parts.append(grey(timing))
@@ -375,11 +382,13 @@ def details_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | Non
     for index, section in enumerate(sections):
         if index:
             children.append({"tag": "hr", "margin": "2px 0px 2px 0px"})
-        heading = Bi(grey(esc(section.title)), grey(esc(section.title_en or section.title)))
+        heading = Bi(f"**{esc(section.title)}**", f"**{esc(section.title_en or section.title)}**")
         children.append(_markdown(heading, size))
         body = _bars if section.layout == "bars" else _grid
         children.extend(body(section.metrics, size))
-        children.extend(_markdown(Bi.same(grey(esc(note))), size) for note in section.notes)
+        notes = [n for n in dict.fromkeys(section.notes) if n]
+        if notes:  # one quiet line per section instead of a stack of footnotes
+            children.append(_markdown(Bi.same(grey(" · ".join(esc(n) for n in notes))), size))
     names_zh = " · ".join(s.title for s in sections)
     names_en = " · ".join(s.title_en or s.title for s in sections)
     title = Bi("**详情** " + grey("· " + names_zh), "**Details** " + grey("· " + names_en))
