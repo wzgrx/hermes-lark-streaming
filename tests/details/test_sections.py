@@ -64,7 +64,7 @@ def test_turn_metrics_from_telemetry():
     assert (section.key, section.title, section.title_en, section.layout) == ("usage", "用量", "Usage", "grid")
     m = by_label(section)
     assert m["输入"].value == "100" and m["输出"].value == "7"
-    assert m["缓存"].value == "70.0%" and m["缓存"].ratio == pytest.approx(0.7)
+    assert m["缓存"].value == "70%" and m["缓存"].ratio == pytest.approx(0.7)
     assert "思考" not in m  # the reasoning effort lives in the footer (🧠)
     # model, context, provider and wall time live in the footer and status line, not here
     assert not {"上下文（末次）", "服务商", "总耗时", "缓存读取", "请求"} & set(m)
@@ -90,7 +90,7 @@ def test_partial_turn_shows_floor_and_partial_note():
 def test_cache_hit_lower_bound_is_labelled_and_never_rounded_up():
     section = usage_section(turn([40, None]).snapshot(), None)
     metric = by_label(section)["缓存"]
-    assert (metric.value, metric.label_en) == ("≥20.0%", "Cache") and metric.ratio == 0.2
+    assert (metric.value, metric.label_en) == ("≥20%", "Cache") and metric.ratio == 0.2
     assert by_label(section)["缓存读取"].value == "≥40"
 
 
@@ -490,3 +490,19 @@ def test_pricing_config_drops_malformed_entries():
 
     cfg = DetailsConfig.from_mapping({"pricing": {"A": {"input": 1, "output": 2}, "b": {"input": "x"}, "c": 3}})
     assert cfg.pricing == {"a": {"input": 1, "output": 2, "currency": "¥"}}
+
+
+def test_cache_share_is_truncated_never_rounded_up():
+    from hermes_lark_streaming.details.sections.fmt import percent
+
+    assert percent(807_552 / 807_910) == "99.9%"  # a real turn: 99.96% used to read 100.0%
+    assert percent(1.0) == "100%" and percent(0.7) == "70%"
+
+
+def test_history_request_counts_fill_the_cumulative_row():
+    history = {"status": "ok", "today": {"tokens": 4_083_994, "requests": 10, "partial": False},
+               "month": {"tokens": 228_419_371, "requests": 12_486, "partial": False},
+               "total": {"tokens": 228_419_371, "requests": 12_486, "partial": False}}
+    m = by_label(usage_section({}, history, show_models=False))
+    assert m["今日请求"].value == "10" and m["本月请求"].value == "12.5k" and m["本月请求"].group == "累计"
+    assert "今日请求" not in by_label(usage_section({}, {**history, "today": {"tokens": 1}}, show_models=False))

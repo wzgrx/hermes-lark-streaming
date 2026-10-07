@@ -131,6 +131,11 @@ def _id(base: str, view: TurnView) -> str:
     return f"{base}_{view.card_key}"[:20] if view.card_key else base
 
 
+_PANEL_PAD = 8  # px inside a panel's 1px border
+# The footer starts where panel content starts (border + padding), so ✅ / 🤖 line up with 📊 below them.
+_PANEL_INSET = f"0px 0px 0px {_PANEL_PAD + 1}px"
+
+
 def panel(*, title: Bi, elements: list[dict[str, Any]], expanded: bool, element_id: str | None = None,
           vertical_spacing: str = "4px") -> dict[str, Any]:
     """The original project's native panel chrome: grey notation title, chevron on the right, rounded border."""
@@ -149,7 +154,7 @@ def panel(*, title: Bi, elements: list[dict[str, Any]], expanded: bool, element_
         },
         "border": {"color": "grey", "corner_radius": "5px"},
         "vertical_spacing": vertical_spacing,
-        "padding": "8px 8px 8px 8px",
+        "padding": f"{_PANEL_PAD}px {_PANEL_PAD}px {_PANEL_PAD}px {_PANEL_PAD}px",
         "elements": elements,
     }
     if element_id:
@@ -329,7 +334,8 @@ def footer_chips(view: TurnView) -> list[Bi]:
         chips.append(Bi.same(f"📑 {compact(footer.context_used)}/{compact(footer.context_max)} "
                              f"({footer.context_used / footer.context_max:.0%})"))
     if footer.cache_hit is not None:
-        hit = f"{'≥' if footer.cache_hit_is_floor else ''}{footer.cache_hit:.0%}"
+        permille = int(footer.cache_hit * 1000 + 1e-9)  # truncated like the details value, so both agree
+        hit = f"{'≥' if footer.cache_hit_is_floor else ''}{permille // 10}.{permille % 10}%".replace(".0%", "%")
         chips.append(Bi(f"⚡ 缓存 {hit}", f"⚡ cache {hit}"))
     return chips
 
@@ -337,12 +343,14 @@ def footer_chips(view: TurnView) -> list[Bi]:
 def _footer_elements(view: TurnView) -> list[dict[str, Any]]:
     """The status line, then the meta chips as ``flow`` columns: a narrow card moves a whole chip to the
     next row, where free text would break a Chinese word in two."""
-    out = [_markdown(footer_text(view), "notation")]
+    status = _markdown(footer_text(view), "notation")
+    status["margin"] = _PANEL_INSET
+    out = [status]
     chips = footer_chips(view)
     if chips:
         columns = [{"tag": "column", "width": "auto", "vertical_align": "center",
                     "elements": [_markdown(Bi(grey(c.zh), grey(c.en)), "notation")]} for c in chips]
-        out.append({"tag": "column_set", "flex_mode": "flow", "horizontal_spacing": "12px", "margin": "0px",
+        out.append({"tag": "column_set", "flex_mode": "flow", "horizontal_spacing": "12px", "margin": _PANEL_INSET,
                     "columns": columns})
     return out
 
@@ -386,11 +394,24 @@ def _cell(metric: Metric) -> dict[str, Any]:
             "elements": [_markdown(Bi.same(f"{grey(label)}\n{_value(metric)}{hint}"), "notation")]}
 
 
-def _grid(metrics: list[Metric]) -> dict[str, Any]:
+def _grid(metrics: list[Metric], columns: int) -> dict[str, Any]:
     """Equal cells in one row; on a narrow screen Feishu regroups them three per row (``trisect``)
-    instead of squeezing the row, so a label never breaks away from its value."""
+    instead of squeezing the row, so a label never breaks away from its value. Every grid in the panel
+    has the same column count (empty cells pad the short ones), so the columns line up from row to row."""
+    cells = [_cell(m) for m in metrics]
+    blank = {"tag": "column", "width": "weighted", "weight": 1,  # Feishu drops a column with no elements
+             "elements": [{"tag": "markdown", "content": "\u200b", "text_size": "notation"}]}
+    if -(-len(cells) // 3) == -(-columns // 3):  # pad only when a narrow screen gets no extra, empty row
+        cells += [blank] * (columns - len(cells))
     return {"tag": "column_set", "flex_mode": "trisect", "horizontal_spacing": "8px", "margin": "0px",
-            "columns": [_cell(m) for m in metrics]}
+            "columns": cells}
+
+
+def _groups(section: Section) -> dict[str, list[Metric]]:
+    groups: dict[str, list[Metric]] = {}
+    for metric in section.metrics:
+        groups.setdefault(metric.group or section.title.split(" · ")[0], []).append(metric)
+    return groups
 
 
 def _bar(ratio: float) -> str:
@@ -400,30 +421,38 @@ def _bar(ratio: float) -> str:
     return f"<font color='{color}'>{'▓' * filled}</font>{grey('░' * (_BAR_CELLS - filled))}"
 
 
+def _wide(label: str) -> str:
+    """ASCII digits as full-width ones, so ``5小时`` is as wide as ``每周`` plus one ideographic space."""
+    return label.translate({ord(c): ord(c) + 0xFEE0 for c in "0123456789"})
+
+
 def _note(lines: list[str]) -> str:
     return grey(" · ".join(esc(n) for n in dict.fromkeys(lines) if n))
 
 
-def _section_elements(section: Section) -> list[dict[str, Any]]:
+def _section_elements(section: Section, columns: int) -> list[dict[str, Any]]:
     """Grid sections: a heading line, then a cell grid per group. Quota: one short bar line per window."""
     out: list[dict[str, Any]] = []
     if section.layout == "bars":
         lines = []
-        for m in section.metrics:
+        names = [_wide(m.label) for m in section.metrics]
+        width = max(len(n) for n in names)
+        value_width = max(len(m.value) for m in section.metrics)
+        for m, name in zip(section.metrics, names, strict=True):
             emoji = _WINDOW_EMOJI.get(m.label, "🎫")
+            pad = "\u3000" * (width - len(name))  # ideographic spaces: every bar starts at the same x
+            vpad = "\u2007" * (value_width - len(m.value))  # figure spaces: the reset hints line up too
+            m = replace(m, label=name)
             bar = _bar(m.ratio) + " " if m.ratio is not None else ""
             hint = f" {grey('· ' + esc(m.hint))}" if m.hint else ""
-            lines.append(f"{emoji} **{esc(m.label)}** {bar}{_value(m, colour=True)}{hint}")
+            lines.append(f"{emoji} **{esc(m.label)}**{pad} {bar}{vpad}{_value(m, colour=True)}{hint}")
         note = _note([section.title.replace(" · 订阅与额度", ""), *section.notes])
         text = "\n".join(lines) + (f"\n{note}" if note else "")
         return [_markdown(Bi.same(text), "notation")]
-    groups: dict[str, list[Metric]] = {}
-    for metric in section.metrics:
-        groups.setdefault(metric.group or section.title.split(" · ")[0], []).append(metric)
-    for heading, metrics in groups.items():
+    for heading, metrics in _groups(section).items():
         emoji = _ROW_EMOJI.get(heading, "")
         out.append(_markdown(Bi.same(f"{emoji} **{esc(heading)}**".strip()), "notation"))
-        out.append(_grid(metrics))
+        out.append(_grid(metrics, columns))
     if section.notes:
         out.append(_markdown(Bi.same(_note(list(section.notes))), "notation"))
     return out
@@ -434,10 +463,10 @@ def details_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | Non
         return None
     parts: list[list[dict[str, Any]]] = []
     names: list[str] = []
-    for section in (known(s) for s in view.sections):
-        if not section.metrics:
-            continue
-        parts.append(_section_elements(section))
+    sections = [s for s in (known(s) for s in view.sections) if s.metrics]
+    columns = max((len(g) for s in sections if s.layout != "bars" for g in _groups(s).values()), default=0)
+    for section in sections:
+        parts.append(_section_elements(section, columns))
         names.append(_SECTION_NAMES.get(section.key, section.title.split(" · ")[0]))
     if view.notices:
         parts.append([_markdown(Bi.same("📝 **后台复盘**\n" + "\n".join(esc(n) for n in view.notices)), "notation")])

@@ -172,12 +172,17 @@ class Session:
         for index, entry in enumerate(entries):
             is_open = not finished and entry.ended is None and index == len(entries) - 1
             end = entry.ended if entry.ended is not None else (None if is_open else now)
+            elapsed = None if end is None else max(0.0, end - entry.started)
+            if entry.kind is BlockKind.TOOLS and not is_open:
+                # tool time only: the block stays "open" until the next text arrives, which is model time
+                span = self.tracker.span(entry.tool_ids)
+                elapsed = span if span is not None else elapsed
             out.append(Block(
                 kind=entry.kind,
                 key=entry.key,
                 text=entry.text,
                 steps=self.tracker.steps_for(entry.tool_ids) if entry.kind is BlockKind.TOOLS else (),
-                elapsed_s=None if end is None else max(0.0, end - entry.started),
+                elapsed_s=elapsed,
                 open=is_open,
             ))
         return tuple(out)

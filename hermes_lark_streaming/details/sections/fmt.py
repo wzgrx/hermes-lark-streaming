@@ -29,8 +29,8 @@ def compact(value: int | None, *, lower_bound: bool = False) -> str:
 def percent(ratio: float | None, *, floor: bool = False) -> str:
     if ratio is None:
         return UNKNOWN
-    permille = int(ratio * 1000 + 1e-9) if floor else round(ratio * 1000)
-    return f"{'≥' if floor else ''}{permille // 10}.{permille % 10}%"
+    permille = int(ratio * 1000 + 1e-9)  # truncated: 99.96% reads 99.9%, never a 100% that did not happen
+    return f"{'≥' if floor else ''}{permille // 10}.{permille % 10}%".replace(".0%", "%")
 
 
 def percent_value(value: float) -> str:

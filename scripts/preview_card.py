@@ -38,7 +38,8 @@ SECTIONS = (
         Metric("缓存", "99.9%", 0.999, group="本轮"), Metric("首响应", "6.2s", group="本轮"),
         Metric("费用", "¥0.13", group="本轮"),
         Metric("今日", "3.63M", group="累计"), Metric("本月", "228.4M", group="累计"),
-        Metric("总计", "228.4M", group="累计"),
+        Metric("总计", "228.4M", group="累计"), Metric("今日请求", "10", group="累计"),
+        Metric("本月请求", "486", group="累计"),
     )),
     Section("resources", "资源 · WSL", (
         Metric("CPU", "36.8%"), Metric("GPU", "2%·73°C"), Metric("显存", "2.8/24G"), Metric("内存", "35/126G"),

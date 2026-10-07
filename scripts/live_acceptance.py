@@ -45,8 +45,12 @@ def report(card: dict) -> None:
 
 async def main(chat_id: str, home: Path, *, ok_only: bool = False) -> int:
     load_env(home)
+    from hermes_lark_streaming.session import controller as controller_module
     from hermes_lark_streaming.session.controller import Controller
     from hermes_lark_streaming.transport import DeliveryLedger
+
+    # the simulated turn's usage must never reach the real usage ledger (累计 今日/本月/总计)
+    controller_module.observe_history = lambda *args, **kwargs: False
 
     ctl = Controller(home)
     ctl.ledger = DeliveryLedger(Path(tempfile.mkdtemp()) / "ledger.json")

@@ -68,3 +68,25 @@ def test_ids_link_starts_to_finishes_and_icons_follow_the_tool():
     steps = t.steps_for([b, a])
     assert [s.name for s in steps] == ["Read file", "Terminal"]
     assert steps[0].icon == "file-link-text_outlined" and steps[1].icon == "setting_outlined"
+
+
+def test_tool_block_time_is_tool_time_not_model_time(monkeypatch):
+    import asyncio
+
+    from hermes_lark_streaming.session import state as state_module
+    from hermes_lark_streaming.session import tools as tools_module
+
+    clock = [100.0]
+    monkeypatch.setattr(state_module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(tools_module.time, "monotonic", lambda: clock[0])
+    session = state_module.Session("om", "oc", asyncio.new_event_loop())
+    rid = session.tracker.start("terminal", "echo hi")
+    session.add_tool(rid)
+    clock[0] += 0.14
+    session.tracker.finish("terminal", result="{}")
+    assert session.tracker.span([rid]) is not None and abs(session.tracker.span([rid]) - 0.14) < 1e-9
+    clock[0] += 6.9  # the model writes its answer after the tool
+    session.add_answer("已执行")
+    tools = session.blocks(finished=True)[0]
+    assert abs(tools.elapsed_s - 0.14) < 1e-9  # was 7.04: the block stayed open until the next text
+    session.loop.close()

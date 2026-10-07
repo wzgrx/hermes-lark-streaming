@@ -80,6 +80,12 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
         Metric(title, _history_tokens(mapping(history.get(key))), label_en=en, group=group)
         for key, title, en in (("today", "今日", "Today"), ("month", "本月", "Month"), ("total", "总计", "Total"))
     ]
+    # request counts: what a request-metered subscription actually spends; also fills the row to five cells
+    for key, title, en in (("today", "今日请求", "Requests today"), ("month", "本月请求", "Requests this month")):
+        requests = count(mapping(history.get(key)).get("requests"))
+        if requests is not None:
+            metrics.append(Metric(title, f"{requests:,}" if requests < 10_000 else compact(requests),
+                                  label_en=en, group=group))
     if show_models:
         for item in history.get("models", [])[:3] if isinstance(history.get("models"), list) else []:
             row = mapping(item)

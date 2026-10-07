@@ -204,6 +204,14 @@ class ToolTracker:
         by_id = {r.id: r for r in self._records}
         return tuple(by_id[i].view() for i in ids if i in by_id)
 
+    def span(self, ids: list[int]) -> float | None:
+        """Seconds from the first start to the last finish of these tools, or None while any has no end.
+        The model's own time after the tools is not part of it."""
+        records = [r for r in self._records if r.id in set(ids)]
+        if not records or any(r.elapsed_ms is None for r in records):
+            return None
+        return max(r.started + (r.elapsed_ms or 0) / 1000 for r in records) - min(r.started for r in records)
+
     def _trim(self) -> None:
         excess = len(self._records) - self._max
         if excess <= 0:

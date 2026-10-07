@@ -260,3 +260,20 @@ def test_reasoning_sits_next_to_the_model():
     hr = next(i for i, e in enumerate(elements) if e["tag"] == "hr")
     chips = [zh(c["elements"][0]) for c in elements[hr + 2]["columns"]]
     assert [c[len("<font color='grey'>"):][:1] for c in chips] == ["🤖", "🧠", "📑"]
+
+
+def test_footer_cache_matches_the_details_value():
+    view = done_view(footer=Footer(model="m", cache_hit=807_552 / 807_910))
+    elements = render_final(view)["body"]["elements"]
+    hr = next(i for i, e in enumerate(elements) if e["tag"] == "hr")
+    assert "⚡ 缓存 99.9%" in dumps(elements[hr + 2])
+
+
+def test_grids_share_a_column_count_without_an_empty_narrow_row():
+    five = Section("resources", "资源", tuple(Metric(f"r{i}", "1") for i in range(5)))
+    four = Section("usage", "用量", tuple(Metric(f"u{i}", "1", group="本轮") for i in range(4)))
+    three = Section("usage", "用量", tuple(Metric(f"c{i}", "1", group="累计") for i in range(3)))
+    details = render_final(done_view(sections=(four, five)))["body"]["elements"][-1]
+    assert [len(g["columns"]) for g in details["elements"] if g["tag"] == "column_set"] == [5, 5]  # 4 → padded
+    details = render_final(done_view(sections=(three, five)))["body"]["elements"][-1]
+    assert [len(g["columns"]) for g in details["elements"] if g["tag"] == "column_set"] == [3, 5]  # would add a row
