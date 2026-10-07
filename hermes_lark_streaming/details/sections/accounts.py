@@ -88,8 +88,8 @@ def _reset_hint(raw: Any, tz: ZoneInfo, now: float) -> str:
     delta = moment.timestamp() - now
     if delta <= 0:
         return "已过重置时间 · 待刷新"
-    text = f"{span(delta)} 后重置"
-    return text + f" · {stamp(raw, tz)}" if delta >= 86400 else text
+    # A day or more away, the clock time says more than "4天7小时"; it also fits a narrow tile.
+    return f"{stamp(raw, tz)} 重置" if delta >= 86400 else f"{span(delta)} 后重置"
 
 
 def _windows(row: Mapping[str, Any]) -> list[Any]:

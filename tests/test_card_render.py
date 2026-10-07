@@ -121,11 +121,12 @@ def test_footer_line_is_one_status_row():
     elements = card["body"]["elements"]
     hr = next(i for i, e in enumerate(elements) if e["tag"] == "hr")
     footer = zh(elements[hr + 1])
-    assert footer.startswith("✅ 已完成 · 10.4s · 20.0K/1.0M (2%) · deepseek-v4-flash · 缓存 83%")
-    assert "1 步失败" in footer and "龙虾3号" in footer
-    assert zh(render_final(done_view(phase=Phase.STOPPED))["body"]["elements"][hr + 1]).startswith("🛑 已停止")
+    assert footer.startswith("✅ **已完成** · 10.4s · <font color='red'>1 步失败</font>")
+    assert footer.endswith("<font color='grey'>deepseek-v4-flash · 上下文 20k/1M (2%) · 缓存 83%</font>")
+    assert "龙虾3号" not in footer  # the identity tag is not shown
+    assert zh(render_final(done_view(phase=Phase.STOPPED))["body"]["elements"][hr + 1]).startswith("🛑 **已停止**")
     error = render_final(done_view(phase=Phase.FAILED))["body"]["elements"][hr + 1]
-    assert "❌ 出错" in zh(error) and zh(error).startswith("<font color='red'>")
+    assert "❌ **出错**" in zh(error) and zh(error).startswith("<font color='red'>")
 
 
 def test_details_panel_after_the_footer():
@@ -139,7 +140,7 @@ def test_details_panel_after_the_footer():
     assert details["element_id"] == "details_abc123"
     assert title(details).endswith("详情 · 用量 · 额度 · 后台复盘</font>")
     text = dumps(details)
-    for needle in ("输入 **70.3k**", "统计不完整", "▓", "已保存记忆"):
+    for needle in ("输入", "**70.3k**", "统计不完整", "<font color='red'>86%</font>", "已保存记忆"):
         assert needle in text
 
 
@@ -226,4 +227,4 @@ def test_card_stays_small():
         QUOTA,
     )))
     assert len(json.dumps(card, ensure_ascii=False).encode()) < 9000
-    assert count_elements(card) < 60
+    assert count_elements(card) < 90

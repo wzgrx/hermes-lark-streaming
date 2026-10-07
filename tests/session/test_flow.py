@@ -53,7 +53,7 @@ async def test_happy_path_streams_then_finalizes(make_controller, client):
     assert [c[0] for c in client.calls][-2:] == ["close", "update_card"]
     final = client.of("update_card")[-1][2]
     assert "streaming_mode" not in final["config"]
-    assert "header" not in final and state_tag(final).startswith("✅ 已完成")
+    assert "header" not in final and state_tag(final).startswith("✅ **已完成**")
     assert STATUS_ID not in element_ids(final)
     assert ctl._sessions == {} and ctl.consume_text_fallback("om_1") is False
 
@@ -73,7 +73,7 @@ async def test_failed_tool_and_failed_turn_are_distinct(make_controller, client)
     ctl2 = make_controller()
     await start(ctl2, "om_2")
     assert await ctl2.on_completed_wait(message_id="om_2", answer="", is_error=True) is True
-    assert "❌ 出错" in state_tag(client.of("update_card")[-1][2])
+    assert "❌ **出错**</font>" in state_tag(client.of("update_card")[-1][2])
 
 
 async def test_creation_rejected_yields_to_gateway(make_controller, client):
@@ -100,7 +100,7 @@ async def test_interrupt_stops_old_and_redirects_completion(make_controller, cli
     await start(ctl, "om_a")
     ctl.on_interrupted(old_message_id="om_a", new_message_id="om_b", chat_id="oc_1")
     await settle(ctl, 0.3)
-    assert "🛑 已停止" in state_tag(client.of("update_card")[0][2])
+    assert "🛑 **已停止**" in state_tag(client.of("update_card")[0][2])
     assert "om_b" in ctl._sessions
     ctl.on_answer(message_id="om_b", text="新的回答")
     assert await ctl.on_completed_wait(message_id="om_a", answer="新的回答") is True  # redirected
@@ -111,7 +111,7 @@ async def test_stop_by_session_key(make_controller, client):
     ctl = make_controller()
     await start(ctl, session_key="sk")
     assert await ctl.on_session_aborted(session_key="sk") is True
-    assert "🛑 已停止" in state_tag(client.of("update_card")[-1][2])
+    assert "🛑 **已停止**" in state_tag(client.of("update_card")[-1][2])
 
 
 async def test_time_limit_handoff_seals_old_and_continues(make_controller, client):

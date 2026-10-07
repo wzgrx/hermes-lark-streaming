@@ -16,7 +16,9 @@ def compact(value: int | None, *, lower_bound: bool = False) -> str:
     if value is None:
         return UNKNOWN
     if value >= 1_000_000:
-        text = f"{value // 10_000 / 100:.2f}" if lower_bound else f"{value / 1_000_000:.2f}"
+        digits = 1 if value >= 100_000_000 else 2  # 226.9M, 2.14M
+        step = 10 ** (6 - digits)
+        text = f"{value // step * step / 1_000_000:.{digits}f}" if lower_bound else f"{value / 1_000_000:.{digits}f}"
         return text.rstrip("0").rstrip(".") + "M"
     if value >= 1_000:
         text = f"{value // 100 / 10:.1f}" if lower_bound else f"{value / 1_000:.1f}"

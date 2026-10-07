@@ -10,7 +10,7 @@ from typing import Any
 from ...card.model import Metric, Section
 from ..usage import cache_ratio
 from ..values import count, label, mapping, seconds
-from .fmt import UNKNOWN, compact, number, percent
+from .fmt import UNKNOWN, compact, percent
 
 _HISTORY_NOTES = {
     "pending": "正在读取本机历史",
@@ -19,9 +19,15 @@ _HISTORY_NOTES = {
 }
 
 
-def _seconds(value: Any, digits: int) -> str:
+def _seconds(value: Any, digits: int = 1) -> str:
+    """``1.2s`` below a minute, ``1m 43s`` above."""
     n = seconds(value)
-    return UNKNOWN if n is None else f"{n:.{digits}f}s"
+    if n is None:
+        return UNKNOWN
+    if n < 60:
+        return f"{n:.{digits}f}s"
+    minutes, rest = divmod(int(n), 60)
+    return f"{minutes}m {rest:02d}s"
 
 
 def _turn_metrics(data: Mapping[str, Any]) -> tuple[Metric, ...]:
@@ -29,24 +35,29 @@ def _turn_metrics(data: Mapping[str, Any]) -> tuple[Metric, ...]:
     partial_cache = bool(data.get("cache_read_partial"))
     ratio, floor = cache_ratio(dict(data))
     calls, errors = count(data.get("api_calls")), count(data.get("retries"))
+    group = "本轮"
     metrics = [
-        Metric("输入（含缓存）", number(count(data.get("input_tokens"))), label_en="Input incl. cache"),
-        Metric("输出", number(count(data.get("output_tokens"))), label_en="Output"),
+        Metric("输入(含缓存)", compact(count(data.get("input_tokens"))), label_en="Input incl. cache", group=group),
+        Metric("输出", compact(count(data.get("output_tokens"))), label_en="Output", group=group),
         Metric(
-            "命中率下限" if floor else "命中率",
+            "缓存命中下限" if floor else "缓存命中",
             percent(ratio, floor=floor),
             ratio=ratio,
             label_en="Cache hit lower bound" if floor else "Cache hit",
+            group=group,
         ),
-        Metric("首响应", _seconds(data.get("first_response"), 2), label_en="First response"),
+        Metric("首响应", _seconds(data.get("first_response")), label_en="First response", group=group),
     ]
     if partial_cache:
-        metrics.append(Metric("缓存读取（部分）", number(count(data.get("cache_read_tokens")), lower_bound=True)))
+        read = count(data.get("cache_read_tokens"))
+        metrics.append(Metric("缓存读取(部分)", "≥" + compact(read, lower_bound=True) if read is not None else UNKNOWN,
+                              group=group))
     if calls is not None and (calls > 1 or errors):
-        metrics.append(Metric("请求", f"{calls}" + (f" · 错误 {errors}" if errors else ""), label_en="Requests"))
+        metrics.append(Metric("请求", f"{calls}" + (f" · 错误 {errors}" if errors else ""), label_en="Requests",
+                              group=group))
     reasoning = label(data.get("reasoning"))
     if reasoning:
-        metrics.append(Metric("思考强度", reasoning, label_en="Reasoning"))
+        metrics.append(Metric("思考强度", reasoning, label_en="Reasoning", group=group))
     return tuple(metrics)
 
 
@@ -65,20 +76,18 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
         if terminal and status in {"pending", "unavailable"}:
             note = "本轮历史快照尚未就绪；后续消息可重试"
         return (), [note]
-    since = label(history.get("since")) or "未记录"
+    since = label(history.get("since"))
+    group = f"累计 · 自 {since[5:] if len(since) == 10 else since}" if since else "累计"
     metrics = [
-        Metric(title, _history_tokens(mapping(history.get(key))), hint=hint, label_en=en)
-        for key, title, en, hint in (
-            ("today", "今日累计", "Today", ""),
-            ("month", "本月累计", "Month", ""),
-            ("total", "总累计", "Total", f"自 {since} 起"),
-        )
+        Metric(title, _history_tokens(mapping(history.get(key))), label_en=en, group=group)
+        for key, title, en in (("today", "今日", "Today"), ("month", "本月", "Month"), ("total", "总计", "Total"))
     ]
     if show_models:
         for item in history.get("models", [])[:3] if isinstance(history.get("models"), list) else []:
             row = mapping(item)
             name = label(row.get("model"))[:48] or UNKNOWN
-            metrics.append(Metric(name, _history_tokens(row), hint=label(row.get("subscription"))[:32] + " · 累计"))
+            metrics.append(Metric(name, _history_tokens(row), hint=label(row.get("subscription"))[:32],
+                                  group="模型累计"))
     notes: list[str] = []
     if any(mapping(history.get(k)).get("partial") for k in ("today", "month", "total")):
         notes.append("* 部分请求缺少用量，≥ 表示已观测下限")

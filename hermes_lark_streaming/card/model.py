@@ -65,6 +65,7 @@ class Metric:
     ratio: float | None = None
     hint: str = ""
     label_en: str = ""
+    group: str = ""  # sub-heading inside a section, e.g. 本轮 / 累计; empty uses the section title
 
 
 @dataclass(frozen=True, slots=True)

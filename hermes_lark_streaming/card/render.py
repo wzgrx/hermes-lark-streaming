@@ -16,7 +16,6 @@ While streaming, a grey live line at the bottom says what is happening; new bloc
 from __future__ import annotations
 
 import html
-from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -119,11 +118,11 @@ def step_time(ms: float | None) -> str:
 
 
 def compact(value: int) -> str:
+    """12.3k / 403.5k / 1.2M / 1M, the same style as the details panel."""
     if value >= 1_000_000:
-        n = value / 1_000_000
-        return f"{n:.0f}M" if n >= 100 else f"{n:.1f}M"
+        return f"{value / 1_000_000:.2f}".rstrip("0").rstrip(".") + "M"
     if value >= 1_000:
-        return f"{value / 1_000:.1f}K"
+        return f"{value / 1_000:.1f}".rstrip("0").rstrip(".") + "k"
     return str(value)
 
 
@@ -297,33 +296,37 @@ def footer_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None
 
 
 def footer_text(view: TurnView) -> Bi:
+    """``✅ **已完成** · 2m 01s`` then the run's figures in grey; failures in red."""
     if view.phase is Phase.FAILED:
-        head = ("❌ 出错", "❌ Error")
+        head = ("<font color='red'>❌ **出错**</font>", "<font color='red'>❌ **Error**</font>")
     elif view.phase is Phase.STOPPED:
-        head = ("🛑 已停止", "🛑 Stopped")
+        head = ("🛑 **已停止**", "🛑 **Stopped**")
     else:
-        head = ("✅ 已完成", "✅ Completed")
-    parts: list[str] = []
+        head = ("✅ **已完成**", "✅ **Completed**")
     clock = duration(view.elapsed_s)
-    if clock:
-        parts.append(clock)
+    zh, en = head[0] + (f" · {clock}" if clock else ""), head[1] + (f" · {clock}" if clock else "")
+    if view.failed_steps:
+        zh += f" · <font color='red'>{view.failed_steps} 步失败</font>"
+        en += f" · <font color='red'>{view.failed_steps} failed</font>"
     footer = view.footer
-    if footer.context_used is not None and footer.context_max:
-        parts.append(f"{compact(footer.context_used)}/{compact(footer.context_max)} "
-                     f"({footer.context_used / footer.context_max:.0%})")
+    meta_zh: list[str] = []
+    meta_en: list[str] = []
     if footer.model:
-        parts.append(esc(clip(footer.model, 60)))
+        model = esc(clip(footer.model, 60))
+        meta_zh.append(model)
+        meta_en.append(model)
+    if footer.context_used is not None and footer.context_max:
+        ratio = f"{compact(footer.context_used)}/{compact(footer.context_max)} " \
+                f"({footer.context_used / footer.context_max:.0%})"
+        meta_zh.append(f"上下文 {ratio}")
+        meta_en.append(f"context {ratio}")
     if footer.cache_hit is not None:
-        parts.append(f"缓存 {'≥' if footer.cache_hit_is_floor else ''}{footer.cache_hit:.0%}")
-    tail = " · ".join(parts)
-    failed = view.failed_steps
-    warn_zh = f" · <font color='red'>{failed} 步失败</font>" if failed else ""
-    warn_en = f" · <font color='red'>{failed} failed</font>" if failed else ""
-    tag = f" <text_tag color='neutral'>{esc(clip(footer.tag, 30))}</text_tag>" if footer.tag else ""
-    zh = head[0] + (f" · {tail}" if tail else "") + warn_zh + tag
-    en = head[1] + (f" · {tail}" if tail else "") + warn_en + tag
-    if view.phase is Phase.FAILED:
-        zh, en = f"<font color='red'>{zh}</font>", f"<font color='red'>{en}</font>"
+        hit = f"{'≥' if footer.cache_hit_is_floor else ''}{footer.cache_hit:.0%}"
+        meta_zh.append(f"缓存 {hit}")
+        meta_en.append(f"cache {hit}")
+    if meta_zh:
+        zh += "　" + grey(" · ".join(meta_zh))
+        en += "　" + grey(" · ".join(meta_en))
     return Bi(zh, en)
 
 
@@ -341,55 +344,81 @@ def known(section: Section) -> Section:
     return replace(section, metrics=metrics, notes=notes)
 
 
-def _bar(ratio: float) -> str:
-    ratio = min(max(ratio, 0.0), 1.0)
-    filled = round(ratio * 10)
-    color = "red" if ratio >= 0.8 else "orange" if ratio >= 0.5 else "blue"
-    return f"<font color='{color}'>{'▓' * filled}</font>{grey('░' * (10 - filled))}"
+_TILES_PER_ROW = 4
 
 
-def _inline(metrics: Iterable[Metric]) -> str:
-    cells = [f"{esc(m.label)} **{esc(m.value)}**" + (f" {grey(esc(m.hint))}" if m.hint else "") for m in metrics]
-    return "\n".join(" · ".join(cells[i:i + 4]) for i in range(0, len(cells), 4))
+def _level_color(ratio: float | None) -> str | None:
+    if ratio is None:
+        return None
+    return "red" if ratio >= 0.8 else "orange" if ratio >= 0.5 else None
 
 
-def _bars(metrics: Iterable[Metric]) -> str:
+def _tile(metric: Metric | None, *, colour: bool) -> dict[str, Any]:
+    column: dict[str, Any] = {"tag": "column", "width": "weighted", "weight": 1, "vertical_align": "top",
+                              "elements": []}
+    if metric is None:
+        return column  # keeps the grid aligned on a short row
+    value = esc(metric.value)
+    color = _level_color(metric.ratio) if colour else None
+    if color:
+        value = f"<font color='{color}'>{value}</font>"
+    zh = f"{grey(esc(metric.label))}\n**{value}**"
+    en = f"{grey(esc(metric.label_en or metric.label))}\n**{value}**"
+    if metric.hint:
+        zh += "\n" + grey(esc(metric.hint))
+        en += "\n" + grey(esc(metric.hint))
+    column["elements"].append(_markdown(Bi(zh, en), "notation"))
+    return column
+
+
+def _tile_rows(metrics: list[Metric], *, colour: bool) -> list[dict[str, Any]]:
     rows = []
-    for m in metrics:
-        bar = _bar(m.ratio) + " " if m.ratio is not None else ""
-        hint = " " + grey(esc(m.hint)) if m.hint else ""
-        rows.append(f"{esc(m.label)}　{bar}**{esc(m.value)}**{hint}")
-    return "\n".join(rows)
+    for start in range(0, len(metrics), _TILES_PER_ROW):
+        chunk: list[Metric | None] = list(metrics[start:start + _TILES_PER_ROW])
+        chunk += [None] * (_TILES_PER_ROW - len(chunk))
+        rows.append({"tag": "column_set", "flex_mode": "none", "horizontal_spacing": "8px",
+                     "columns": [_tile(m, colour=colour) for m in chunk]})
+    return rows
+
+
+def _section_elements(section: Section) -> list[dict[str, Any]]:
+    """Heading, then rows of label-over-value tiles per group, then one grey note line."""
+    elements: list[dict[str, Any]] = []
+    groups: dict[str, list[Metric]] = {}
+    for metric in section.metrics:
+        groups.setdefault(metric.group or section.title, []).append(metric)
+    for heading, metrics in groups.items():
+        elements.append(_markdown(Bi.same(f"**{esc(heading)}**"), "notation"))
+        elements.extend(_tile_rows(metrics, colour=section.layout == "bars"))
+    note_line = " · ".join(esc(n) for n in dict.fromkeys(section.notes) if n)
+    if note_line:
+        elements.append(_markdown(Bi.same(grey(note_line)), "notation"))
+    return elements
 
 
 def details_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
     if not opts.show_details or view.phase is Phase.RUNNING or view.continued:
         return None
-    blocks: list[str] = []
+    blocks: list[list[dict[str, Any]]] = []
     names: list[str] = []
     for section in (known(s) for s in view.sections):
         if not section.metrics:
             continue
-        body = _bars(section.metrics) if section.layout == "bars" else _inline(section.metrics)
-        text = f"**{esc(section.title)}**\n{body}"
-        note_line = " · ".join(esc(n) for n in dict.fromkeys(section.notes) if n)
-        if note_line:
-            text += "\n" + grey(note_line)
-        blocks.append(text)
+        blocks.append(_section_elements(section))
         names.append(_SECTION_NAMES.get(section.key, section.title.split(" · ")[0]))
     if view.notices:
-        blocks.append("**后台复盘**\n" + "\n".join(esc(n) for n in view.notices))
+        blocks.append([_markdown(Bi.same("**后台复盘**\n" + "\n".join(esc(n) for n in view.notices)), "notation")])
         names.append("后台复盘")
     if not blocks:
         return None
     children: list[dict[str, Any]] = []
-    for index, text in enumerate(blocks):
+    for index, block in enumerate(blocks):
         if index:
             children.append({"tag": "hr"})
-        children.append(_markdown(Bi.same(text), "notation"))
+        children.extend(block)
     title = Bi(grey("📊 详情 · " + " · ".join(names)), grey("📊 Details · " + " · ".join(names)))
     return panel(title=title, elements=children, expanded=False, element_id=_id(DETAILS_ID, view),
-                 vertical_spacing="8px")
+                 vertical_spacing="6px")
 
 
 # --------------------------------------------------------------------------- cards

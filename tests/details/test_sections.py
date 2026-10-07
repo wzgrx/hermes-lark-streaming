@@ -63,8 +63,8 @@ def test_turn_metrics_from_telemetry():
     section = usage_section(state.snapshot(), None)
     assert (section.key, section.title, section.title_en, section.layout) == ("usage", "用量", "Usage", "grid")
     m = by_label(section)
-    assert m["输入（含缓存）"].value == "100" and m["输出"].value == "7"
-    assert m["命中率"].value == "70.0%" and m["命中率"].ratio == pytest.approx(0.7)
+    assert m["输入(含缓存)"].value == "100" and m["输出"].value == "7"
+    assert m["缓存命中"].value == "70.0%" and m["缓存命中"].ratio == pytest.approx(0.7)
     assert m["思考强度"].value == "max"
     # model, context, provider and wall time live in the footer and status line, not here
     assert not {"上下文（末次）", "服务商", "总耗时", "缓存读取", "请求"} & set(m)
@@ -81,23 +81,23 @@ def test_partial_turn_shows_floor_and_partial_note():
     complete(state, second)
     section = usage_section(state.snapshot(), None)
     m = by_label(section)
-    assert m["命中率"].value == "未知" and m["命中率"].ratio is None  # count known, rate not
-    assert m["缓存读取（部分）"].value == "≥70"
+    assert m["缓存命中"].value == "未知" and m["缓存命中"].ratio is None  # count known, rate not
+    assert m["缓存读取(部分)"].value == "≥70"
     assert "统计不完整" in section.notes and "服务商路径 opencode-go → other" in section.notes
     assert m["请求"].value == "2 · 错误 1"
 
 
 def test_cache_hit_lower_bound_is_labelled_and_never_rounded_up():
     section = usage_section(turn([40, None]).snapshot(), None)
-    metric = by_label(section)["命中率下限"]
+    metric = by_label(section)["缓存命中下限"]
     assert (metric.value, metric.label_en) == ("≥20.0%", "Cache hit lower bound") and metric.ratio == 0.2
-    assert by_label(section)["缓存读取（部分）"].value == "≥40"
+    assert by_label(section)["缓存读取(部分)"].value == "≥40"
 
 
 def test_missing_telemetry_is_unknown_not_zero():
     section = usage_section(None, None)
     m = by_label(section)
-    assert m["输入（含缓存）"].value == m["输出"].value == m["命中率"].value == "未知"
+    assert m["输入(含缓存)"].value == m["输出"].value == m["缓存命中"].value == "未知"
     assert "本轮统计待采集" in section.notes
     assert not any(x.ratio for x in section.metrics)
 
@@ -114,12 +114,12 @@ def test_history_rows_partial_models_and_status_notes():
     }
     section = usage_section({}, history)
     m = by_label(section)
-    assert m["今日累计"].value == "1.2k" and m["本月累计"].value == "≥1.55M" and m["总累计"].value == "未知"
-    assert m["总累计"].hint == "自 2026-09-01 起"
-    models = [x for x in section.metrics if x.hint == "Go plan · 累计"]
+    assert m["今日"].value == "1.2k" and m["本月"].value == "≥1.55M" and m["总计"].value == "未知"
+    assert m["总计"].group == "累计 · 自 09-01" and m["今日"].group == m["总计"].group
+    models = [x for x in section.metrics if x.hint == "Go plan"]
     assert len(models) == 3 and models[0].label == "m" * 48  # top three, bounded
     assert any("下限" in n for n in section.notes)
-    assert not [x for x in usage_section({}, history, show_models=False).metrics if x.hint == "Go plan · 累计"]
+    assert not [x for x in usage_section({}, history, show_models=False).metrics if x.hint == "Go plan"]
     assert "尚无已记录的主请求" in usage_section({}, {"status": "no_history"}).notes
     assert "本轮历史快照尚未就绪；后续消息可重试" in usage_section({}, {"status": "pending"}, terminal=True).notes
     assert "正在读取本机历史" in usage_section({}, {"status": "pending"}).notes
@@ -152,7 +152,7 @@ def test_resources_have_ratios_where_meaningful_and_unknown_elsewhere():
     section = resources_section(host)
     m = by_label(section)
     assert section.key == "resources" and section.layout == "grid"
-    assert m["显存"].value == "2.0 GiB / 8.0 GiB" and m["显存"].ratio == 0.25
+    assert m["显存"].value == "2.0/8G" and m["显存"].ratio == 0.25
     assert m["内存"].ratio == 0.5 and m["磁盘"].ratio == 0.25 and m["GPU"].ratio == pytest.approx(0.4)
     assert m["GPU 温度"].value == "61°C" and m["GPU 温度"].ratio is None
     assert "WSL" in section.title and section.notes == ()  # sampled and complete: nothing to explain
@@ -191,7 +191,7 @@ def test_far_resets_show_the_account_clock_in_the_configured_timezone():
     later = datetime(2026, 10, 16, 4, 12, 40, tzinfo=UTC).timestamp()
     shanghai = by_label(accounts_section(snapshot(), "Asia/Shanghai", now=later))["每月"].hint
     utc = by_label(accounts_section(snapshot(), "UTC", now=later))["每月"].hint
-    assert shanghai == "4天2小时 后重置 · 10-20 14:26" and utc == "4天2小时 后重置 · 10-20 06:26"
+    assert shanghai == "10-20 14:26 重置" and utc == "10-20 06:26 重置"
 
 
 @pytest.mark.parametrize("bad", [None, {}, [], 7, ""])
@@ -440,7 +440,7 @@ async def test_collector_reads_history_resources_and_scopes_accounts(tmp_path, m
     await collector.finish("chat", "opencode-go")
     sections = collector.sections(chat_id="chat", provider="opencode-go", terminal=True)
     assert [s.key for s in sections] == ["usage", "resources", "accounts"]
-    assert by_label(sections[0])["今日累计"].value == "11" and by_label(sections[0])["总累计"].value == "11"
+    assert by_label(sections[0])["今日"].value == "11" and by_label(sections[0])["总计"].value == "11"
     assert seen == [(("opencode-go",), ("KEY",))]  # the other provider's account is never queried
     # No active provider, or a chat that is not allowed: the accounts section disappears.
     assert "accounts" not in [s.key for s in collector.sections(chat_id="chat", provider="")]

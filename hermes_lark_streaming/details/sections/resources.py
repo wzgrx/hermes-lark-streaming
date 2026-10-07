@@ -8,7 +8,7 @@ from typing import Any
 
 from ...card.model import Metric, Section
 from ..values import label
-from .fmt import UNKNOWN, gib, percent_value, ratio_of
+from .fmt import UNKNOWN, percent_value, ratio_of
 
 
 def _percent(data: Mapping[str, Any], key: str, name: str, en: str) -> Metric:
@@ -22,7 +22,8 @@ def _pair(data: Mapping[str, Any], used: str, total: str, name: str, en: str) ->
     u, t = data.get(used), data.get(total)
     if isinstance(u, bool) or not isinstance(u, int | float) or isinstance(t, bool) or not isinstance(t, int | float):
         return Metric(name, UNKNOWN, label_en=en)
-    return Metric(name, f"{gib(float(u))} / {gib(float(t))}", ratio=ratio_of(u, t), label_en=en)
+    used = f"{float(u):.0f}" if float(u) >= 10 else f"{float(u):.1f}"
+    return Metric(name, f"{used}/{float(t):.0f}G", ratio=ratio_of(u, t), label_en=en)
 
 
 def resources_section(host: Mapping[str, Any] | None) -> Section:
@@ -33,10 +34,10 @@ def resources_section(host: Mapping[str, Any] | None) -> Section:
     metrics = (
         _percent(data, "cpu_percent", "CPU", "CPU"),
         _percent(data, "gpu_percent", "GPU", "GPU"),
+        Metric("GPU 温度", temp_text, label_en="GPU temp"),
         _pair(data, "gpu_used_gib", "gpu_total_gib", "显存", "VRAM"),
         _pair(data, "ram_used_gib", "ram_total_gib", "内存", "RAM"),
         _pair(data, "disk_used_gib", "disk_total_gib", "磁盘", "Disk"),
-        Metric("GPU 温度", temp_text, label_en="GPU temp"),
     )
     notes: list[str] = []
     sampled = label(data.get("sampled_at"))
