@@ -7,6 +7,8 @@ __version__ = "1.0.0.dev0"
 
 def register(ctx: object) -> None:
     """Hermes plugin entry point: register observer hooks, telemetry and the execution middleware."""
+    from .compat import register as register_compat
     from .hooks.native import register as register_native
 
     register_native(ctx)
+    register_compat(ctx)
