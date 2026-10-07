@@ -75,6 +75,9 @@ async def main(chat_id: str, home: Path, *, ok_only: bool = False) -> int:
         return 1
     print("card created:", session.channel.card_id if session.channel else None)
 
+    with session.lock:  # reasoning display is a config switch; feed the timeline directly for the check
+        session.add_thought("用户想看卡片的完整效果。先执行一个成功的命令,再执行一个预期失败的命令。")
+    await asyncio.sleep(1.5)
     ctl.on_tool_update(message_id=mid, tool_name="terminal", status="started", detail="printf 'V1_OK\\n'")
     await asyncio.sleep(1.2)
     ok = '{"exit_code": 0, "output": "V1_OK"}'

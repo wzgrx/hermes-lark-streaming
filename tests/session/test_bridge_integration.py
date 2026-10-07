@@ -35,7 +35,7 @@ async def test_turn_through_the_bridge(wired, client):
     )
     assert sent is True
     final = client.of("update_card")[-1][2]
-    assert state_tag(final) == "有失败"
+    assert "1 步失败" in state_tag(final)
     assert "5/100" in str(final)  # the result payload fills in the context chip when telemetry saw nothing
 
 

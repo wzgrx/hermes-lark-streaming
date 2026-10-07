@@ -10,7 +10,7 @@ def test_start_finish_records_timing_and_status():
     t = ToolTracker()
     t.start("terminal", "git status")
     assert t.running == 1
-    assert t.finish("terminal", "completed", "") is False
+    assert t.finish("terminal", "completed", "")[0] is False
     (step,) = t.steps()
     assert step.name == "Terminal" and step.status is StepStatus.OK and step.elapsed_ms is not None
     assert t.running == 0 and t.count == 1
@@ -19,7 +19,7 @@ def test_start_finish_records_timing_and_status():
 def test_command_exit_code_marks_failure_with_excerpt():
     t = ToolTracker()
     t.start("terminal", "exit 7")
-    failed = t.finish("terminal", "completed", "", result=json.dumps({"exit_code": 7, "output": "boom"}))
+    failed, _ = t.finish("terminal", "completed", "", result=json.dumps({"exit_code": 7, "output": "boom"}))
     (step,) = t.steps()
     assert failed and step.status is StepStatus.FAILED
     assert step.error.startswith("Exit code 7") and "boom" in step.error
@@ -58,3 +58,13 @@ def test_trim_folds_old_ok_steps_but_keeps_failures():
         t.start("b"); t.finish("b")  # noqa: E702
     assert t.count == 6 and len(t.steps()) == 3 and t.archived == 3
     assert t.steps()[0].status is StepStatus.FAILED
+
+
+def test_ids_link_starts_to_finishes_and_icons_follow_the_tool():
+    t = ToolTracker()
+    a = t.start("terminal", "ls")
+    b = t.start("read_file", "x.py")
+    assert t.finish("terminal")[1] == a
+    steps = t.steps_for([b, a])
+    assert [s.name for s in steps] == ["Read file", "Terminal"]
+    assert steps[0].icon == "file-link-text_outlined" and steps[1].icon == "setting_outlined"

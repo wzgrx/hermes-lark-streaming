@@ -16,8 +16,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from ..card import render
-from ..card.markdown import downgrade_tables, optimize_markdown_style
-from ..card.model import Phase, RenderOptions
+from ..card.model import BlockKind, Phase, RenderOptions
 from ..config import ConfigSource, Settings
 from ..metrics import metrics
 from ..transport import (
@@ -80,9 +79,22 @@ class Pipeline:
         flusher.configure_adaptive(enabled=pressure.enabled, min_ms=pressure.min_ms, max_ms=pressure.max_ms)
         return flusher
 
-    def _initial_card(self, session: Session) -> dict[str, Any]:
+    def _view(self, session: Session) -> Any:
+        """The live view with answer text made card-safe: MEDIA directives stripped, known images swapped in."""
         view = session.view(Phase.RUNNING)
-        return render.render_streaming(view, self.opts())
+        blocks = tuple(
+            replace(b, text=self._clean_answer(session, b.text)) if b.kind is BlockKind.ANSWER else b
+            for b in view.blocks
+        )
+        return replace(view, blocks=blocks)
+
+    @staticmethod
+    def _clean_answer(session: Session, text: str) -> str:
+        text = strip_media_directives(text)
+        return session.images.resolve_images(text) if session.images is not None else text
+
+    def _initial_card(self, session: Session) -> dict[str, Any]:
+        return render.render_streaming(self._view(session), self.opts())
 
     def opts(self) -> RenderOptions:
         """Render options for this instant: Hermes' live ``show_tool_use`` can hide the process panel."""
@@ -211,12 +223,7 @@ class Pipeline:
         session.streaming_closed = False
         elements = card["body"]["elements"]
         session.pushed = {e["element_id"]: signature(e) for e in elements if e.get("element_id")}
-        optional = (render.PROCESS_ID, render.FOOTER_ID)
-        session.inserted = {e["element_id"] for e in elements if e.get("element_id") in optional}
-        panel = next((e for e in elements if e.get("element_id") == render.PROCESS_ID), None)
-        session.process_expanded = panel["expanded"] if panel else None
-        answer = next((e for e in elements if e.get("element_id") == render.ANSWER_ID), None)
-        session.pushed[render.ANSWER_ID] = answer["content"] if answer else ""  # compared as text, not JSON
+        session.inserted = set(session.pushed)
 
     async def _notify_uncertain(self, session: Session) -> None:
         if session.delivery_notice_sent:
@@ -289,14 +296,9 @@ class Pipeline:
         except asyncio.CancelledError:
             return
 
-    def _answer_text(self, session: Session) -> str:
-        text = "\n\n".join(session.answers[session.answers_offset:])
-        text = strip_media_directives(text)
-        if session.images is not None:
-            text = session.images.resolve_images(text)
-        return downgrade_tables(optimize_markdown_style(text))
-
     async def flush(self, session: Session) -> None:
+        """Bring the live card up to the session: insert new blocks above the live line, patch panels,
+        stream answer text. Elements only ever append or change, so a per-id diff is enough."""
         if session.state.terminal or session.channel is None:
             return
         if session.state is State.PAUSED:
@@ -307,20 +309,32 @@ class Pipeline:
             return
         channel, client = session.channel, session.client
         assert client is not None
-        opts = self.opts()
-        view = session.view(Phase.RUNNING)
+        view = self._view(session)
+        elements = render.streaming_elements(view, self.opts())
+        too_big = render.count_elements(elements) > render.ELEMENT_BUDGET and len(view.blocks) > 1
+        if too_big and await self.handoff(session, reason="elements"):
+            return
 
         actions: list[dict[str, Any]] = []
         committed: dict[str, str] = {}
-        inserted = set(session.inserted)
-        status = render.status_element(view, opts)
-        self._plan(session, status, actions, committed, inserted)
-        process = render.process_element(view, opts)
-        footer = render.footer_element(view, opts)
-        if process is not None:
-            self._plan(session, process, actions, committed, inserted, before=render.ANSWER_ID)
-        if footer is not None:
-            self._plan(session, footer, actions, committed, inserted)
+        streams: list[tuple[str, str, str]] = []
+        present = set(session.inserted)
+        for element in elements:
+            element_id, sig = element["element_id"], signature(element)
+            if element_id not in present:
+                actions.append({"action": "add_elements", "params": {
+                    "type": "insert_before", "target_element_id": render.STATUS_ID, "elements": [element],
+                }})
+                present.add(element_id)
+                committed[element_id] = sig
+            elif session.pushed.get(element_id) != sig:
+                if element["tag"] == "markdown" and element_id != render.STATUS_ID:
+                    streams.append((element_id, element["content"], sig))  # typewriter, not a replace
+                else:
+                    actions.append({"action": "partial_update_element", "params": {
+                        "element_id": element_id, "partial_element": render.partial_for(element),
+                    }})
+                    committed[element_id] = sig
         if actions:
             try:
                 await client.batch_update(channel, actions)
@@ -334,17 +348,14 @@ class Pipeline:
                 self._defer_retry(session, exc.code)
                 return
             session.pushed.update(committed)
-            session.inserted = inserted
-            if process is not None:
-                session.process_expanded = process["expanded"]
+            session.inserted = present
 
-        if time.monotonic() < session.stream_retry_after:
-            metrics.increment("cardkit.stream.backoff_skipped")
-            return
-        text = self._answer_text(session)
-        if text != session.pushed.get(render.ANSWER_ID, ""):
+        for element_id, content, sig in streams:
+            if time.monotonic() < session.stream_retry_after:
+                metrics.increment("cardkit.stream.backoff_skipped")
+                return
             try:
-                await client.update_element_content(channel, render.ANSWER_ID, text or " ")
+                await client.update_element_content(channel, element_id, content or " ")
             except StreamingClosedError:
                 self._on_stream_closed(session)
                 return
@@ -357,29 +368,8 @@ class Pipeline:
             except Exception:
                 self._defer_retry(session, 0)
                 return
-            session.pushed[render.ANSWER_ID] = text
+            session.pushed[element_id] = sig
             session.stream_failures, session.stream_retry_after = 0, 0.0
-
-    def _plan(
-        self, session: Session, element: dict[str, Any], actions: list[dict[str, Any]], committed: dict[str, str],
-        inserted: set[str], *, before: str | None = None,
-    ) -> None:
-        """Add the CardKit action (insert or partial update) that brings one element up to date."""
-        element_id = element["element_id"]
-        sig = signature(element)
-        if element_id in inserted or element_id == render.STATUS_ID:
-            if session.pushed.get(element_id) == sig:
-                return
-            reset = element.get("tag") == "collapsible_panel" and element["expanded"] != session.process_expanded
-            actions.append({"action": "partial_update_element", "params": {
-                "element_id": element_id, "partial_element": render.partial_for(element, reset_state=reset),
-            }})
-        else:
-            params: dict[str, Any] = {"type": "insert_before", "target_element_id": before, "elements": [element]} \
-                if before else {"type": "append", "elements": [element]}
-            actions.append({"action": "add_elements", "params": params})
-            inserted.add(element_id)
-        committed[element_id] = sig
 
     def _on_stream_closed(self, session: Session) -> None:
         session.streaming_closed = True
@@ -450,6 +440,9 @@ class Pipeline:
                        session.thoughts_offset)
         session.steps_offset, session.steps_offset_failed = steps_total, failed_total
         session.answers_offset, session.thoughts_offset = len(session.answers), len(session.thoughts)
+        session.close_entry()
+        old_blocks = session.blocks_offset
+        session.blocks_offset = len(session.timeline)
         session.last_was_answer = False
         try:
             card = self._initial_card(session)
@@ -462,6 +455,7 @@ class Pipeline:
             session.delivery_key, session.delivery_status = prior
             (session.steps_offset, session.steps_offset_failed, session.answers_offset,
              session.thoughts_offset) = old_offsets
+            session.blocks_offset = old_blocks
             _logger.warning("card handoff failed; keeping the current card: msg=%s", session.message_id[:12],
                             exc_info=True)
             return False

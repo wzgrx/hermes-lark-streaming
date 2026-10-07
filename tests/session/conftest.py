@@ -114,9 +114,14 @@ def make_controller(tmp_path, client):
 
 
 def state_tag(card: dict[str, Any]) -> str:
-    """The zh state tag of a card header (运行中 / 已完成 / 有失败 / 失败 / 已停止 / 已分页)."""
-    text = card["header"]["text_tag_list"][0]["text"]
-    return str(text.get("i18n_content", {}).get("zh_cn") or text["content"])
+    """The zh footer line of a finished card (✅ 已完成 / 🛑 已停止 / ❌ 出错, plus 'N 步失败'),
+    or the continuation pointer of a sealed card."""
+    elements = card["body"]["elements"]
+    for index, element in enumerate(elements):
+        if element["tag"] == "hr" and index + 1 < len(elements):
+            nxt = elements[index + 1]
+            return str(nxt.get("i18n_content", {}).get("zh_cn") or nxt["content"])
+    return json.dumps(elements[-1], ensure_ascii=False)
 
 
 async def settle(ctl: Controller, delay: float = 0.4) -> None:

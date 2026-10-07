@@ -212,8 +212,7 @@ class Controller:
             return False
         with session.lock:
             if show:
-                session.thoughts += reasoning or ""
-                session.last_was_answer = False
+                session.add_thought(reasoning or "")
             if answer:
                 session.add_answer(answer)
         self._wake(session)
@@ -223,8 +222,7 @@ class Controller:
         if not self.enabled or not self.source.show_reasoning or (session := self._active(message_id)) is None:
             return False
         with session.lock:
-            session.thoughts += text
-            session.last_was_answer = False
+            session.add_thought(text)
         self._wake(session)
         return True
 
@@ -248,11 +246,11 @@ class Controller:
             return False
         split = ""
         with session.lock:
-            session.last_was_answer = False
             if status in _STARTED:
-                session.tracker.start(tool_name, detail)
+                session.add_tool(session.tracker.start(tool_name, detail))
             else:
-                session.tracker.finish(tool_name, status, detail, result=result, is_error=is_error)
+                _, record = session.tracker.finish(tool_name, status, detail, result=result, is_error=is_error)
+                session.add_tool(record)
                 split = self._take_pending_split(session, tool_name)
         if split:
             self._split_blocking(session)

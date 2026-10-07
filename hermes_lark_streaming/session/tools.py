@@ -34,6 +34,25 @@ def _kind(name: str) -> str:
     return ""
 
 
+_ICONS = {
+    "command": "setting_outlined",
+    "path": "file-link-text_outlined",
+    "search": "search_outlined",
+}
+_ICON_BY_NAME = {
+    "edit": "edit_outlined", "write": "edit_outlined", "write_file": "edit_outlined", "patch": "edit_outlined",
+    "web_fetch": "language_outlined", "fetch": "language_outlined", "browser": "browser-mac_outlined",
+    "grep": "doc-search_outlined", "glob": "folder_outlined", "skill": "app-default_outlined",
+    "skill_view": "app-default_outlined", "skills_list": "app-default_outlined", "delegate_task": "robot_outlined",
+    "clarify": "chat_outlined", "memory": "bookmark_outlined", "todo": "list-check_outlined",
+}
+
+
+def icon(name: str) -> str:
+    normalized = name.strip().lower().replace("-", "_")
+    return _ICON_BY_NAME.get(normalized) or _ICONS.get(_kind(name), "setting-inter_outlined")
+
+
 def title(name: str) -> str:
     cleaned = name.replace("-", " ").replace("_", " ").strip()
     return cleaned[:1].upper() + cleaned[1:] if cleaned else "Tool"
@@ -111,6 +130,7 @@ def completion(
 
 @dataclass(slots=True)
 class _Record:
+    id: int
     name: str
     summary: str
     status: StepStatus
@@ -119,7 +139,7 @@ class _Record:
     error: str = ""
 
     def view(self) -> Step:
-        return Step(title(self.name), self.summary, self.status, self.elapsed_ms, self.error)
+        return Step(title(self.name), self.summary, self.status, self.elapsed_ms, self.error, icon(self.name))
 
 
 class ToolTracker:
@@ -130,6 +150,7 @@ class ToolTracker:
         self._max = max(1, max_tracked)
         self.archived = 0
         self.started_at = time.monotonic()
+        self._next_id = 0
 
     @property
     def count(self) -> int:
@@ -140,14 +161,21 @@ class ToolTracker:
     def running(self) -> int:
         return sum(r.status is StepStatus.RUNNING for r in self._records)
 
-    def start(self, name: str, detail: str = "") -> None:
-        self._records.append(_Record(name, summarize(name, detail), StepStatus.RUNNING, time.monotonic()))
+    def _new_id(self) -> int:
+        self._next_id += 1
+        return self._next_id
+
+    def start(self, name: str, detail: str = "") -> int:
+        """Record a started tool; returns its id."""
+        record = _Record(self._new_id(), name, summarize(name, detail), StepStatus.RUNNING, time.monotonic())
+        self._records.append(record)
         self._trim()
+        return record.id
 
     def finish(
         self, name: str, status: str = "completed", detail: str = "", *, result: Any = None, is_error: Any = None,
-    ) -> bool:
-        """Close the newest running record of ``name``; returns whether the tool failed."""
+    ) -> tuple[bool, int]:
+        """Close the newest running record of ``name``; returns ``(failed, record id)``."""
         failed, error = completion(name, status, detail, result=result, is_error=is_error)
         now = time.monotonic()
         for record in reversed(self._records):
@@ -155,12 +183,12 @@ class ToolTracker:
                 record.elapsed_ms = (now - record.started) * 1000
                 break
         else:  # a completion with no observed start still counts
-            record = _Record(name, summarize(name, detail), StepStatus.RUNNING, now)
+            record = _Record(self._new_id(), name, summarize(name, detail), StepStatus.RUNNING, now)
             self._records.append(record)
         record.status = StepStatus.FAILED if failed else StepStatus.OK
         record.error = error
         self._trim()
-        return failed
+        return failed, record.id
 
     def unconfirm_running(self) -> None:
         """The turn ended; a still-running record has no final result, which is not a failure."""
@@ -170,6 +198,11 @@ class ToolTracker:
 
     def steps(self) -> tuple[Step, ...]:
         return tuple(r.view() for r in self._records)
+
+    def steps_for(self, ids: list[int]) -> tuple[Step, ...]:
+        """Steps for the given record ids, in the given order; trimmed records are skipped."""
+        by_id = {r.id: r for r in self._records}
+        return tuple(by_id[i].view() for i in ids if i in by_id)
 
     def _trim(self) -> None:
         excess = len(self._records) - self._max

@@ -35,6 +35,25 @@ class Step:
     status: StepStatus = StepStatus.RUNNING
     elapsed_ms: float | None = None  # None: start/end pair not observed
     error: str = ""  # failure excerpt, shown only for FAILED
+    icon: str = "setting-inter_outlined"  # Feishu standard_icon token
+
+
+class BlockKind(StrEnum):
+    THOUGHT = "thought"
+    TOOLS = "tools"
+    ANSWER = "answer"
+
+
+@dataclass(frozen=True, slots=True)
+class Block:
+    """One stretch of the turn's timeline, in arrival order. ``key`` doubles as the card element id."""
+
+    kind: BlockKind
+    key: str
+    text: str = ""  # thought or answer text
+    steps: tuple[Step, ...] = ()  # tools only
+    elapsed_s: float | None = None  # thought duration / tool batch wall time, once closed
+    open: bool = False  # still receiving content
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +106,7 @@ class TurnView:
     sections: tuple[Section, ...] = ()
     continued: bool = False  # card rolled over; more cards follow, so no terminal chrome
     card_key: str = ""  # short per-card token; keeps panel ids unique so clients don't carry state across cards
+    blocks: tuple[Block, ...] = ()  # the timeline this card shows, in arrival order
 
     @property
     def failed_steps(self) -> int:

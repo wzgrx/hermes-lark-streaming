@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from ..card.model import Footer, Phase, Section, TurnView
+from ..card.model import Block, BlockKind, Footer, Phase, Section, TurnView
 from ..transport.channel import CardChannel
 from ..transport.flush import Flusher
 from ..transport.guard import UnavailableGuard
@@ -39,6 +39,18 @@ class State(StrEnum):
 
 
 @dataclass(eq=False)
+class Entry:
+    """A mutable timeline block; ``Session.view`` freezes it into a ``card.model.Block``."""
+
+    kind: BlockKind
+    key: str
+    text: str = ""
+    tool_ids: list[int] = field(default_factory=list)
+    started: float = field(default_factory=time.monotonic)
+    ended: float | None = None
+
+
+@dataclass(eq=False)
 class Session:
     message_id: str
     chat_id: str
@@ -55,6 +67,8 @@ class Session:
     answers: list[str] = field(default_factory=list)
     raw_answer: list[str] = field(default_factory=list)  # un-stripped deltas: MEDIA: directives live here
     last_was_answer: bool = False
+    timeline: list[Entry] = field(default_factory=list)
+    blocks_offset: int = 0  # timeline entries already shown on earlier (sealed) cards
     notices: list[str] = field(default_factory=list)
     tag: str = ""
     provider: str = ""  # provider the turn is actually using, once telemetry has seen a request
@@ -117,6 +131,19 @@ class Session:
     def raw_text(self) -> str:
         return "".join(self.raw_answer)
 
+    def _entry(self, kind: BlockKind) -> Entry:
+        """The open entry of ``kind`` at the end of the timeline, or a new one (closing the previous)."""
+        if self.timeline and self.timeline[-1].kind is kind and self.timeline[-1].ended is None:
+            return self.timeline[-1]
+        self.close_entry()
+        entry = Entry(kind, f"b{len(self.timeline)}")
+        self.timeline.append(entry)
+        return entry
+
+    def close_entry(self) -> None:
+        if self.timeline and self.timeline[-1].ended is None:
+            self.timeline[-1].ended = time.monotonic()
+
     def add_answer(self, text: str) -> None:
         """Append to the open answer segment, or start a new one after a tool/thought."""
         if self.answers and self.last_was_answer:
@@ -124,6 +151,36 @@ class Session:
         else:
             self.answers.append(text)
         self.last_was_answer = True
+        self._entry(BlockKind.ANSWER).text += text
+
+    def add_thought(self, text: str) -> None:
+        self.thoughts += text
+        self.last_was_answer = False
+        self._entry(BlockKind.THOUGHT).text += text
+
+    def add_tool(self, record_id: int) -> None:
+        """Place a tool record in the timeline once; consecutive tools share one block."""
+        self.last_was_answer = False
+        if any(record_id in e.tool_ids for e in self.timeline[self.blocks_offset:]):
+            return
+        self._entry(BlockKind.TOOLS).tool_ids.append(record_id)
+
+    def blocks(self, *, finished: bool) -> tuple[Block, ...]:
+        now = time.monotonic()
+        out = []
+        entries = self.timeline[self.blocks_offset:]
+        for index, entry in enumerate(entries):
+            is_open = not finished and entry.ended is None and index == len(entries) - 1
+            end = entry.ended if entry.ended is not None else (None if is_open else now)
+            out.append(Block(
+                kind=entry.kind,
+                key=entry.key,
+                text=entry.text,
+                steps=self.tracker.steps_for(entry.tool_ids) if entry.kind is BlockKind.TOOLS else (),
+                elapsed_s=None if end is None else max(0.0, end - entry.started),
+                open=is_open,
+            ))
+        return tuple(out)
 
     def view(self, phase: Phase, *, continued: bool = False, finished: bool = False) -> TurnView:
         """Snapshot for the renderer: only what the *current* card owns."""
@@ -144,6 +201,7 @@ class Session:
             sections=self.sections if finished else (),
             continued=continued,
             card_key=hashlib.sha1(f"{self.message_id}:{self.delivery_generation}".encode()).hexdigest()[:6],
+            blocks=self.blocks(finished=finished or continued),
         )
 
 
