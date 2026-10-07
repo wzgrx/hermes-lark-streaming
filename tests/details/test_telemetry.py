@@ -293,7 +293,9 @@ def prime(state):
 def test_structured_scalar_restores_truncated_effort_without_retaining_body():
     state = TurnTelemetry()
     p = prime(state)
-    actual = event(provider="example", request={"messages": [{"content": "PRIVATE" * 50000}], "reasoning_effort": "max"})
+    actual = event(
+        provider="example", request={"messages": [{"content": "PRIVATE" * 50000}], "reasoning_effort": "max"}
+    )
     original = deepcopy(actual)
     assert state.observe_execution(actual)
     assert actual == original

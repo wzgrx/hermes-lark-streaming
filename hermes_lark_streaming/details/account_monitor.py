@@ -35,8 +35,12 @@ class AccountsSummary:
         return value
 
     def request(self, settings: dict[str, Any], resolve: Callable[[str], str], *, allow_read: bool = True) -> None:
-        identity = (configured(settings), settings.get("auto_detect") is True,
-                    settings.get("_provider_products"), tuple(os.environ))
+        identity = (
+            configured(settings),
+            settings.get("auto_detect") is True,
+            settings.get("_provider_products"),
+            tuple(os.environ),
+        )
         if identity != self._spec_identity or time.monotonic() - self._spec_at >= 60:
             self._specs = discover(settings, resolve)
             self._spec_identity, self._spec_at = identity, time.monotonic()
@@ -85,7 +89,8 @@ class AccountsSummary:
                             if row.get("status") != "ok" and previous.get("status") == "ok":
                                 retained = deepcopy(previous)
                                 retained.update(
-                                    stale=True, last_error_status=row.get("status"),
+                                    stale=True,
+                                    last_error_status=row.get("status"),
                                     last_attempt_at=row.get("checked_at"),
                                 )
                                 code = row.get("http_status")

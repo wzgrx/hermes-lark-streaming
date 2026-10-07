@@ -104,8 +104,16 @@ def test_http_200_failed_moonshot_business_envelope_is_not_balance(code):
 
 @pytest.mark.parametrize("provider", ["minimax", "minimax-cn"])
 def test_minimax_ambiguous_legacy_usage_count_is_not_guessed(provider):
-    base = {"model_remains": [{"model_name": "F", "current_interval_total_count": 1000,
-                               "current_interval_usage_count": 900, "end_time": 1792000000000}]}
+    base = {
+        "model_remains": [
+            {
+                "model_name": "F",
+                "current_interval_total_count": 1000,
+                "current_interval_usage_count": 900,
+                "end_time": 1792000000000,
+            }
+        ]
+    }
     assert parse_account(provider, base)["windows"] == []
     base["model_remains"][0]["current_interval_remaining_percent"] = 12.3456
     row = parse_account(provider, base)
@@ -120,11 +128,17 @@ def test_bad_new_adapter_percentage_is_not_zero(value):
 
 @pytest.mark.parametrize("provider", ["zai", "bigmodel"])
 def test_coding_quotas_keep_mcp_and_token_windows_distinct(provider):
-    body = {"code": 200, "success": True, "data": {"limits": [
-        {"type": "TOKENS_LIMIT", "unit": 3, "number": 5, "percentage": 47, "nextResetTime": 1792000000000},
-        {"type": "TOKENS_LIMIT", "unit": 6, "number": 1, "percentage": 10},
-        {"type": "TIME_LIMIT", "percentage": 25},
-    ]}}
+    body = {
+        "code": 200,
+        "success": True,
+        "data": {
+            "limits": [
+                {"type": "TOKENS_LIMIT", "unit": 3, "number": 5, "percentage": 47, "nextResetTime": 1792000000000},
+                {"type": "TOKENS_LIMIT", "unit": 6, "number": 1, "percentage": 10},
+                {"type": "TIME_LIMIT", "percentage": 25},
+            ]
+        },
+    }
     assert [w["name"] for w in parse_account(provider, body)["windows"]] == ["rolling", "weekly", "mcp_monthly"]
     body["success"] = False
     assert parse_account(provider, body)["status"] == "unavailable"
@@ -132,9 +146,15 @@ def test_coding_quotas_keep_mcp_and_token_windows_distinct(provider):
 
 @pytest.mark.parametrize("auto", [True, 1, False, 0])
 def test_subscription_validity_is_not_next_auto_charge(auto):
-    row = {"productId": "coding-plan", "productName": "Coding Plan", "status": "VALID", "inCurrentPeriod": True,
-           "autoRenew": auto, "nextRenewTime": "2026-11-01 00:00:00",
-           "valid": "2026-10-01 00:00:00 ~ 2026-12-01 00:00:00"}
+    row = {
+        "productId": "coding-plan",
+        "productName": "Coding Plan",
+        "status": "VALID",
+        "inCurrentPeriod": True,
+        "autoRenew": auto,
+        "nextRenewTime": "2026-11-01 00:00:00",
+        "valid": "2026-10-01 00:00:00 ~ 2026-12-01 00:00:00",
+    }
     result = parse_subscription({"code": 200, "data": [row]})
     assert result["subscription_expires_on"] == ("2026-12-01" if auto in (True, 1) else "2026-11-01")
     assert bool(result.get("subscription_renews_on")) == (auto in (True, 1))
@@ -259,9 +279,12 @@ def test_explicit_identical_reference_is_resolved_once_and_distinct_keys_survive
 
 
 def test_full_explicit_capacity_does_not_scan_unrelated_credentials():
-    value = {"auto_detect": True, "accounts": [
-        {"id": f"alias{i}", "provider": "opencode-go", "key_env": f"OPENCODE_GO_API_KEY_{i}"} for i in range(4)
-    ]}
+    value = {
+        "auto_detect": True,
+        "accounts": [
+            {"id": f"alias{i}", "provider": "opencode-go", "key_env": f"OPENCODE_GO_API_KEY_{i}"} for i in range(4)
+        ],
+    }
     calls = []
 
     def resolve(name):
@@ -285,8 +308,13 @@ def test_discovery_is_opt_in_and_preserves_explicit_account_alias():
 
 
 def test_independent_keys_are_bounded_and_do_not_escape_in_output():
-    keys = {"OPENCODE_GO_API_KEY": "SENTINEL_PRIMARY", "OPENCODE_GO_API_KEY_2": "SENTINEL_SECOND",
-            "DEEPSEEK_API_KEY": "SENTINEL_DS", "OPENROUTER_API_KEY": "SENTINEL_OR", "MOONSHOT_API_KEY": "SENTINEL_MOON"}
+    keys = {
+        "OPENCODE_GO_API_KEY": "SENTINEL_PRIMARY",
+        "OPENCODE_GO_API_KEY_2": "SENTINEL_SECOND",
+        "DEEPSEEK_API_KEY": "SENTINEL_DS",
+        "OPENROUTER_API_KEY": "SENTINEL_OR",
+        "MOONSHOT_API_KEY": "SENTINEL_MOON",
+    }
     rows = discover({"auto_detect": True, "accounts": []}, lambda n: keys.get(n, ""), env_names=tuple(keys))
     assert len(rows) == 4 and rows[0].provider == "opencode-go" and all(r.discovered for r in rows)
     assert "SENTINEL_" not in repr(rows)
@@ -304,8 +332,13 @@ def test_unsupported_discovery_is_local_and_never_transmits_key(monkeypatch):
 
 
 def full_settings():
-    return {"auto_detect": True, "accounts": [
-        {"id": "go", "label": "Go Primary", "provider": "opencode-go"}, {"id": "ds", "provider": "deepseek"}]}
+    return {
+        "auto_detect": True,
+        "accounts": [
+            {"id": "go", "label": "Go Primary", "provider": "opencode-go"},
+            {"id": "ds", "provider": "deepseek"},
+        ],
+    }
 
 
 def test_scoped_discovery_never_resolves_unrelated_existing_keys():
@@ -325,7 +358,9 @@ def test_scoped_discovery_never_resolves_unrelated_existing_keys():
     assert calls and all(n.startswith("OPENCODE_GO_API_KEY") for n in calls)
 
 
-@pytest.mark.parametrize("provider", [None, "", "deepseek-v4.1-flash", "OPENCODE_GO_API_KEY", "https://example.invalid"])
+@pytest.mark.parametrize(
+    "provider", [None, "", "deepseek-v4.1-flash", "OPENCODE_GO_API_KEY", "https://example.invalid"]
+)
 def test_unknown_or_model_label_is_not_a_billing_identity(provider):
     assert not current_provider_settings(full_settings(), provider)["accounts"]
     assert "opencode-go" not in provider_products(provider)
@@ -374,12 +409,14 @@ async def test_inflight_rotations_coalesce_to_latest_without_another_delta(monke
 
 @pytest.mark.asyncio
 async def test_same_identity_failure_records_new_attempt_without_relabeling_last_success(monkeypatch):
-    rows = iter([
-        {"id": "first", "status": "ok", "checked_at": "2026-10-05T04:00:00Z", "balances": []},
-        {"id": "first", "status": "unavailable", "http_status": 429, "checked_at": "2026-10-05T04:05:00Z"},
-        {"id": "first", "status": "unavailable", "checked_at": "2026-10-05T04:10:00Z"},
-        {"id": "first", "status": "ok", "checked_at": "2026-10-05T04:15:00Z", "balances": []},
-    ])
+    rows = iter(
+        [
+            {"id": "first", "status": "ok", "checked_at": "2026-10-05T04:00:00Z", "balances": []},
+            {"id": "first", "status": "unavailable", "http_status": 429, "checked_at": "2026-10-05T04:05:00Z"},
+            {"id": "first", "status": "unavailable", "checked_at": "2026-10-05T04:10:00Z"},
+            {"id": "first", "status": "ok", "checked_at": "2026-10-05T04:15:00Z", "balances": []},
+        ]
+    )
     monkeypatch.setattr(
         "hermes_lark_streaming.details.account_fetch.fetch_accounts", lambda *args: {"accounts": [next(rows)]}
     )

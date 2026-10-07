@@ -32,7 +32,9 @@ def test_read_proc_wsl(tmp_path):
 def test_read_proc_missing_files_stay_absent(tmp_path):
     result, cpu = read_proc(tmp_path / "nope")
     assert cpu is None and result == {"scope": "Host"}
-    result, _ = read_proc(fake_proc(tmp_path / "x", release="6.1-generic", meminfo="MemTotal: 10 kB\nMemAvailable: 99 kB\n"))
+    result, _ = read_proc(
+        fake_proc(tmp_path / "x", release="6.1-generic", meminfo="MemTotal: 10 kB\nMemAvailable: 99 kB\n")
+    )
     assert result["scope"] == "Linux" and "ram_used_gib" not in result  # impossible values are not shown
 
 
@@ -59,8 +61,9 @@ def test_read_disk_is_bounded_and_fails_closed(tmp_path):
 async def test_sampler_reports_cpu_delta_and_disk_without_gpu():
     sampler = HostSampler()
     samples = iter([({"ram_used_gib": 1.0, "ram_total_gib": 2.0}, (1000, 900)), ({"ram_used_gib": 1.0}, (2000, 1500))])
-    with patch("hermes_lark_streaming.details.host.read_proc", lambda: next(samples)), patch(
-        "hermes_lark_streaming.details.host.shutil.which", return_value=None
+    with (
+        patch("hermes_lark_streaming.details.host.read_proc", lambda: next(samples)),
+        patch("hermes_lark_streaming.details.host.shutil.which", return_value=None),
     ):
         sampler.request()
         await sampler._task
@@ -85,8 +88,9 @@ async def test_slow_thread_stays_owned_and_coalesced():
         return {"ram_used_gib": 1}, None
 
     sampler = HostSampler()
-    with patch("hermes_lark_streaming.details.host.read_proc", slow_read), patch(
-        "hermes_lark_streaming.details.host.shutil.which", return_value=None
+    with (
+        patch("hermes_lark_streaming.details.host.read_proc", slow_read),
+        patch("hermes_lark_streaming.details.host.shutil.which", return_value=None),
     ):
         sampler.request()
         task = sampler._task

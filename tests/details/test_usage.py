@@ -44,7 +44,12 @@ HERMES = {"input_tokens": 20, "cache_read_tokens": 70, "cache_write_tokens": 10,
         ),
         (
             "gemini",
-            {"promptTokenCount": 100, "candidatesTokenCount": 5, "thoughtsTokenCount": 2, "cachedContentTokenCount": 70},
+            {
+                "promptTokenCount": 100,
+                "candidatesTokenCount": 5,
+                "thoughtsTokenCount": 2,
+                "cachedContentTokenCount": 70,
+            },
             100,
             7,
             70,
@@ -85,7 +90,9 @@ def test_cohere_physical_tokens_not_billable_units(protocol):
 
 
 def test_cohere_sdk_integral_floats_and_cache_subset():
-    usage = normalize_usage({"tokens": {"input_tokens": 71.0, "output_tokens": 418.0}, "cached_tokens": 25.0}, "cohere_v2")
+    usage = normalize_usage(
+        {"tokens": {"input_tokens": 71.0, "output_tokens": 418.0}, "cached_tokens": 25.0}, "cohere_v2"
+    )
     assert (usage.prompt, usage.output, usage.cache_read) == (71, 418, 25)
     assert type(usage.prompt) is int and type(usage.output) is int and type(usage.cache_read) is int
 
@@ -125,7 +132,14 @@ def test_cohere_requires_explicit_protocol_and_usage_object():
 
 @pytest.mark.parametrize(
     ("prompt", "read", "expected"),
-    [(149120, 99072, 0.664), (3, 2, 0.666), (200, 40, 0.2), (100, 0, 0.0), (100, 100, 1.0), (10**15, 10**15 - 1, 0.999)],
+    [
+        (149120, 99072, 0.664),
+        (3, 2, 0.666),
+        (200, 40, 0.2),
+        (100, 0, 0.0),
+        (100, 100, 1.0),
+        (10**15, 10**15 - 1, 0.999),
+    ],
 )
 def test_lower_bounds_never_round_up(prompt, read, expected):
     ratio, floor = cache_ratio({"input_tokens": prompt, "cache_read_tokens": read, "cache_read_partial": True})
@@ -135,7 +149,15 @@ def test_lower_bounds_never_round_up(prompt, read, expected):
 
 @pytest.mark.parametrize(
     ("prompt", "read", "partial"),
-    [(0, 0, False), (None, 40, False), (100, 101, False), (100, 40, True), (True, 0, False), (100, None, False), (100, -1, False)],
+    [
+        (0, 0, False),
+        (None, 40, False),
+        (100, 101, False),
+        (100, 40, True),
+        (True, 0, False),
+        (100, None, False),
+        (100, -1, False),
+    ],
 )
 def test_unknown_denominator_or_invalid_counts_stay_unknown(prompt, read, partial):
     data = {"input_tokens": prompt, "cache_read_tokens": read, "cache_read_partial": True, "usage_partial": partial}

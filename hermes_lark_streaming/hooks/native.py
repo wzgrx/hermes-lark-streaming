@@ -4,8 +4,8 @@ Hermes 0.21.x observer hooks carry no chat/message id and their return values ar
 telemetry only and never own delivery. The reversible source injection (``table``) stays the card owner;
 if a future Hermes context exposes ``register_streaming_renderer``, that protocol takes over.
 
-Telemetry is forwarded to ``hermes_lark_streaming.details.observe(event, payload, session_key=...)`` when the
-details package provides it; its absence is tolerated.
+Telemetry is forwarded to ``hermes_lark_streaming.session.observe(event, payload, session_key=...)`` when the
+session package provides it; its absence is tolerated.
 """
 
 from __future__ import annotations
@@ -135,19 +135,17 @@ def session_key() -> str | None:
     ``get_current_session_key`` is deliberately not used in a multiplexed observer.
     """
     keys = {
-        value
-        for var, value in copy_context().items()
-        if var.name in _SESSION_VARS and isinstance(value, str) and value
+        value for var, value in copy_context().items() if var.name in _SESSION_VARS and isinstance(value, str) and value
     }
     return next(iter(keys)) if len(keys) == 1 else None
 
 
 def observe_telemetry(event: str, payload: dict[str, Any]) -> None:
-    """Forward one provider/auxiliary event to ``details.observe``; never raises."""
+    """Forward one provider/auxiliary event to ``session.observe``; never raises."""
     try:
-        from hermes_lark_streaming import details
+        from hermes_lark_streaming import session
 
-        observe: Callable[..., Any] | None = getattr(details, "observe", None)
+        observe: Callable[..., Any] | None = getattr(session, "observe", None)
         if not callable(observe):
             return
         key = session_key()

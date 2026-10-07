@@ -117,7 +117,7 @@ async def test_time_limit_handoff_seals_old_and_continues(make_controller, clien
     ctl.on_answer(message_id="om_1", text="第二段")
     await settle(ctl, 0.6)
     assert client.cards == 2
-    sealed = [c for c in client.of("update_card") if c[0] == "card_1"][0][2]
+    sealed = next(c for c in client.of("update_card") if c[0] == "card_1")[2]
     assert "已分页" in sealed["body"]["elements"][0]["i18n_content"]["zh_cn"]
     assert "第一段第二段" in str(sealed) or "第一段" in str(sealed)
     ctl.on_answer(message_id="om_1", text="第三段")

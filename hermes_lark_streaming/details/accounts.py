@@ -78,7 +78,8 @@ def current_provider_settings(settings: dict[str, Any], provider: str) -> dict[s
     return {
         **settings,
         "accounts": [row for row in rows if isinstance(row, dict) and row.get("provider") in products]
-        if isinstance(rows, list) else [],
+        if isinstance(rows, list)
+        else [],
         "_provider_products": products,
     }
 
@@ -87,9 +88,13 @@ def current_provider_snapshot(value: dict[str, Any], provider: str, *, terminal:
     products = provider_products(provider)
     rows = value.get("accounts")
     return {
-        **value, "scope": "active_provider", "active_provider": provider, "terminal": terminal,
+        **value,
+        "scope": "active_provider",
+        "active_provider": provider,
+        "terminal": terminal,
         "accounts": [row for row in rows if isinstance(row, dict) and row.get("provider") in products]
-        if isinstance(rows, list) else [],
+        if isinstance(rows, list)
+        else [],
     }
 
 
@@ -168,5 +173,3 @@ def discover(
                 if len(result) >= limit:
                     return tuple(result[:limit])
     return tuple(result[:limit])
-
-

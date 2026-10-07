@@ -118,7 +118,9 @@ def installed(hermes_source: Path) -> Path:
 def test_delta_preserves_tts_without_duplicate_text(installed: Path) -> None:
     stts, native = Mock(), Mock()
     native.stream_deltas_enabled = True
-    ctx = SimpleNamespace(event_message_id="message-1", _run_still_current=lambda: True, stream_consumer_holder=[native])
+    ctx = SimpleNamespace(
+        event_message_id="message-1", _run_still_current=lambda: True, stream_consumer_holder=[native]
+    )
     from typing import Optional
 
     namespace = {"ctx": ctx, "stts": stts, "delta_sinks": [native, stts], "Optional": Optional}

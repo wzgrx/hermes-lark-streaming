@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -85,7 +85,10 @@ class TestAnswer:
         ns = build(f"def callback(text, ctx, stts):\n{indented(snippets.answer)}    return 'native'\n")
         stts = MagicMock()
         stts.on_delta.side_effect = RuntimeError("tts down")
-        with caplog.at_level(logging.ERROR, logger="hermes_lark_streaming"), patch(f"{BRIDGE}.on_answer_delta", return_value=True):
+        with (
+            caplog.at_level(logging.ERROR, logger="hermes_lark_streaming"),
+            patch(f"{BRIDGE}.on_answer_delta", return_value=True),
+        ):
             assert ns["callback"]("delta", ctx_with(), stts) is None
         assert any("streaming_tts" in r.message for r in caplog.records)
 
@@ -98,8 +101,7 @@ class TestAnswer:
 class TestThinking:
     def run(self) -> Any:
         return build(
-            "def callback(text, ctx, already_streamed, stts):\n"
-            f"{indented(snippets.thinking)}    return 'native'\n"
+            f"def callback(text, ctx, already_streamed, stts):\n{indented(snippets.thinking)}    return 'native'\n"
         )["callback"]
 
     def test_commentary_is_wrapped_in_tts_boundaries(self) -> None:
@@ -120,7 +122,12 @@ class TestTool:
         with patch(f"{BRIDGE}.on_tool_updated", return_value=True) as hook:
             assert tool_callback(True)(ctx)("tool.started", tool_name="search", preview="query") is None
         hook.assert_called_once_with(
-            message_id="modern-message", tool_name="search", status="started", detail="query", result=None, is_error=None
+            message_id="modern-message",
+            tool_name="search",
+            status="started",
+            detail="query",
+            result=None,
+            is_error=None,
         )
 
     def test_consumed_event_preserves_log_mode(self) -> None:
@@ -207,9 +214,7 @@ class TestComplete:
             patch(f"{BRIDGE}.on_message_completed_wait", new_callable=AsyncMock, return_value=True) as done,
             patch(f"{BRIDGE}.on_message_needs_text_fallback", return_value=False),
         ):
-            await self.run()(
-                {"_hermes_lark_completion_id": "deep"}, SimpleNamespace(message_id="outer"), "a", 1.0, ""
-            )
+            await self.run()({"_hermes_lark_completion_id": "deep"}, SimpleNamespace(message_id="outer"), "a", 1.0, "")
         assert done.await_args.kwargs["message_id"] == "deep"
 
     @pytest.mark.asyncio
@@ -256,11 +261,8 @@ class TestFollowup:
         controller.on_completed_wait.assert_not_awaited()
         assert raw["final_response"] == "discarded" and delivery["final_response"] == "n"
 
-    def test_result_hook_carries_deepest_id(self) -> None:
-        ns = build(
-            "def carry(next_message_id, pending_event, followup_result):\n"
-            f"{indented(snippets.followup_result)}"
-        )
+    def test_result_hook_carries_deepest_id(self, controller: MagicMock) -> None:
+        ns = build(f"def carry(next_message_id, pending_event, followup_result):\n{indented(snippets.followup_result)}")
         deep: dict[str, Any] = {"_hermes_lark_completion_id": "deep"}
         ns["carry"]("outer", None, deep)
         assert deep["_hermes_lark_completion_id"] == "deep"
@@ -271,7 +273,9 @@ class TestFollowup:
 
 class TestCron:
     def runner(self, *, media_in_scope: bool = True) -> Any:
-        params = "targets, cleaned_delivery_content, loop, transport=None" + (", media_files=None" if media_in_scope else "")
+        params = "targets, cleaned_delivery_content, loop, transport=None" + (
+            ", media_files=None" if media_in_scope else ""
+        )
         source = (
             f"def deliver(job, {params}):\n"
             "    unverified_targets = []\n"
@@ -293,11 +297,13 @@ class TestCron:
         }  # fmt: skip
         return SimpleNamespace(**{**base, **values})
 
-    JOB = {"name": "daily", "next_run_at": "2026-06-10T14:30:00+08:00", "id": "job-1"}
+    JOB: ClassVar[dict[str, str]] = {"name": "daily", "next_run_at": "2026-06-10T14:30:00+08:00", "id": "job-1"}
 
     def test_verified_receipt_mirrors_and_skips_native(self) -> None:
         with patch(f"{BRIDGE}.on_cron_deliver", return_value={"message_id": "om_1"}) as hook:
-            unverified, mirrored = self.runner()(self.JOB, [self.target()], " body ", object(), media_files=[("/a", False)])
+            unverified, mirrored = self.runner()(
+                self.JOB, [self.target()], " body ", object(), media_files=[("/a", False)]
+            )
         assert unverified == [] and len(mirrored) == 1
         assert hook.call_args.kwargs == {
             "chat_id": "oc_1", "content": "body", "loop": hook.call_args.kwargs["loop"], "task_name": "daily",
@@ -321,7 +327,12 @@ class TestCron:
 
     @pytest.mark.parametrize(
         "override",
-        [{"platform_name": "telegram"}, {"in_channel_surface": True}, {"thread_id": "t"}, {"transport": SimpleNamespace(is_relay=True)}],
+        [
+            {"platform_name": "telegram"},
+            {"in_channel_surface": True},
+            {"thread_id": "t"},
+            {"transport": SimpleNamespace(is_relay=True)},
+        ],
     )
     def test_other_targets_are_untouched(self, override: dict[str, Any]) -> None:
         with patch(f"{BRIDGE}.on_cron_deliver") as hook:

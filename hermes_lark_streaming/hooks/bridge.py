@@ -26,9 +26,7 @@ def _controller() -> Any | None:
     return ctrl if ctrl is not None and getattr(ctrl, "enabled", True) else None
 
 
-def _safe(
-    default: R, level: int = logging.WARNING
-) -> Callable[[Callable[Concatenate[Any, P], R]], Callable[P, R]]:
+def _safe(default: R, level: int = logging.WARNING) -> Callable[[Callable[Concatenate[Any, P], R]], Callable[P, R]]:
     def decorator(func: Callable[Concatenate[Any, P], R]) -> Callable[P, R]:
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
@@ -306,14 +304,10 @@ def on_approval_enter(ctrl: Any, *, message_id: str) -> None:
 
 
 @_safe(None)
-def on_clarify_enter(
-    ctrl: Any, *, message_id: str, chat_id: str | None = None, session_key: str | None = None
-) -> None:
+def on_clarify_enter(ctrl: Any, *, message_id: str, chat_id: str | None = None, session_key: str | None = None) -> None:
     ctrl.on_clarify_enter(message_id=message_id, chat_id=chat_id, session_key=session_key)
 
 
 @_safe(None)
-def on_clarify_exit(
-    ctrl: Any, *, message_id: str, chat_id: str | None = None, session_key: str | None = None
-) -> None:
+def on_clarify_exit(ctrl: Any, *, message_id: str, chat_id: str | None = None, session_key: str | None = None) -> None:
     ctrl.on_clarify_exit(message_id=message_id, chat_id=chat_id, session_key=session_key)

@@ -91,8 +91,11 @@ class TurnTelemetry:
             elif event == "api_request_error":
                 request.failed = True  # do not retain the error message/body
                 error_type = mapping(payload.get("error")).get("type") or payload.get("error_type")
-                if (isinstance(error_type, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.]{0,95}", error_type)
-                        and label(error_type) == error_type):
+                if (
+                    isinstance(error_type, str)
+                    and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.]{0,95}", error_type)
+                    and label(error_type) == error_type
+                ):
                     request.error_type = error_type
             elif event == "post_api_request":
                 request.finished = True
@@ -134,8 +137,11 @@ class TurnTelemetry:
             if self._sealed is not None or self._identity != (sid, tid):
                 return False
             matches = [
-                request for (request_id, _), request in self._requests.items()
-                if request_id == rid and not request.finished and not request.failed
+                request
+                for (request_id, _), request in self._requests.items()
+                if request_id == rid
+                and not request.finished
+                and not request.failed
                 and [request.provider, request.model, request.api_mode] == route
             ]
             if len(matches) != 1:

@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from ..config import valid_timezone
+
 UNKNOWN = "未知"
 
 
@@ -49,11 +51,8 @@ def ratio_of(used: Any, total: Any) -> float | None:
     return min(1.0, max(0.0, used / total)) if total > 0 else None
 
 
-def zone(name: str) -> ZoneInfo:
-    try:
-        return ZoneInfo(name)
-    except (ValueError, OSError, KeyError):
-        return ZoneInfo("UTC")
+def zone(name: Any) -> ZoneInfo:
+    return ZoneInfo(valid_timezone(name))
 
 
 def parse_instant(raw: Any) -> datetime | None:

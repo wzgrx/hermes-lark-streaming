@@ -51,9 +51,13 @@ def test_install_injects_at_anchors_with_indent(tree: Path) -> None:
     plan = Engine(tree, TABLE).install()
     assert plan.ok and set(plan.included) == {"ALPHA", "BETA", "GAMMA", "OPT"}
     a = (tree / "pkg/a.py").read_text()
-    assert "        # HERMES_LARK_ALPHA_BEGIN\n        alpha_hit = True\n        # HERMES_LARK_ALPHA_END\n        # anchor-a" in a
+    block = "        # HERMES_LARK_ALPHA_BEGIN\n        alpha_hit = True\n        # HERMES_LARK_ALPHA_END\n"
+    assert block + "        # anchor-a" in a
     assert a.index('"""doc"""') < a.index("BETA_BEGIN") < a.index("x = 1")
-    assert (tree / "pkg/b.py").read_text() == "state.value = 3\n# HERMES_LARK_GAMMA_BEGIN\ngamma_hit = True\n# HERMES_LARK_GAMMA_END\nprint(state)\n"
+    assert (
+        (tree / "pkg/b.py").read_text()
+        == "state.value = 3\n# HERMES_LARK_GAMMA_BEGIN\ngamma_hit = True\n# HERMES_LARK_GAMMA_END\nprint(state)\n"
+    )
 
 
 def test_install_is_idempotent_and_status_reports_up_to_date(tree: Path) -> None:

@@ -34,11 +34,13 @@ def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict
     for _key, start, end in periods:
         # One scan for all periods, not MIN plus three independent scans.
         inside = "occurred_at >= ? AND occurred_at < ?"
-        columns.extend((
-            f"SUM(CASE WHEN {inside} THEN 1 ELSE 0 END)",
-            f"SUM(CASE WHEN {inside} AND {measured} THEN 1 ELSE 0 END)",
-            f"SUM(CASE WHEN {inside} AND {measured} THEN input_tokens+output_tokens END)",
-        ))
+        columns.extend(
+            (
+                f"SUM(CASE WHEN {inside} THEN 1 ELSE 0 END)",
+                f"SUM(CASE WHEN {inside} AND {measured} THEN 1 ELSE 0 END)",
+                f"SUM(CASE WHEN {inside} AND {measured} THEN input_tokens+output_tokens END)",
+            )
+        )
         params.extend((start, end) * 3)
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.2)) as db:
         deadline = time.monotonic() + 0.5
@@ -52,7 +54,7 @@ def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict
             return result
         result.update(status="ok", since=datetime.fromtimestamp(first, tz).strftime("%Y-%m-%d"))
         for index, (key, _start, _end) in enumerate(periods):
-            requests, known, tokens = row[1 + index * 3:4 + index * 3]
+            requests, known, tokens = row[1 + index * 3 : 4 + index * 3]
             # A truly empty period is zero once recording exists. Requests with
             # missing usage remain unknown/partial, never an invented zero.
             result[key] = {

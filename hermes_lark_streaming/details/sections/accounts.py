@@ -116,7 +116,7 @@ def _quota_metrics(row: Mapping[str, Any], tz: ZoneInfo, now: float, prefix: str
                 prefix + zh,
                 percent_value(used) if used is not None else UNKNOWN,
                 ratio=min(1.0, used / 100) if used is not None else None,
-                hint=_reset_hint(window.get("reset_at"), tz, now) if window else "",
+                hint=_reset_hint(window.get("reset_at"), tz, now) if window else "API 未返回",
                 label_en=en,
             )
         )
