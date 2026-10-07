@@ -10,7 +10,7 @@ import subprocess
 import sys
 from typing import Any
 
-MIN_LARK_OAPI = "1.7.3"
+MIN_LARK_OAPI = "1.6.8"
 
 
 def _version_tuple(value: str) -> tuple[int, ...]:

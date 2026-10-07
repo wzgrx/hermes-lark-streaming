@@ -41,7 +41,7 @@ def test_sdk_repair_targets_current_interpreter(monkeypatch) -> None:
     monkeypatch.setattr(sdk.subprocess, "run", fake_run)
     result = sdk.repair_lark_oapi()
     assert result["after"] == healthy
-    assert calls[0][0] == ["/usr/bin/uv", "pip", "install", "--python", sdk.sys.executable, "lark-oapi>=1.7.3"]
+    assert calls[0][0] == ["/usr/bin/uv", "pip", "install", "--python", sdk.sys.executable, "lark-oapi>=1.6.8"]
     assert calls[0][1]["timeout"] == 180
 
 
