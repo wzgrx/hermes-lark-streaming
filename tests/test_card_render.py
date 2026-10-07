@@ -29,11 +29,12 @@ RUN = StepStatus.RUNNING
 
 
 def dumps(node):
-    return json.dumps(node, ensure_ascii=False)
+    return json.dumps(node, ensure_ascii=False).replace("\xa0", " ")
 
 
 def zh(element):
-    return element.get("i18n_content", {}).get("zh_cn") or element.get("content", "")
+    """The zh text with no-break spaces read as plain spaces (they only steer where lines wrap)."""
+    return (element.get("i18n_content", {}).get("zh_cn") or element.get("content", "")).replace("\xa0", " ")
 
 
 def title(panel):
@@ -121,9 +122,13 @@ def test_footer_line_is_one_status_row():
     elements = card["body"]["elements"]
     hr = next(i for i, e in enumerate(elements) if e["tag"] == "hr")
     footer = zh(elements[hr + 1])
-    first, second = footer.split("\n")
-    assert first == "✅ **已完成** · ⏱️ 10.4s · 🛠️ 2 步 · ❗ <font color='red'>1 步失败</font>"
-    assert second == "<font color='grey'>🤖 deepseek-v4-flash · 📑 20k/1M (2%) · ⚡ 缓存 83%</font>"
+    assert footer == "✅ **已完成** · ⏱️ 10.4s · 🛠️ 2 步 · ❗ <font color='red'>1 步失败</font>"
+    chips = elements[hr + 2]
+    assert chips["tag"] == "column_set" and chips["flex_mode"] == "flow"  # whole chips wrap, words never split
+    assert [zh(c["elements"][0]) for c in chips["columns"]] == [
+        "<font color='grey'>🤖 deepseek-v4-flash</font>", "<font color='grey'>📑 20k/1M (2%)</font>",
+        "<font color='grey'>⚡ 缓存 83%</font>"]
+    assert chips["columns"][2]["elements"][0]["content"] == "<font color='grey'>⚡ cache 83%</font>"
     assert "龙虾3号" not in footer  # the identity tag is not shown
     assert zh(render_final(done_view(phase=Phase.STOPPED))["body"]["elements"][hr + 1]).startswith("🛑 **已停止**")
     error = render_final(done_view(phase=Phase.FAILED))["body"]["elements"][hr + 1]
@@ -156,7 +161,7 @@ def test_unknown_values_are_not_shown():
     text = dumps(render_final(done_view(sections=(section, empty)))["body"]["elements"][-1])
     assert "未知" not in text and "账户余额" not in text and "CPU" not in text and "资源" not in text
     assert "5小时" in text and "API 快照" in text
-    assert render_final(done_view(sections=(empty,)))["body"]["elements"][-1]["tag"] == "markdown"
+    assert render_final(done_view(sections=(empty,)))["body"]["elements"][-1]["tag"] != "collapsible_panel"
 
 
 # ---------------------------------------------------------------- streaming
@@ -236,4 +241,22 @@ def test_footer_shows_reasoning_effort_and_cost_needs_a_price():
     view = done_view(footer=Footer(model="m", reasoning="max"))
     elements = render_final(view)["body"]["elements"]
     hr = next(i for i, e in enumerate(elements) if e["tag"] == "hr")
-    assert "🧠 max" in zh(elements[hr + 1])
+    assert "🧠 max" in dumps(elements[hr + 2])
+
+
+def test_details_grid_reflows_instead_of_squeezing():
+    usage = Section("usage", "用量", tuple(Metric(n, "1", group="本轮") for n in ("输入", "输出", "缓存", "首响应")))
+    details = render_final(done_view(sections=(usage, QUOTA)))["body"]["elements"][-1]
+    grids = [e for e in details["elements"] if e["tag"] == "column_set"]
+    assert len(grids) == 1 and grids[0]["flex_mode"] == "trisect"  # narrow screens: three cells per row
+    cells = [zh(c["elements"][0]) for c in grids[0]["columns"]]
+    assert cells[0] == "<font color='grey'>输入</font>\n**1**" and {c["weight"] for c in grids[0]["columns"]} == {1}
+    assert not any(e["tag"] == "column_set" for e in details["elements"][2:])  # quota stays one bar line per window
+
+
+def test_reasoning_sits_next_to_the_model():
+    view = done_view(footer=Footer(model="m", reasoning="max", context_used=5, context_max=10))
+    elements = render_final(view)["body"]["elements"]
+    hr = next(i for i, e in enumerate(elements) if e["tag"] == "hr")
+    chips = [zh(c["elements"][0]) for c in elements[hr + 2]["columns"]]
+    assert [c[len("<font color='grey'>"):][:1] for c in chips] == ["🤖", "🧠", "📑"]

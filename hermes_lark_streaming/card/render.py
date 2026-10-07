@@ -296,7 +296,7 @@ def footer_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None
 
 
 def footer_text(view: TurnView) -> Bi:
-    """Two lines: ``✅ 已完成 · ⏱️ 2m 01s · 🛠️ 2 步``, then grey ``🤖 model · 📑 context · ⚡ cache · 🧠 effort``."""
+    """The status line: ``✅ 已完成 · ⏱️ 2m 01s · 🛠️ 2 步 · ❗ 1 步失败``."""
     if view.phase is Phase.FAILED:
         head = ("<font color='red'>❌ **出错**</font>", "<font color='red'>❌ **Error**</font>")
     elif view.phase is Phase.STOPPED:
@@ -314,23 +314,37 @@ def footer_text(view: TurnView) -> Bi:
     if view.failed_steps:
         zh.append(f"❗ <font color='red'>{view.failed_steps} 步失败</font>")
         en.append(f"❗ <font color='red'>{view.failed_steps} failed</font>")
+    return Bi(" · ".join(zh), " · ".join(en))
+
+
+def footer_chips(view: TurnView) -> list[Bi]:
+    """``🤖 model``, ``🧠 effort``, ``📑 context``, ``⚡ cache``: the effort sits right after its model."""
     footer = view.footer
-    meta: list[str] = []
+    chips: list[Bi] = []
     if footer.model:
-        meta.append(f"🤖 {esc(clip(footer.model, 60))}")
-    if footer.context_used is not None and footer.context_max:
-        meta.append(f"📑 {compact(footer.context_used)}/{compact(footer.context_max)} "
-                    f"({footer.context_used / footer.context_max:.0%})")
-    if footer.cache_hit is not None:
-        meta.append(f"⚡ 缓存 {'≥' if footer.cache_hit_is_floor else ''}{footer.cache_hit:.0%}")
+        chips.append(Bi.same(f"🤖 {esc(clip(footer.model, 60))}"))
     if footer.reasoning:
-        meta.append(f"🧠 {esc(footer.reasoning)}")
-    line_zh, line_en = " · ".join(zh), " · ".join(en)
-    if meta:
-        tail = grey(" · ".join(meta))
-        line_zh += "\n" + tail
-        line_en += "\n" + tail.replace("缓存", "cache")
-    return Bi(line_zh, line_en)
+        chips.append(Bi.same(f"🧠 {esc(footer.reasoning)}"))
+    if footer.context_used is not None and footer.context_max:
+        chips.append(Bi.same(f"📑 {compact(footer.context_used)}/{compact(footer.context_max)} "
+                             f"({footer.context_used / footer.context_max:.0%})"))
+    if footer.cache_hit is not None:
+        hit = f"{'≥' if footer.cache_hit_is_floor else ''}{footer.cache_hit:.0%}"
+        chips.append(Bi(f"⚡ 缓存 {hit}", f"⚡ cache {hit}"))
+    return chips
+
+
+def _footer_elements(view: TurnView) -> list[dict[str, Any]]:
+    """The status line, then the meta chips as ``flow`` columns: a narrow card moves a whole chip to the
+    next row, where free text would break a Chinese word in two."""
+    out = [_markdown(footer_text(view), "notation")]
+    chips = footer_chips(view)
+    if chips:
+        columns = [{"tag": "column", "width": "auto", "vertical_align": "center",
+                    "elements": [_markdown(Bi(grey(c.zh), grey(c.en)), "notation")]} for c in chips]
+        out.append({"tag": "column_set", "flex_mode": "flow", "horizontal_spacing": "12px", "margin": "0px",
+                    "columns": columns})
+    return out
 
 
 # --------------------------------------------------------------------------- details panel (finished)
@@ -338,7 +352,6 @@ def footer_text(view: TurnView) -> Bi:
 _SECTION_NAMES = {"usage": "用量", "resources": "资源", "accounts": "额度"}
 _ROW_EMOJI = {"本轮": "📊", "用量": "📊", "累计": "🪙", "模型累计": "🤖", "资源": "🖥️"}
 _WINDOW_EMOJI = {"5小时": "⏱️", "每周": "📅", "每月": "🗓️"}
-_CELL_LABELS = {"输入": "↑", "输出": "↓"}  # input / output read as arrows, like the token counters people know
 
 
 def known(section: Section) -> Section:
@@ -350,8 +363,7 @@ def known(section: Section) -> Section:
     return replace(section, metrics=metrics, notes=notes)
 
 
-_CELLS_PER_ROW = 5
-_HEAD_WEIGHT, _CELL_WEIGHT = 2, 3  # Feishu column weights must stay within 1..5
+_BAR_CELLS = 8
 
 
 def _level_color(ratio: float | None) -> str | None:
@@ -360,106 +372,86 @@ def _level_color(ratio: float | None) -> str | None:
     return "red" if ratio >= 0.8 else "orange" if ratio >= 0.5 else None
 
 
-def _column(weight: int, text: Bi | None) -> dict[str, Any]:
-    column: dict[str, Any] = {"tag": "column", "width": "weighted", "weight": weight, "vertical_align": "center",
-                              "elements": []}
-    if text is not None:
-        column["elements"].append(_markdown(text, "notation"))
-    return column
+def _value(metric: Metric, *, colour: bool = False) -> str:
+    color = _level_color(metric.ratio) if colour else None
+    text = esc(metric.value)
+    return f"**<font color='{color}'>{text}</font>**" if color else f"**{text}**"
 
 
-def _row(columns: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"tag": "column_set", "flex_mode": "none", "horizontal_spacing": "4px", "margin": "0px",
-            "columns": columns}
-
-
-def _cell(metric: Metric) -> Bi:
-    value = f"**{esc(metric.value)}**"
+def _cell(metric: Metric) -> dict[str, Any]:
+    """One grid cell: grey label over the bold value."""
+    label = esc(metric.label)
     hint = f" {grey(esc(metric.hint))}" if metric.hint else ""
-    arrow = _CELL_LABELS.get(metric.label)
-    if arrow:
-        return Bi.same(f"{grey(arrow)} {value}{hint}")
-    return Bi(f"{grey(esc(metric.label))} {value}{hint}",
-              f"{grey(esc(metric.label_en or metric.label))} {value}{hint}")
+    return {"tag": "column", "width": "weighted", "weight": 1, "vertical_align": "top",
+            "elements": [_markdown(Bi.same(f"{grey(label)}\n{_value(metric)}{hint}"), "notation")]}
 
 
-def _grid_rows(heading: str, metrics: list[Metric]) -> list[dict[str, Any]]:
-    """One line per group: a bold heading column, then up to five ``label **value**`` cells, aligned."""
-    rows = []
-    for start in range(0, len(metrics), _CELLS_PER_ROW):
-        chunk = metrics[start:start + _CELLS_PER_ROW]
-        emoji = _ROW_EMOJI.get(heading, "")
-        head = Bi.same(f"{emoji} **{esc(heading)}**".strip()) if start == 0 else None
-        columns = [_column(_HEAD_WEIGHT, head)]
-        columns += [_column(_CELL_WEIGHT, _cell(m)) for m in chunk]
-        columns += [_column(_CELL_WEIGHT, None) for _ in range(_CELLS_PER_ROW - len(chunk))]
-        rows.append(_row(columns))
-    return rows
+def _grid(metrics: list[Metric]) -> dict[str, Any]:
+    """Equal cells in one row; on a narrow screen Feishu regroups them three per row (``trisect``)
+    instead of squeezing the row, so a label never breaks away from its value."""
+    return {"tag": "column_set", "flex_mode": "trisect", "horizontal_spacing": "8px", "margin": "0px",
+            "columns": [_cell(m) for m in metrics]}
 
 
 def _bar(ratio: float) -> str:
     ratio = min(max(ratio, 0.0), 1.0)
-    filled = round(ratio * 10)
+    filled = round(ratio * _BAR_CELLS)
     color = _level_color(ratio) or "blue"
-    return f"<font color='{color}'>{'▓' * filled}</font>{grey('░' * (10 - filled))}"
+    return f"<font color='{color}'>{'▓' * filled}</font>{grey('░' * (_BAR_CELLS - filled))}"
 
 
-def _bar_rows(metrics: list[Metric]) -> list[dict[str, Any]]:
-    """Quota windows, one line each: name, bar and percentage, reset time."""
-    rows = []
-    for m in metrics:
-        color = _level_color(m.ratio)
-        value = f"**{esc(m.value)}**" if not color else f"**<font color='{color}'>{esc(m.value)}</font>**"
-        bar = _bar(m.ratio) + " " if m.ratio is not None else ""
-        rows.append(_row([
-            _column(_HEAD_WEIGHT, Bi(f"{_WINDOW_EMOJI.get(m.label, '🎫')} **{esc(m.label)}**",
-                                     f"{_WINDOW_EMOJI.get(m.label, '🎫')} **{esc(m.label_en or m.label)}**")),
-            _column(4, Bi.same(bar + value)),
-            _column(5, Bi.same(grey(esc(m.hint))) if m.hint else None),
-        ]))
-    return rows
+def _note(lines: list[str]) -> str:
+    return grey(" · ".join(esc(n) for n in dict.fromkeys(lines) if n))
 
 
 def _section_elements(section: Section) -> list[dict[str, Any]]:
-    elements: list[dict[str, Any]] = []
-    notes = [n for n in dict.fromkeys(section.notes) if n]
+    """Grid sections: a heading line, then a cell grid per group. Quota: one short bar line per window."""
+    out: list[dict[str, Any]] = []
     if section.layout == "bars":
-        elements.extend(_bar_rows(list(section.metrics)))
-        notes.insert(0, section.title.replace(" · 订阅与额度", ""))  # the provider, once, in the note line
-    else:
-        groups: dict[str, list[Metric]] = {}
-        for metric in section.metrics:
-            groups.setdefault(metric.group or section.title.split(" · ")[0], []).append(metric)
-        for heading, metrics in groups.items():
-            elements.extend(_grid_rows(heading, metrics))
-    if notes:
-        elements.append(_markdown(Bi.same(grey(" · ".join(esc(n) for n in notes))), "notation"))
-    return elements
+        lines = []
+        for m in section.metrics:
+            emoji = _WINDOW_EMOJI.get(m.label, "🎫")
+            bar = _bar(m.ratio) + " " if m.ratio is not None else ""
+            hint = f" {grey('· ' + esc(m.hint))}" if m.hint else ""
+            lines.append(f"{emoji} **{esc(m.label)}** {bar}{_value(m, colour=True)}{hint}")
+        note = _note([section.title.replace(" · 订阅与额度", ""), *section.notes])
+        text = "\n".join(lines) + (f"\n{note}" if note else "")
+        return [_markdown(Bi.same(text), "notation")]
+    groups: dict[str, list[Metric]] = {}
+    for metric in section.metrics:
+        groups.setdefault(metric.group or section.title.split(" · ")[0], []).append(metric)
+    for heading, metrics in groups.items():
+        emoji = _ROW_EMOJI.get(heading, "")
+        out.append(_markdown(Bi.same(f"{emoji} **{esc(heading)}**".strip()), "notation"))
+        out.append(_grid(metrics))
+    if section.notes:
+        out.append(_markdown(Bi.same(_note(list(section.notes))), "notation"))
+    return out
 
 
 def details_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
     if not opts.show_details or view.phase is Phase.RUNNING or view.continued:
         return None
-    blocks: list[list[dict[str, Any]]] = []
+    parts: list[list[dict[str, Any]]] = []
     names: list[str] = []
     for section in (known(s) for s in view.sections):
         if not section.metrics:
             continue
-        blocks.append(_section_elements(section))
+        parts.append(_section_elements(section))
         names.append(_SECTION_NAMES.get(section.key, section.title.split(" · ")[0]))
     if view.notices:
-        blocks.append([_markdown(Bi.same("**后台复盘**\n" + "\n".join(esc(n) for n in view.notices)), "notation")])
+        parts.append([_markdown(Bi.same("📝 **后台复盘**\n" + "\n".join(esc(n) for n in view.notices)), "notation")])
         names.append("后台复盘")
-    if not blocks:
+    if not parts:
         return None
     children: list[dict[str, Any]] = []
-    for index, block in enumerate(blocks):
+    for index, part in enumerate(parts):
         if index:
             children.append({"tag": "hr"})
-        children.extend(block)
+        children.extend(part)
     title = Bi(grey("📊 详情 · " + " · ".join(names)), grey("📊 Details · " + " · ".join(names)))
     return panel(title=title, elements=children, expanded=False, element_id=_id(DETAILS_ID, view),
-                 vertical_spacing="2px")
+                 vertical_spacing="6px")
 
 
 # --------------------------------------------------------------------------- cards
@@ -519,7 +511,7 @@ def render_final(view: TurnView, opts: RenderOptions | None = None) -> dict[str,
             phase = view.phase if view.phase.terminal else Phase.DONE
             elements.append(_markdown(_EMPTY_ANSWER[phase], opts.text_size))
         elements.append({"tag": "hr"})
-        elements.append(_markdown(footer_text(view), "notation"))
+        elements.extend(_footer_elements(view))
         details = details_element(view, opts)
         if details:
             elements.append(details)

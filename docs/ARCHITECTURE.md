@@ -26,7 +26,7 @@ config ◀── 所有层只读
 
 - `card.model`:`TurnView`、`Step`、`Footer`、`Section`、`Metric`、`RenderOptions`。`details` 只产出 `Footer` 与 `Section`,不关心布局。
 - `card.render`:`render_streaming(view)`、`render_final(view)`,以及 `status_element/process_element/footer_element/details_element` 供增量更新;元素 id 常量 `STATUS_ID PROCESS_ID ANSWER_ID FOOTER_ID DETAILS_ID`。
-- 流式阶段只通过 `ANSWER_ID` 做打字机更新;状态、过程、页脚按需 patch;终态用整卡更新。
+- 流式阶段按块对比:新块插在实时状态行之前,回答块用打字机更新,面板局部更新;终态用整卡更新。
 - 空内容的 markdown 元素 CardKit 可能丢弃,新增元素用 insert 而不是预占位。
 
 ## 不变的行为约束(来自 legacy 测试与线上事故)

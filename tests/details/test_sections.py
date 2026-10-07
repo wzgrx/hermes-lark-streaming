@@ -65,7 +65,7 @@ def test_turn_metrics_from_telemetry():
     m = by_label(section)
     assert m["输入"].value == "100" and m["输出"].value == "7"
     assert m["缓存"].value == "70.0%" and m["缓存"].ratio == pytest.approx(0.7)
-    assert m["思考"].value == "max"
+    assert "思考" not in m  # the reasoning effort lives in the footer (🧠)
     # model, context, provider and wall time live in the footer and status line, not here
     assert not {"上下文（末次）", "服务商", "总耗时", "缓存读取", "请求"} & set(m)
     assert "统计不完整" not in section.notes

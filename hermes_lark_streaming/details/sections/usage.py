@@ -55,9 +55,7 @@ def _turn_metrics(data: Mapping[str, Any]) -> tuple[Metric, ...]:
     if calls is not None and (calls > 1 or errors):
         metrics.append(Metric("请求", f"{calls}" + (f" · 错误 {errors}" if errors else ""), label_en="Requests",
                               group=group))
-    reasoning = label(data.get("reasoning"))
-    if reasoning:
-        metrics.append(Metric("思考", reasoning, label_en="Reasoning", group=group))
+    # The reasoning effort sits in the footer (🧠), so it is not repeated here.
     return tuple(metrics)
 
 
