@@ -4,15 +4,31 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-lark-streaming"
-version = "1.0.0.dev0"
+version = "1.0.0"
 description = "Real-time streaming card plugin for Hermes Gateway via Feishu/Lark CardKit v2.0"
 readme = "README.md"
 requires-python = ">=3.11"
-keywords = ["Hermes", "Feishu", "Lark", "streaming-card"]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "wzgrx" }]
+keywords = ["Hermes", "Feishu", "Lark", "CardKit", "streaming-card"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Framework :: AsyncIO",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Communications :: Chat",
+]
 dependencies = [
   "lark-oapi>=1.6.8",
   "PyYAML>=6.0.3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/wzgrx/hermes-lark-streaming"
+Changelog = "https://github.com/wzgrx/hermes-lark-streaming/blob/main/CHANGELOG.md"
 
 [project.scripts]
 hermes-lark-streaming = "hermes_lark_streaming.__main__:main"
@@ -38,7 +54,6 @@ include = ["hermes_lark_streaming*"]
 [tool.ruff]
 target-version = "py311"
 line-length = 120
-exclude = ["legacy"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
