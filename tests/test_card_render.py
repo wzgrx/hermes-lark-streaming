@@ -181,3 +181,19 @@ def test_live_clock_has_no_decimals_but_final_does():
     running = render_streaming(TurnView(elapsed_s=42.7))
     assert "42s" in by_id(running, STATUS_ID)["content"] and "42.7" not in by_id(running, STATUS_ID)["content"]
     assert "14.4s" in by_id(render_final(done_view()), STATUS_ID)["content"]
+
+
+def test_unknown_values_are_not_shown():
+    section = Section(
+        "accounts", "订阅",
+        (Metric("账户余额", "未知", hint="API 未返回"), Metric("5小时", "38%", 0.38, "重置时间未知")),
+        notes=("订阅到期:未知(API 未返回)", "API 快照 · 22:37"),
+    )
+    empty = Section("resources", "资源", (Metric("CPU", "未知"), Metric("GPU", "未知")), notes=("采样未就绪",))
+    card = render_final(done_view(sections=(section, empty)))
+    text = json.dumps(by_id(card, DETAILS_ID), ensure_ascii=False)
+    assert "未知" not in text and "账户余额" not in text and "CPU" not in text
+    assert "5小时" in text and "API 快照" in text
+    assert "资源" not in json.dumps(by_id(card, DETAILS_ID)["header"], ensure_ascii=False)  # empty section left out
+    only_unknown = render_final(done_view(sections=(empty,)))
+    assert DETAILS_ID not in ids(only_unknown)

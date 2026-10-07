@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import html
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from .markdown import downgrade_tables, optimize_markdown_style, split_long_text
-from .model import Footer, Metric, Phase, RenderOptions, Step, StepStatus, TurnView
+from .model import Footer, Metric, Phase, RenderOptions, Section, Step, StepStatus, TurnView
 from .redact import redact
 
 STATUS_ID = "status"
@@ -373,8 +373,20 @@ def _bars(metrics: Iterable[Metric], size: str) -> list[dict[str, Any]]:
     return out
 
 
+_UNKNOWN = "未知"
+
+
+def known(section: Section) -> Section:
+    """Drop what is not known: a metric whose value is unknown, an unknown hint, and notes that say so."""
+    metrics = tuple(
+        replace(m, hint="" if _UNKNOWN in m.hint else m.hint) for m in section.metrics if m.value != _UNKNOWN
+    )
+    notes = tuple(n for n in section.notes if _UNKNOWN not in n)
+    return replace(section, metrics=metrics, notes=notes)
+
+
 def details_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
-    sections = [s for s in view.sections if s.metrics or s.notes]
+    sections = [k for k in (known(s) for s in view.sections) if k.metrics]
     if not opts.show_details or not sections or view.phase is Phase.RUNNING or view.continued:
         return None
     size = "notation"
