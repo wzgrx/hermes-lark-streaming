@@ -33,6 +33,22 @@ hermes pm install
 
 Hermes 升级后、或本插件的钩子内容变化后,先在网关空闲时 `uninstall` 再 `install`:引擎会重写不一致的标记块,并拒绝在锚点缺失或不唯一时写入任何文件。
 
+## 随 Hermes 更新
+
+Hermes 保持纯上游,不带本地提交;本插件的行为全部在插件内:钩子由引擎注入,日志脱敏、OpenCode Go 403 轮换、`skills.index_mode: names_only` 通过插件入口注册。更新 Hermes 的完整流程:
+
+```bash
+hermes gateway stop
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming uninstall   # 还原被注入的 5 个文件
+hermes update --no-gateway-restart
+hermes pm install
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming verify      # 锚点变化时在这里失败,不会写入任何文件
+"$HERMES_LAUNCHER" --run-module hermes_lark_streaming install
+hermes gateway start
+```
+
+`verify` 失败说明上游改动了注入锚点,修 `hermes_lark_streaming/hooks/table.py` 后再 `install`。验收可运行 `python scripts/live_acceptance.py <chat_id>`,它用真实飞书接口走一轮模拟对话,不需要人工发消息。
+
 ## 回滚
 
 ```bash

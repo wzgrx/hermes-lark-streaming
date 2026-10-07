@@ -539,6 +539,11 @@ class Controller:
             return False
         if not session.telemetry.observe(event, payload):
             return False
+        provider = _provider(session)
+        if provider and provider != session.provider:
+            # Account readers are per provider, so they can only start once the turn's provider is known.
+            session.provider = provider
+            self.collector.request(chat_id=session.chat_id, provider=provider)
         self._wake(session)
         return True
 

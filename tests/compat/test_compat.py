@@ -81,3 +81,15 @@ def test_install_wraps_once_and_reads_config(monkeypatch, tmp_path):
 def test_register_isolates_failures(monkeypatch):
     monkeypatch.setattr(skills_index, "install", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
     compat.register(SimpleNamespace())  # must not raise
+
+
+def test_normal_websocket_close_is_not_logged():
+    f = log_safety.RedactWebsocketSecrets()
+
+    def record(msg: str) -> logging.LogRecord:
+        return logging.LogRecord("Lark", logging.ERROR, "", 0, msg, (), None)
+
+    assert f.filter(record("receive message loop exit, err: received 1000 (OK); then sent 1000 (OK)")) is False
+    assert f.filter(record("receive message loop exit, err: ConnectionClosedOK")) is False
+    assert f.filter(record("receive message loop exit, err: 1006 abnormal closure")) is True
+    assert f.filter(record("something else")) is True

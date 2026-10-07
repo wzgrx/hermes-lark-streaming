@@ -76,3 +76,17 @@ async def _ready(ctl, mid):
     session = ctl._sessions[mid]
     await ctl._wait_creation(session)
     return session
+
+
+async def test_provider_known_from_telemetry_starts_account_reads(wired, client):
+    import time
+
+    bridge.on_message_started(message_id="om_4", chat_id="oc_1", session_key="sk4")
+    session = await _ready(wired, "om_4")
+    requests: list[dict] = []
+    wired.collector.request = lambda **kw: requests.append(kw)  # type: ignore[method-assign]
+    payload = {"platform": "feishu", "session_id": "s", "turn_id": "t", "api_request_id": "r",
+               "started_at": time.time() + 1, "provider": "opencode-go", "model": "m"}
+    wired.observe("pre_api_request", payload, session_key="sk4")
+    wired.observe("pre_api_request", payload, session_key="sk4")  # unchanged provider: no second request
+    assert requests == [{"chat_id": "oc_1", "provider": "opencode-go"}] and session.provider == "opencode-go"

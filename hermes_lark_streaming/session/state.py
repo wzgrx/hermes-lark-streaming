@@ -56,6 +56,7 @@ class Session:
     last_was_answer: bool = False
     notices: list[str] = field(default_factory=list)
     tag: str = ""
+    provider: str = ""  # provider the turn is actually using, once telemetry has seen a request
     telemetry: Any = None  # details.TurnTelemetry
     final_footer: Footer | None = None
     sections: tuple[Section, ...] = ()
