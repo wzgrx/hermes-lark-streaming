@@ -2,7 +2,7 @@
 
 让 Hermes 的飞书回复成为一张持续更新的卡片:状态一行、回答居中、过程和详情各折叠成一行。
 
-[English](README.en.md) · [安装](INSTALL.md) · [设计稿](docs/design/card-redesign.html) · [架构](docs/ARCHITECTURE.md) · [更新记录](CHANGELOG.md)
+[安装](INSTALL.md) · [设计稿](docs/design/card-redesign.html) · [架构](docs/ARCHITECTURE.md) · [更新记录](CHANGELOG.md)
 
 > 1.0 是完全重写。旧版(0.21.x)的三套布局合并为一套,配置键同步精简,旧配置不兼容,迁移见 [升级说明](docs/MIGRATION.md)。
 
@@ -44,8 +44,10 @@ streaming:
   details:
     usage: true
     resources: false
-    accounts: false
-    allowed_chats: []       # 资源与账户仅对名单内会话显示
+    timezone: Asia/Shanghai
+    accounts:
+      enabled: false
+      allowed_chats: []     # 账户额度必须显式列出会话
 ```
 
 其余键见 [配置参考](docs/CONFIG.md)。Hermes 自带的 `display.show_reasoning`、`display.show_tool_use` 仍然生效。

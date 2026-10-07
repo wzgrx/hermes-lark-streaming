@@ -5,8 +5,7 @@ on:
     - cron: '0 0 * * *'  # daily at 08:00 CST
   push:
     paths:
-      - 'hermes_lark_streaming/patcher.py'
-      - 'hermes_lark_streaming/modular_patcher.py'
+      - 'hermes_lark_streaming/hooks/**'
       - '.github/workflows/hermes-check.yml'
   workflow_dispatch:
 
@@ -39,15 +38,7 @@ jobs:
         id: verify
         continue-on-error: true
         run: |
-          python - <<'PY' > "$RUNNER_TEMP/hermes-compat-verify.log" 2>&1
-          from pathlib import Path
-          from hermes_lark_streaming.patcher import CronPatcher, Patcher
-
-          root = Path('_hermes-agent')
-          Patcher(root / 'gateway/run.py').verify_target()
-          CronPatcher(root / 'cron/scheduler.py').verify_target()
-          print('Gateway and cron targets are compatible with latest Hermes main.')
-          PY
+          python -m hermes_lark_streaming verify --root _hermes-agent > "$RUNNER_TEMP/hermes-compat-verify.log" 2>&1
 
       - name: Summarize compatibility failure
         if: always() && steps.verify.outcome == 'failure'
