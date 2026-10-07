@@ -150,3 +150,34 @@ def test_default_card_stays_small():
     )))
     assert len(json.dumps(card, ensure_ascii=False).encode()) < 8000
     assert count_elements(card) < 80
+
+
+def test_notices_render_in_one_collapsed_panel():
+    card = render_final(done_view(notices=("已保存记忆",)))
+    panel = by_id(card, "notices")
+    assert panel["expanded"] is False and "已保存记忆" in json.dumps(panel, ensure_ascii=False)
+
+
+def test_static_cards():
+    from hermes_lark_streaming.card.static import render_background, render_cron
+
+    cron = render_cron("# 日报\n内容", task_name="晨报", run_time="2026-10-07T08:00:00")
+    assert cron["schema"] == "2.0" and "2026-10-07 08:00" in json.dumps(cron, ensure_ascii=False)
+    bg = render_background("整理文件", "")
+    assert "No response generated" in json.dumps(bg)
+
+
+def test_partial_update_keeps_panel_state_unless_reset():
+    from hermes_lark_streaming.card.render import partial_for
+
+    card = render_final(done_view(), RenderOptions(process="open"))
+    panel = by_id(card, PROCESS_ID)
+    assert "expanded" not in partial_for(panel)
+    assert partial_for(panel, reset_state=True)["expanded"] is True
+    assert set(partial_for(by_id(card, STATUS_ID))) <= {"content", "i18n_content"}
+
+
+def test_live_clock_has_no_decimals_but_final_does():
+    running = render_streaming(TurnView(elapsed_s=42.7))
+    assert "42s" in by_id(running, STATUS_ID)["content"] and "42.7" not in by_id(running, STATUS_ID)["content"]
+    assert "14.4s" in by_id(render_final(done_view()), STATUS_ID)["content"]

@@ -30,7 +30,7 @@ dev = [
 ]
 
 [tool.setuptools.package-data]
-"hermes_lark_streaming.footer" = ["account_catalog.json"]
+"hermes_lark_streaming.details" = ["account_catalog.json"]
 
 [tool.setuptools.packages.find]
 include = ["hermes_lark_streaming*"]
@@ -56,3 +56,6 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = "lark_oapi.*"
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

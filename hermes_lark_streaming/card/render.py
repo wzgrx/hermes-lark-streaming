@@ -90,11 +90,12 @@ def grey(text: str) -> str:
     return f"<font color='grey'>{text}</font>"
 
 
-def duration(seconds: float | None) -> str:
+def duration(seconds: float | None, *, whole: bool = False) -> str:
+    """``14.4s`` / ``2m05s`` / ``1h02m``; ``whole`` drops the decimal for a live clock."""
     if seconds is None or seconds < 0:
         return ""
     if seconds < 60:
-        return f"{seconds:.1f}s"
+        return f"{int(seconds)}s" if whole else f"{seconds:.1f}s"
     minutes, rest = divmod(int(seconds), 60)
     if minutes < 60:
         return f"{minutes}m{rest:02d}s"
@@ -136,7 +137,7 @@ def _line(color: str, label: Bi, bits: Iterable[Bi]) -> Bi:
 def status_text(view: TurnView) -> Bi:
     if view.continued:
         return _line("grey", Bi("**已分页**", "**Continued**"), [Bi("内容见下一张卡片", "see the next card")])
-    clock = Bi.same(duration(view.elapsed_s))
+    clock = Bi.same(duration(view.elapsed_s, whole=view.phase is Phase.RUNNING))
     steps = view.total_steps
     if view.phase is Phase.RUNNING:
         done = view.finished_steps
@@ -385,6 +386,16 @@ def details_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | Non
     return panel(title=title, elements=children, expanded=False, element_id=DETAILS_ID)
 
 
+def notice_element(view: TurnView) -> dict[str, Any] | None:
+    """Background-review messages captured during the turn, kept apart from the answer."""
+    if not view.notices:
+        return None
+    children = [_markdown(Bi.same(esc(text)), "notation") for text in view.notices]
+    return panel(
+        title=Bi("**后台复盘**", "**Background review**"), elements=children, expanded=False, element_id="notices",
+    )
+
+
 # --------------------------------------------------------------------------- answer
 
 _EMPTY_ANSWER = {
@@ -462,8 +473,9 @@ def render_final(view: TurnView, opts: RenderOptions | None = None) -> dict[str,
     process = process_element(view, opts)
     if process:
         elements.append(process)
-    for notice in view.notices:
-        elements.append(_markdown(Bi.same(grey(esc(notice))), "notation"))
+    notices = notice_element(view)
+    if notices:
+        elements.append(notices)
     elements.extend(answer_elements(view, opts))
     for build in (footer_element, details_element):
         element = build(view, opts)
@@ -474,6 +486,23 @@ def render_final(view: TurnView, opts: RenderOptions | None = None) -> dict[str,
         "config": _config(opts, streaming=False, summary=_summary(view)),
         "body": {"elements": elements},
     }
+
+
+_PANEL_FIELDS = ("header", "elements", "border")
+
+
+def partial_for(element: dict[str, Any], *, reset_state: bool = False) -> dict[str, Any]:
+    """Fields for a ``partial_update_element`` of ``element``.
+
+    Panels keep the reader's expanded/collapsed choice unless ``reset_state`` (used once, when the
+    renderer itself decides the panel should open). Markdown elements update their text only.
+    """
+    if element.get("tag") == "collapsible_panel":
+        fields = {k: element[k] for k in _PANEL_FIELDS if k in element}
+        if reset_state:
+            fields["expanded"] = element["expanded"]
+        return fields
+    return {k: element[k] for k in ("content", "i18n_content") if k in element}
 
 
 def count_elements(node: Any) -> int:

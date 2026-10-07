@@ -1,0 +1,373 @@
+"""Crash-safe idempotency ledger for user-visible Feishu deliveries.
+
+The ledger deliberately stores no message bodies, credentials, user ids, or chat ids.  A
+caller-supplied logical key is reduced to a SHA-256 fingerprint before it reaches disk.  Card and
+message ids are retained because they are required to resume an interrupted attach operation.
+The file is local operator state, created with mode 0600 and updated atomically.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import hashlib
+import json
+import os
+import threading
+import time
+import uuid
+from collections.abc import Iterator
+from dataclasses import asdict, dataclass, replace
+from enum import StrEnum
+from pathlib import Path
+from typing import Any
+
+
+def hermes_home() -> Path:
+    """Hermes home: Hermes' own resolver when importable, else ``HERMES_HOME``, else ``~/.hermes``."""
+    try:
+        from hermes_constants import get_hermes_home  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
+    return Path(str(get_hermes_home()))
+
+
+def default_ledger_path() -> Path:
+    return hermes_home() / "state" / "hermes-lark-streaming-delivery.json"
+
+
+# A Gateway and cron worker can touch the same ledger in separate processes. A
+# per-instance RLock alone does not protect the read/modify/replace sequence.
+_PROCESS_LOCK = threading.RLock()
+# Lark IM request UUID deduplication lasts one hour. Stop retrying five minutes
+# early so scheduling and network latency cannot cross the server-side boundary.
+IDEMPOTENCY_RETRY_WINDOW_SEC = 55 * 60
+
+
+@contextlib.contextmanager
+def _file_lock(path: Path) -> Iterator[None]:
+    lock_path = path.with_name(f"{path.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        if os.name == "nt":
+            import importlib
+
+            msvcrt = importlib.import_module("msvcrt")
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"\0")
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+class DeliveryLedgerError(RuntimeError):
+    """Ledger contents must be preserved when they cannot be read safely."""
+
+
+class DeliveryStatus(StrEnum):
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    NOT_SENT = "not_sent"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class DeliveryEntry:
+    key: str
+    operation: str
+    request_uuid: str
+    status: DeliveryStatus
+    created_at: float
+    updated_at: float
+    attempt: int = 1
+    card_id: str = ""
+    message_id: str = ""
+    error_code: int = 0
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> DeliveryEntry | None:
+        try:
+            return cls(
+                key=str(payload["key"]),
+                operation=str(payload["operation"]),
+                request_uuid=str(payload["request_uuid"]),
+                status=DeliveryStatus(str(payload["status"])),
+                created_at=float(payload["created_at"]),
+                updated_at=float(payload["updated_at"]),
+                attempt=max(1, int(payload.get("attempt", 1))),
+                card_id=str(payload.get("card_id", "")),
+                message_id=str(payload.get("message_id", "")),
+                error_code=int(payload.get("error_code", 0)),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+
+
+class DeliveryLedger:
+    """Bounded, atomic delivery state shared across Gateway restarts."""
+
+    SCHEMA = 1
+
+    def __init__(
+        self,
+        path: Path | None = None,
+        *,
+        max_entries: int = 1024,
+        retention_sec: int = 7 * 24 * 60 * 60,
+    ) -> None:
+        self._path = path
+        self.max_entries = max(32, int(max_entries))
+        self.retention_sec = max(3600, int(retention_sec))
+        self._lock = threading.RLock()
+
+    @property
+    def path(self) -> Path:
+        return self._path or default_ledger_path()
+
+    @staticmethod
+    def fingerprint(logical_key: str) -> str:
+        return hashlib.sha256(logical_key.encode("utf-8", errors="replace")).hexdigest()
+
+    def _read(self) -> dict[str, DeliveryEntry]:
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise DeliveryLedgerError("delivery ledger unreadable; existing evidence preserved") from exc
+        if not isinstance(raw, dict) or raw.get("schema") != self.SCHEMA:
+            raise DeliveryLedgerError("delivery ledger schema invalid; existing evidence preserved")
+        rows = raw.get("entries")
+        if not isinstance(rows, dict):
+            raise DeliveryLedgerError("delivery ledger entries invalid; existing evidence preserved")
+        parsed: dict[str, DeliveryEntry] = {}
+        for key, payload in rows.items():
+            entry = DeliveryEntry.from_dict(payload) if isinstance(payload, dict) else None
+            if entry is None or entry.key != key:
+                raise DeliveryLedgerError("delivery ledger entry invalid; existing evidence preserved")
+            parsed[key] = entry
+        return parsed
+
+    def _write(self, entries: dict[str, DeliveryEntry]) -> None:
+        now = time.time()
+        # Pending and unknown sends may already have reached Feishu. Expiring or
+        # evicting their UUID would let a later retry create a second visible
+        # delivery. Keep them until an explicit terminal result is recorded.
+        unresolved = [
+            entry for entry in entries.values() if entry.status in {DeliveryStatus.PENDING, DeliveryStatus.UNKNOWN}
+        ]
+        if len(unresolved) > self.max_entries:
+            raise DeliveryLedgerError("delivery ledger unresolved capacity reached; existing evidence preserved")
+        resolved = [
+            entry
+            for entry in entries.values()
+            if entry.status not in {DeliveryStatus.PENDING, DeliveryStatus.UNKNOWN}
+            and now - entry.updated_at <= self.retention_sec
+        ]
+        resolved.sort(key=lambda entry: entry.updated_at, reverse=True)
+        kept = unresolved + resolved[: self.max_entries - len(unresolved)]
+        kept.sort(key=lambda entry: entry.updated_at, reverse=True)
+        payload = {
+            "schema": self.SCHEMA,
+            "updated_at": now,
+            "entries": {entry.key: {**asdict(entry), "status": entry.status.value} for entry in kept},
+        }
+        path = self.path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp, path)
+            with contextlib.suppress(OSError):
+                path.chmod(0o600)
+        finally:
+            with contextlib.suppress(OSError):
+                tmp.unlink(missing_ok=True)
+
+    @contextlib.contextmanager
+    def _transaction(self) -> Iterator[None]:
+        try:
+            with _PROCESS_LOCK, self._lock, _file_lock(self.path):
+                yield
+        except OSError as exc:
+            raise DeliveryLedgerError("delivery ledger I/O failed; existing evidence preserved") from exc
+
+    def get(self, logical_key: str) -> DeliveryEntry | None:
+        key = self.fingerprint(logical_key)
+        with self._transaction():
+            return self._read().get(key)
+
+    def begin(self, logical_key: str, operation: str, *, retry_not_sent: bool = True) -> DeliveryEntry:
+        """Return the stable request UUID for one logical delivery.
+
+        Pending, unknown, and delivered rows are resumed.  A confirmed ``not_sent`` row starts a
+        fresh attempt by default because the previous UUID was conclusively rejected.
+        """
+        key = self.fingerprint(logical_key)
+        now = time.time()
+        with self._transaction():
+            entries = self._read()
+            previous = entries.get(key)
+            if previous is not None and not (retry_not_sent and previous.status is DeliveryStatus.NOT_SENT):
+                if (
+                    previous.status is DeliveryStatus.PENDING
+                    and now - previous.created_at >= IDEMPOTENCY_RETRY_WINDOW_SEC
+                ):
+                    previous = replace(previous, status=DeliveryStatus.UNKNOWN, updated_at=now)
+                    entries[key] = previous
+                    self._write(entries)
+                return previous
+            attempt = previous.attempt + 1 if previous is not None else 1
+            entry = DeliveryEntry(
+                key=key,
+                operation=operation,
+                request_uuid=uuid.uuid4().hex,
+                status=DeliveryStatus.PENDING,
+                created_at=now,
+                updated_at=now,
+                attempt=attempt,
+            )
+            entries[key] = entry
+            self._write(entries)
+            return entry
+
+    def claim_send(self, logical_key: str, operation: str) -> tuple[DeliveryEntry, bool]:
+        """Atomically claim one outbound send across Gateway and Cron workers.
+
+        The claim is durably marked unknown *before* network I/O. Later workers
+        retain its request UUID but do not send again without a verified
+        rejection. A pending row from an older interrupted preparation can be
+        claimed once under the same process/file lock.
+        """
+        key = self.fingerprint(logical_key)
+        now = time.time()
+        with self._transaction():
+            entries = self._read()
+            previous = entries.get(key)
+            if previous is not None and previous.status in {DeliveryStatus.UNKNOWN, DeliveryStatus.DELIVERED}:
+                return previous, False
+            if previous is not None and previous.status is DeliveryStatus.PENDING:
+                if now - previous.created_at >= IDEMPOTENCY_RETRY_WINDOW_SEC:
+                    held = replace(previous, status=DeliveryStatus.UNKNOWN, updated_at=now)
+                    entries[key] = held
+                    self._write(entries)
+                    return held, False
+                request_uuid = previous.request_uuid
+                attempt = previous.attempt
+                created_at = previous.created_at
+            else:
+                request_uuid = uuid.uuid4().hex
+                attempt = previous.attempt + 1 if previous is not None else 1
+                created_at = now
+            entry = DeliveryEntry(
+                key=key,
+                operation=operation,
+                request_uuid=request_uuid,
+                status=DeliveryStatus.UNKNOWN,
+                created_at=created_at,
+                updated_at=now,
+                attempt=attempt,
+            )
+            entries[key] = entry
+            self._write(entries)
+            return entry, True
+
+    def update(
+        self,
+        logical_key: str,
+        *,
+        status: DeliveryStatus | None = None,
+        card_id: str | None = None,
+        message_id: str | None = None,
+        error_code: int | None = None,
+    ) -> DeliveryEntry:
+        key = self.fingerprint(logical_key)
+        with self._transaction():
+            entries = self._read()
+            previous = entries.get(key)
+            if previous is None:
+                now = time.time()
+                previous = DeliveryEntry(
+                    key=key,
+                    operation="unknown",
+                    request_uuid=uuid.uuid4().hex,
+                    status=DeliveryStatus.PENDING,
+                    created_at=now,
+                    updated_at=now,
+                )
+            updated = DeliveryEntry(
+                key=previous.key,
+                operation=previous.operation,
+                request_uuid=previous.request_uuid,
+                status=status or previous.status,
+                created_at=previous.created_at,
+                updated_at=time.time(),
+                attempt=previous.attempt,
+                card_id=previous.card_id if card_id is None else card_id,
+                message_id=previous.message_id if message_id is None else message_id,
+                error_code=previous.error_code if error_code is None else int(error_code),
+            )
+            entries[key] = updated
+            self._write(entries)
+            return updated
+
+    def card_created(self, logical_key: str, card_id: str) -> DeliveryEntry:
+        return self.update(logical_key, card_id=card_id)
+
+    def delivered(self, logical_key: str, *, card_id: str, message_id: str) -> DeliveryEntry:
+        return self.update(
+            logical_key,
+            status=DeliveryStatus.DELIVERED,
+            card_id=card_id,
+            message_id=message_id,
+            error_code=0,
+        )
+
+    def failed(self, logical_key: str, status: DeliveryStatus, *, error_code: int = 0) -> DeliveryEntry:
+        if status not in {DeliveryStatus.NOT_SENT, DeliveryStatus.UNKNOWN}:
+            raise ValueError("failed delivery status must be not_sent or unknown")
+        return self.update(logical_key, status=status, error_code=error_code)
+
+    def summary(self) -> dict[str, Any]:
+        with self._transaction():
+            entries = self._read()
+        now = time.time()
+        counts = {status.value: 0 for status in DeliveryStatus}
+        unresolved: list[DeliveryEntry] = []
+        expired_pending = 0
+        for entry in entries.values():
+            counts[entry.status.value] += 1
+            if entry.status in {DeliveryStatus.PENDING, DeliveryStatus.UNKNOWN}:
+                unresolved.append(entry)
+            if entry.status is DeliveryStatus.PENDING and now - entry.created_at >= IDEMPOTENCY_RETRY_WINDOW_SEC:
+                expired_pending += 1
+        return {
+            "schema": self.SCHEMA,
+            "path": str(self.path),
+            "entries": len(entries),
+            "counts": counts,
+            "unresolved_count": len(unresolved),
+            "unresolved_capacity_remaining": max(0, self.max_entries - len(unresolved)),
+            "oldest_unresolved_age_sec": (
+                max(0, int(now - min(entry.created_at for entry in unresolved))) if unresolved else None
+            ),
+            "expired_pending_count": expired_pending,
+        }
