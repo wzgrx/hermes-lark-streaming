@@ -1,0 +1,317 @@
+<title>Lark 流式卡片重设计</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: 设计说明页 = 左侧结论 + 四张并排的飞书卡片实物稿(运行中/完成/失败/详情展开) */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --fg: #1f2329;
+  --muted: #646a73;
+  --line: #dee0e3;
+  --accent: #3370ff;
+  --accent-soft: #e8efff;
+  --ok: #2ea121;
+  --ok-soft: #e6f6e3;
+  --bad: #d83931;
+  --bad-soft: #fdeceb;
+  --warn: #c76a00;
+  --code-bg: #eff1f4;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181b; --surface: #232528; --fg: #ebeef2; --muted: #9aa0a9; --line: #3a3d42;
+    --accent: #6d9bff; --accent-soft: #24304a; --ok: #5bc24f; --ok-soft: #1f3320;
+    --bad: #f07a73; --bad-soft: #3a2220; --warn: #e8a24a; --code-bg: #2c2f33; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17181b; --surface: #232528; --fg: #ebeef2; --muted: #9aa0a9; --line: #3a3d42;
+  --accent: #6d9bff; --accent-soft: #24304a; --ok: #5bc24f; --ok-soft: #1f3320;
+  --bad: #f07a73; --bad-soft: #3a2220; --warn: #e8a24a; --code-bg: #2c2f33; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); line-height: 1.6; padding-inline: 16px; }
+* { box-sizing: border-box; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 32px 56px; display: grid; gap: 40px; }
+h1 { font-size: 28px; line-height: 1.25; margin: 0 0 8px; text-wrap: balance; }
+h2 { font-size: 18px; margin: 0 0 12px; }
+p { margin: 0; }
+.lede { color: var(--muted); max-width: 70ch; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+/* 对比条 */
+.delta { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.delta div { border-top: 2px solid var(--line); padding-top: 8px; }
+.delta b { display: block; font-family: var(--font-mono); font-size: 20px; font-weight: 500; }
+.delta s { color: var(--muted); font-size: 13px; }
+.delta span { font-size: 13px; color: var(--muted); display: block; }
+
+/* 卡片画板 */
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px 24px; align-items: start; }
+.slot { min-width: 0; display: grid; gap: 10px; }
+.slot > .cap { font-size: 13px; color: var(--muted); }
+.slot > .cap b { color: var(--fg); font-weight: 700; }
+
+/* 飞书卡片 */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 10px; font-size: 14px; max-width: 420px; width: 100%; }
+.status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.status.run .dot { animation: pulse 1.4s ease-in-out infinite; }
+.status.ok .dot { background: var(--ok); }
+.status.bad .dot { background: var(--bad); }
+.status.bad .label { color: var(--bad); font-weight: 700; }
+.status .label { color: var(--fg); font-weight: 500; }
+.status .right { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+@keyframes pulse { 50% { opacity: .3 } }
+@media (prefers-reduced-motion: reduce) { .status.run .dot, .cursor { animation: none } }
+
+details.panel { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+details.panel > summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; font-size: 12.5px; color: var(--muted); }
+details.panel > summary::-webkit-details-marker { display: none; }
+details.panel > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+details.panel > summary .t { color: var(--fg); font-weight: 500; }
+details.panel > summary .chev { margin-left: auto; width: 8px; height: 8px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform .15s; }
+details.panel[open] > summary .chev { transform: rotate(-135deg); }
+details.panel.fail { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+details.panel.fail > summary .t { color: var(--bad); }
+.pbody { border-top: 1px solid var(--line); padding: 8px 10px; display: grid; gap: 6px; font-size: 12.5px; }
+
+.step { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: baseline; }
+.step .ic { font-family: var(--font-mono); color: var(--ok); }
+.step .nm { min-width: 0; overflow-wrap: anywhere; }
+.step .nm code, .answer code { font-family: var(--font-mono); font-size: 12px; background: var(--code-bg); border-radius: 4px; padding: 0 4px; }
+.step .ms { font-family: var(--font-mono); color: var(--muted); font-size: 12px; }
+.step.run .ic { color: var(--accent); }
+.step.fail { background: var(--bad-soft); margin-inline: -10px; padding: 4px 10px; }
+.step.fail .ic, .step.fail .ms { color: var(--bad); }
+.err { grid-column: 2 / 4; font-family: var(--font-mono); font-size: 12px; color: var(--bad); }
+
+.answer { font-size: 14px; display: grid; gap: 6px; }
+.answer ul { margin: 0; padding-left: 18px; }
+.cursor { display: inline-block; width: 7px; height: 14px; background: var(--accent); vertical-align: -2px; animation: pulse 1s steps(2) infinite; }
+
+.foot { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--muted); align-items: center; }
+.foot .m { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.foot .tag { margin-left: auto; background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 6px; font-size: 11px; }
+
+/* 详情内的分区 */
+.sec { display: grid; gap: 6px; }
+.sec + .sec { border-top: 1px dashed var(--line); padding-top: 8px; }
+.sec h4 { margin: 0; font-size: 11.5px; font-weight: 500; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+.kv { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+.kv div { display: grid; }
+.kv small { font-size: 11px; color: var(--muted); }
+.kv b { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; font-size: 13px; }
+.bar { height: 5px; border-radius: 3px; background: var(--code-bg); overflow: hidden; margin-top: 3px; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+.bar i.warn { background: var(--warn); }
+.q { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; align-items: center; font-size: 12px; }
+.q .lb { color: var(--muted); }
+.q .rs { font-family: var(--font-mono); color: var(--muted); font-size: 11.5px; }
+.note { font-size: 11.5px; color: var(--muted); }
+
+/* 规格表 */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; }
+.cols > div { min-width: 0; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; font-weight: 500; color: var(--muted); }
+pre { background: var(--code-bg); border-radius: 8px; padding: 12px 14px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; overflow-x: auto; margin: 0; }
+ol.rules { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.theme { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 10px); right: 12px; }
+.theme button { font: inherit; font-size: 12px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+</style>
+
+<div class="theme"><button id="tt" type="button">切换深浅色</button></div>
+<main class="wrap">
+  <header>
+    <div class="eyebrow">hermes-lark-streaming · 完全重写 · 设计稿 v1</div>
+    <h1>一张卡片,三层信息:状态、回答、详情</h1>
+    <p class="lede">旧版把工具、资源、模型、本轮、历史、账户分别做成并列面板,回答被挤在中间。新版只保留一个布局:状态一行在上,回答居中,过程和详情各折叠成一行。默认折叠时只比纯文本多三行,出错时过程面板自动展开并标红。</p>
+  </header>
+
+  <section class="delta" aria-label="新旧对比">
+    <div><b>3 → 1</b><span>布局套数<br><s>classic / V1 / V2</s></span></div>
+    <div><b>6 → 2</b><span>默认可见折叠面板<br><s>工具、资源、本轮、历史、账户…</s></span></div>
+    <div><b>≈21KB → ≤8KB</b><span>完成态卡片 JSON 目标<br><s>11 个 column_set 压到 3 个</s></span></div>
+    <div><b>0</b><span>布局后处理补丁<br><s>V2 不再改写 V1 输出</s></span></div>
+  </section>
+
+  <section>
+    <h2>四个状态的卡片(点击折叠行可展开)</h2>
+    <div class="board">
+
+      <!-- A 运行中 -->
+      <div class="slot">
+        <div class="cap"><b>A · 运行中</b> 过程自动展开,回答流式追加</div>
+        <article class="card">
+          <div class="status run"><span class="dot"></span><span class="label">运行中</span><span>步骤 3/5</span><span class="right">00:42</span></div>
+          <details class="panel" open>
+            <summary><span class="t">过程</span><span>3 步 · 1 进行中</span><i class="chev"></i></summary>
+            <div class="pbody">
+              <div class="step"><span class="ic">✓</span><span class="nm">Terminal · <code>git status --short</code></span><span class="ms">180ms</span></div>
+              <div class="step"><span class="ic">✓</span><span class="nm">Read · <code>config.yaml</code></span><span class="ms">42ms</span></div>
+              <div class="step run"><span class="ic">◌</span><span class="nm">Terminal · <code>pytest -q</code></span><span class="ms">12.1s</span></div>
+            </div>
+          </details>
+          <div class="answer"><p>先看配置和测试状态。目前发现两处差异:</p><ul><li>`streaming.layout` 仍指向旧值</li><li>测试正在跑,等结果<span class="cursor"></span></li></ul></div>
+          <div class="foot"><span class="m">deepseek-v4.1-flash</span><span>· 流式中</span></div>
+        </article>
+      </div>
+
+      <!-- B 完成 -->
+      <div class="slot">
+        <div class="cap"><b>B · 完成(默认折叠)</b> 常态:状态 + 过程一行 + 回答 + 底栏 + 详情一行</div>
+        <article class="card">
+          <div class="status ok"><span class="dot"></span><span class="label">已完成</span><span class="right">14.4s</span></div>
+          <details class="panel">
+            <summary><span class="t">过程</span><span>5 步 · 全部成功</span><i class="chev"></i></summary>
+            <div class="pbody">
+              <div class="step"><span class="ic">✓</span><span class="nm">Terminal · <code>git status --short</code></span><span class="ms">180ms</span></div>
+              <div class="step"><span class="ic">✓</span><span class="nm">Read · <code>config.yaml</code></span><span class="ms">42ms</span></div>
+              <div class="step"><span class="ic">✓</span><span class="nm">Terminal · <code>pytest -q</code></span><span class="ms">12.1s</span></div>
+              <div class="note">已省略 2 步较早的输出,仅保留摘要</div>
+            </div>
+          </details>
+          <div class="answer"><p><b>已修复。</b>配置已指向新布局,测试 63 项全部通过。旧卡片不会被重写,新消息自动使用新版。</p></div>
+          <div class="foot"><span class="m">deepseek-v4.1-flash</span><span class="m">70.3k / 1M · 7%</span><span class="m">缓存命中 ≥82%</span><span class="tag">龙虾1号</span></div>
+          <details class="panel">
+            <summary><span class="t">详情</span><span>用量 · 资源 · 账户</span><i class="chev"></i></summary>
+            <div class="pbody"><div class="note">展开后见 D。</div></div>
+          </details>
+        </article>
+      </div>
+
+      <!-- C 失败 -->
+      <div class="slot">
+        <div class="cap"><b>C · 工具失败</b> 失败时过程自动展开,失败行浅红,回答不受影响</div>
+        <article class="card">
+          <div class="status bad"><span class="dot"></span><span class="label">1 步失败</span><span>回答已完成</span><span class="right">14.4s</span></div>
+          <details class="panel fail" open>
+            <summary><span class="t">过程</span><span>2/2 步结束</span><i class="chev"></i></summary>
+            <div class="pbody">
+              <div class="step"><span class="ic">✓</span><span class="nm">Terminal · <code>printf 'OK\n'</code></span><span class="ms">180ms</span></div>
+              <div class="step fail"><span class="ic">✕</span><span class="nm">Terminal · <code>exit 7</code></span><span class="ms">38ms</span><span class="err">Exit code 7 · line two</span></div>
+            </div>
+          </details>
+          <div class="answer"><p>预期失败已复现,退出码 7。回答完成与工具失败分开显示,不会混成整轮失败。</p></div>
+          <div class="foot"><span class="m">deepseek-v4.1-flash</span><span class="m">22.8k / 1M · 2%</span></div>
+          <details class="panel">
+            <summary><span class="t">详情</span><span>用量 · 资源 · 账户</span><i class="chev"></i></summary>
+            <div class="pbody"><div class="note">同 D。</div></div>
+          </details>
+        </article>
+      </div>
+
+      <!-- D 详情展开 -->
+      <div class="slot">
+        <div class="cap"><b>D · 详情展开</b> 用量、资源、账户收进同一个面板,分区排列</div>
+        <article class="card">
+          <div class="status ok"><span class="dot"></span><span class="label">已完成</span><span class="right">14.4s</span></div>
+          <div class="answer"><p><b>已修复。</b>配置已指向新布局,测试 63 项全部通过。</p></div>
+          <div class="foot"><span class="m">deepseek-v4.1-flash</span><span class="m">70.3k / 1M · 7%</span><span class="tag">龙虾1号</span></div>
+          <details class="panel" open>
+            <summary><span class="t">详情</span><span>用量 · 资源 · 账户</span><i class="chev"></i></summary>
+            <div class="pbody">
+              <div class="sec">
+                <h4>用量</h4>
+                <div class="kv">
+                  <div><small>本轮输入</small><b>70.3k</b></div>
+                  <div><small>本轮输出</small><b>1.2k</b></div>
+                  <div><small>缓存命中率</small><b>≥82%</b></div>
+                  <div><small>请求次数</small><b>3</b></div>
+                  <div><small>今日累计</small><b>1.84M</b></div>
+                  <div><small>本月累计</small><b>26.7M</b></div>
+                </div>
+                <div class="note">缓存已含在输入内;累计从启用日起统计。</div>
+              </div>
+              <div class="sec">
+                <h4>资源 · WSL</h4>
+                <div class="kv">
+                  <div><small>GPU</small><b>1% · 66°C</b></div>
+                  <div><small>显存</small><b>10.5 / 24 GiB</b><div class="bar"><i style="width:44%"></i></div></div>
+                  <div><small>内存</small><b>15.5 / 126 GiB</b><div class="bar"><i style="width:12%"></i></div></div>
+                  <div><small>磁盘</small><b>312 / 931 GiB</b><div class="bar"><i style="width:34%"></i></div></div>
+                </div>
+              </div>
+              <div class="sec">
+                <h4>订阅账户 · Go 主账户</h4>
+                <div class="q"><span class="lb">5 小时</span><div class="bar"><i style="width:38%"></i></div><span class="rs">38% · 2h14m 后重置</span></div>
+                <div class="q"><span class="lb">每周</span><div class="bar"><i class="warn" style="width:71%"></i></div><span class="rs">71% · 周一 04:00</span></div>
+                <div class="q"><span class="lb">每月</span><div class="bar"><i style="width:29%"></i></div><span class="rs">29% · 11-01</span></div>
+                <div class="note">订阅到期 2026-11-18 · 快照 10-07 14:02 · 未提供的字段显示“未知”</div>
+              </div>
+            </div>
+          </details>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div>
+      <h2>结构与默认可见性</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>区块</th><th>运行中</th><th>完成</th><th>失败</th></tr></thead>
+        <tbody>
+          <tr><td>状态行</td><td>脉冲点 · 步骤 · 计时</td><td>绿点 · 总耗时</td><td>红点 · 失败数</td></tr>
+          <tr><td>过程(工具+思考)</td><td>展开</td><td>折叠一行</td><td>展开,失败行标红</td></tr>
+          <tr><td>回答</td><td>流式追加</td><td>完整</td><td>完整</td></tr>
+          <tr><td>底栏</td><td>模型 · 流式中</td><td>模型 · 上下文 · 缓存</td><td>同完成</td></tr>
+          <tr><td>详情(用量/资源/账户)</td><td>不显示</td><td>折叠一行</td><td>折叠一行</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div>
+      <h2>设计规则</h2>
+      <ol class="rules">
+        <li>回答永远是视觉主体,其余信息字号更小、颜色更淡。</li>
+        <li>不用卡片级彩色 header。状态只用一个小圆点和一行文字,红色只留给失败。</li>
+        <li>同一层级只出现一种容器:折叠面板。数据对齐用等宽数字,不再嵌套 column_set 网格。</li>
+        <li>详情面板的三个分区可在配置里单独开关;关闭的分区不生成元素。</li>
+        <li>未提供的数据显示“未知”,不补造,不隐藏失败原因。</li>
+        <li>深浅色走飞书原生主题,不写死颜色。</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div>
+      <h2>新配置(取代 layout / footer.mode / header 等旧键)</h2>
+<pre>streaming:
+  enabled: true
+  process: auto        # auto | open | closed
+  details:
+    usage: true
+    resources: true    # 默认仅允许名单内的会话
+    accounts: true
+    allowed_chats: []  # 资源与账户的可见范围
+  text_size: normal_v2</pre>
+    </div>
+    <div>
+      <h2>代码结构(重写后)</h2>
+<pre>hermes_lark_streaming/
+  hooks/       # 唯一的注入点与自检
+  session/     # 状态机、分段、续卡
+  card/        # state → card JSON(唯一渲染器)
+  transport/   # CardKit 创建/刷新/重试/幂等台账
+  details/     # usage · resources · accounts
+  config.py  cli.py</pre>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  var b = document.getElementById("tt");
+  b.addEventListener("click", function () {
+    var r = document.documentElement;
+    var dark = r.getAttribute("data-theme") === "dark" ||
+      (!r.getAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    r.setAttribute("data-theme", dark ? "light" : "dark");
+  });
+})();
+</script>

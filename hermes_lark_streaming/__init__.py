@@ -1,18 +1,3 @@
-"""Hermes Lark streaming package entry point."""
+"""Hermes Lark Streaming: streaming Feishu/Lark CardKit cards for Hermes Gateway."""
 
-__version__ = "0.21.5"
-
-
-def register(ctx: object) -> None:
-    """Register native observers and select a future owner-capable renderer.
-
-    Current Hermes stream hooks are observer-only, so the reversible AST adapter remains
-    the CardKit delivery owner. A future ``register_streaming_renderer`` protocol takes
-    precedence without running both delivery paths.
-    """
-    from .footer.hooks import register as register_footer
-    from .native_hooks import try_register
-
-    try_register(ctx)
-    register_footer(ctx)
-    return None
+__version__ = "1.0.0.dev0"
