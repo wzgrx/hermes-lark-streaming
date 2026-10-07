@@ -423,8 +423,13 @@ class Controller:
         tokens: dict[str, Any] | None = None, context: dict[str, Any] | None = None, deliver_all_media: bool = False,
     ) -> bool:
         """Finish the card and report whether it was delivered (the gateway then skips its own send)."""
-        if not self.enabled or (session := self._completion_session(message_id)) is None:
+        if not self.enabled:
             return False
+        if (session := self._completion_session(message_id)) is None:
+            _logger.info("completion for unknown session: msg=%s", message_id[:12])
+            return False
+        _logger.info("completion: msg=%s has_card=%s state=%s error=%s", session.message_id[:12], session.has_card,
+                     session.state.value, is_error)
         if not await self._wait_creation(session):
             if not session.has_card:
                 self._need_text_fallback(session)

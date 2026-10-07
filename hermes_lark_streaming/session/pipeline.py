@@ -532,6 +532,9 @@ class Pipeline:
                 await client.update_card(channel, card)
                 session.state = {Phase.FAILED: State.FAILED, Phase.STOPPED: State.ABORTED}.get(phase, State.COMPLETED)
                 metrics.increment("card.completed")
+                _logger.info("card finalized: msg=%s card=%s phase=%s steps=%d failed=%d elapsed=%.1fs",
+                             session.message_id[:12], channel.card_id[:12], phase.value, view.total_steps,
+                             view.failed_steps, view.elapsed_s or 0.0)
                 if session.delivery_status is DeliveryStatus.UNKNOWN:
                     await self._notify_uncertain(session)
                 return True
