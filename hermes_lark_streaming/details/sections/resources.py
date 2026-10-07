@@ -22,8 +22,14 @@ def _pair(data: Mapping[str, Any], used: str, total: str, name: str, en: str) ->
     u, t = data.get(used), data.get(total)
     if isinstance(u, bool) or not isinstance(u, int | float) or isinstance(t, bool) or not isinstance(t, int | float):
         return Metric(name, UNKNOWN, label_en=en)
-    used = f"{float(u):.0f}" if float(u) >= 10 else f"{float(u):.1f}"
-    return Metric(name, f"{used}/{float(t):.0f}G", ratio=ratio_of(u, t), label_en=en)
+    return Metric(name, _size_pair(float(u), float(t)), ratio=ratio_of(u, t), label_en=en)
+
+
+def _size_pair(used: float, total: float) -> str:
+    """``2.8/24G``, ``35/126G``, ``1.1/1.5T``: short enough for one table cell."""
+    if total >= 1000:
+        return f"{used / 1024:.1f}/{total / 1024:.1f}T"
+    return f"{used:.0f}/{total:.0f}G" if used >= 10 else f"{used:.1f}/{total:.0f}G"
 
 
 def resources_section(host: Mapping[str, Any] | None) -> Section:
@@ -31,10 +37,12 @@ def resources_section(host: Mapping[str, Any] | None) -> Section:
     temperature = data.get("gpu_temperature")
     real = isinstance(temperature, int | float) and not isinstance(temperature, bool)
     temp_text = f"{float(temperature):.0f}°C" if real and isinstance(temperature, int | float) else UNKNOWN
+    gpu = _percent(data, "gpu_percent", "GPU", "GPU")
+    if gpu.value != UNKNOWN and temp_text != UNKNOWN:
+        gpu = Metric(gpu.label, f"{gpu.value}·{temp_text}", ratio=gpu.ratio, label_en=gpu.label_en)
     metrics = (
         _percent(data, "cpu_percent", "CPU", "CPU"),
-        _percent(data, "gpu_percent", "GPU", "GPU"),
-        Metric("GPU 温度", temp_text, label_en="GPU temp"),
+        gpu,
         _pair(data, "gpu_used_gib", "gpu_total_gib", "显存", "VRAM"),
         _pair(data, "ram_used_gib", "ram_total_gib", "内存", "RAM"),
         _pair(data, "disk_used_gib", "disk_total_gib", "磁盘", "Disk"),

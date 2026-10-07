@@ -85,7 +85,7 @@ async def main(chat_id: str, home: Path, *, ok_only: bool = False) -> int:
     now = time.time()
     payload = {
         "platform": "feishu", "session_id": "live", "turn_id": "t1", "api_request_id": "r1", "started_at": now,
-        "provider": "opencode-go", "model": "deepseek-v4.1-flash",
+        "provider": "opencode-go", "model": "deepseek-v4.1-flash", "request": {"body": {"reasoning_effort": "max"}},
     }
     ctl.observe("pre_api_request", payload, session_key="live-acceptance")
     chunks = (

@@ -541,7 +541,10 @@ class Controller:
         session = self._by_key.get(session_key or "")
         if session is None or session.telemetry is None or session.state.terminal:
             return False
-        if not session.telemetry.observe(event, payload):
+        # The pre-request payload may be truncated; execution middleware still carries the reasoning controls.
+        observed = (session.telemetry.observe_execution(payload) if event == "llm_execution"
+                    else session.telemetry.observe(event, payload))
+        if not observed:
             return False
         provider = _provider(session)
         if provider and provider != session.provider:

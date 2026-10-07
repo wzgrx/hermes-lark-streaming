@@ -187,7 +187,7 @@ def _row(
     notes += _expiry_notes(row, tz, reason)
     checked = stamp(row.get("checked_at"), tz)
     if checked != UNKNOWN and row.get("source") != "none":
-        notes.append(f"{'API 快照' if status == 'ok' else '最近查询'} · {checked}")
+        notes.append(f"{'快照' if status == 'ok' else '最近查询'} {checked}")
     if row.get("stale"):
         when = stamp(row.get("last_attempt_at"), tz)
         suffix = f" · {when}" if when != UNKNOWN else ""
@@ -197,7 +197,7 @@ def _row(
     if multi and name:
         notes = [f"{name}：{n}" for n in notes]
     elif name:
-        notes.insert(0, f"账户：{name}")
+        notes.insert(0, name)
     return metrics, notes
 
 

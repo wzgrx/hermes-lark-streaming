@@ -344,7 +344,8 @@ def known(section: Section) -> Section:
     return replace(section, metrics=metrics, notes=notes)
 
 
-_TILES_PER_ROW = 4
+_CELLS_PER_ROW = 5
+_HEAD_WEIGHT, _CELL_WEIGHT = 2, 3  # Feishu column weights must stay within 1..5
 
 
 def _level_color(ratio: float | None) -> str | None:
@@ -353,46 +354,75 @@ def _level_color(ratio: float | None) -> str | None:
     return "red" if ratio >= 0.8 else "orange" if ratio >= 0.5 else None
 
 
-def _tile(metric: Metric | None, *, colour: bool) -> dict[str, Any]:
-    column: dict[str, Any] = {"tag": "column", "width": "weighted", "weight": 1, "vertical_align": "top",
+def _column(weight: int, text: Bi | None) -> dict[str, Any]:
+    column: dict[str, Any] = {"tag": "column", "width": "weighted", "weight": weight, "vertical_align": "center",
                               "elements": []}
-    if metric is None:
-        return column  # keeps the grid aligned on a short row
-    value = esc(metric.value)
-    color = _level_color(metric.ratio) if colour else None
-    if color:
-        value = f"<font color='{color}'>{value}</font>"
-    zh = f"{grey(esc(metric.label))}\n**{value}**"
-    en = f"{grey(esc(metric.label_en or metric.label))}\n**{value}**"
-    if metric.hint:
-        zh += "\n" + grey(esc(metric.hint))
-        en += "\n" + grey(esc(metric.hint))
-    column["elements"].append(_markdown(Bi(zh, en), "notation"))
+    if text is not None:
+        column["elements"].append(_markdown(text, "notation"))
     return column
 
 
-def _tile_rows(metrics: list[Metric], *, colour: bool) -> list[dict[str, Any]]:
+def _row(columns: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"tag": "column_set", "flex_mode": "none", "horizontal_spacing": "4px", "margin": "0px",
+            "columns": columns}
+
+
+def _cell(metric: Metric) -> Bi:
+    value = f"**{esc(metric.value)}**"
+    hint = f" {grey(esc(metric.hint))}" if metric.hint else ""
+    return Bi(f"{grey(esc(metric.label))} {value}{hint}",
+              f"{grey(esc(metric.label_en or metric.label))} {value}{hint}")
+
+
+def _grid_rows(heading: str, metrics: list[Metric]) -> list[dict[str, Any]]:
+    """One line per group: a bold heading column, then up to five ``label **value**`` cells, aligned."""
     rows = []
-    for start in range(0, len(metrics), _TILES_PER_ROW):
-        chunk: list[Metric | None] = list(metrics[start:start + _TILES_PER_ROW])
-        chunk += [None] * (_TILES_PER_ROW - len(chunk))
-        rows.append({"tag": "column_set", "flex_mode": "none", "horizontal_spacing": "8px",
-                     "columns": [_tile(m, colour=colour) for m in chunk]})
+    for start in range(0, len(metrics), _CELLS_PER_ROW):
+        chunk = metrics[start:start + _CELLS_PER_ROW]
+        head = Bi.same(f"**{esc(heading)}**") if start == 0 else None
+        columns = [_column(_HEAD_WEIGHT, head)]
+        columns += [_column(_CELL_WEIGHT, _cell(m)) for m in chunk]
+        columns += [_column(_CELL_WEIGHT, None) for _ in range(_CELLS_PER_ROW - len(chunk))]
+        rows.append(_row(columns))
+    return rows
+
+
+def _bar(ratio: float) -> str:
+    ratio = min(max(ratio, 0.0), 1.0)
+    filled = round(ratio * 10)
+    color = _level_color(ratio) or "blue"
+    return f"<font color='{color}'>{'▓' * filled}</font>{grey('░' * (10 - filled))}"
+
+
+def _bar_rows(metrics: list[Metric]) -> list[dict[str, Any]]:
+    """Quota windows, one line each: name, bar and percentage, reset time."""
+    rows = []
+    for m in metrics:
+        color = _level_color(m.ratio)
+        value = f"**{esc(m.value)}**" if not color else f"**<font color='{color}'>{esc(m.value)}</font>**"
+        bar = _bar(m.ratio) + " " if m.ratio is not None else ""
+        rows.append(_row([
+            _column(_HEAD_WEIGHT, Bi(f"**{esc(m.label)}**", f"**{esc(m.label_en or m.label)}**")),
+            _column(4, Bi.same(bar + value)),
+            _column(5, Bi.same(grey(esc(m.hint))) if m.hint else None),
+        ]))
     return rows
 
 
 def _section_elements(section: Section) -> list[dict[str, Any]]:
-    """Heading, then rows of label-over-value tiles per group, then one grey note line."""
     elements: list[dict[str, Any]] = []
-    groups: dict[str, list[Metric]] = {}
-    for metric in section.metrics:
-        groups.setdefault(metric.group or section.title, []).append(metric)
-    for heading, metrics in groups.items():
-        elements.append(_markdown(Bi.same(f"**{esc(heading)}**"), "notation"))
-        elements.extend(_tile_rows(metrics, colour=section.layout == "bars"))
-    note_line = " · ".join(esc(n) for n in dict.fromkeys(section.notes) if n)
-    if note_line:
-        elements.append(_markdown(Bi.same(grey(note_line)), "notation"))
+    notes = [n for n in dict.fromkeys(section.notes) if n]
+    if section.layout == "bars":
+        elements.extend(_bar_rows(list(section.metrics)))
+        notes.insert(0, section.title.replace(" · 订阅与额度", ""))  # the provider, once, in the note line
+    else:
+        groups: dict[str, list[Metric]] = {}
+        for metric in section.metrics:
+            groups.setdefault(metric.group or section.title.split(" · ")[0], []).append(metric)
+        for heading, metrics in groups.items():
+            elements.extend(_grid_rows(heading, metrics))
+    if notes:
+        elements.append(_markdown(Bi.same(grey(" · ".join(esc(n) for n in notes))), "notation"))
     return elements
 
 
@@ -418,7 +448,7 @@ def details_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | Non
         children.extend(block)
     title = Bi(grey("📊 详情 · " + " · ".join(names)), grey("📊 Details · " + " · ".join(names)))
     return panel(title=title, elements=children, expanded=False, element_id=_id(DETAILS_ID, view),
-                 vertical_spacing="6px")
+                 vertical_spacing="2px")
 
 
 # --------------------------------------------------------------------------- cards

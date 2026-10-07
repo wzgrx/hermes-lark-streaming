@@ -37,27 +37,27 @@ def _turn_metrics(data: Mapping[str, Any]) -> tuple[Metric, ...]:
     calls, errors = count(data.get("api_calls")), count(data.get("retries"))
     group = "本轮"
     metrics = [
-        Metric("输入(含缓存)", compact(count(data.get("input_tokens"))), label_en="Input incl. cache", group=group),
+        Metric("输入", compact(count(data.get("input_tokens"))), label_en="Input", group=group),
         Metric("输出", compact(count(data.get("output_tokens"))), label_en="Output", group=group),
         Metric(
-            "缓存命中下限" if floor else "缓存命中",
+            "缓存",
             percent(ratio, floor=floor),
             ratio=ratio,
-            label_en="Cache hit lower bound" if floor else "Cache hit",
+            label_en="Cache",
             group=group,
         ),
         Metric("首响应", _seconds(data.get("first_response")), label_en="First response", group=group),
     ]
     if partial_cache:
         read = count(data.get("cache_read_tokens"))
-        metrics.append(Metric("缓存读取(部分)", "≥" + compact(read, lower_bound=True) if read is not None else UNKNOWN,
+        metrics.append(Metric("缓存读取", "≥" + compact(read, lower_bound=True) if read is not None else UNKNOWN,
                               group=group))
     if calls is not None and (calls > 1 or errors):
         metrics.append(Metric("请求", f"{calls}" + (f" · 错误 {errors}" if errors else ""), label_en="Requests",
                               group=group))
     reasoning = label(data.get("reasoning"))
     if reasoning:
-        metrics.append(Metric("思考强度", reasoning, label_en="Reasoning", group=group))
+        metrics.append(Metric("思考", reasoning, label_en="Reasoning", group=group))
     return tuple(metrics)
 
 
@@ -76,8 +76,8 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
         if terminal and status in {"pending", "unavailable"}:
             note = "本轮历史快照尚未就绪；后续消息可重试"
         return (), [note]
-    since = label(history.get("since"))
-    group = f"累计 · 自 {since[5:] if len(since) == 10 else since}" if since else "累计"
+    label(history.get("since"))
+    group = "累计"
     metrics = [
         Metric(title, _history_tokens(mapping(history.get(key))), label_en=en, group=group)
         for key, title, en in (("today", "今日", "Today"), ("month", "本月", "Month"), ("total", "总计", "Total"))

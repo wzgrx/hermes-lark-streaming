@@ -63,9 +63,9 @@ def test_turn_metrics_from_telemetry():
     section = usage_section(state.snapshot(), None)
     assert (section.key, section.title, section.title_en, section.layout) == ("usage", "用量", "Usage", "grid")
     m = by_label(section)
-    assert m["输入(含缓存)"].value == "100" and m["输出"].value == "7"
-    assert m["缓存命中"].value == "70.0%" and m["缓存命中"].ratio == pytest.approx(0.7)
-    assert m["思考强度"].value == "max"
+    assert m["输入"].value == "100" and m["输出"].value == "7"
+    assert m["缓存"].value == "70.0%" and m["缓存"].ratio == pytest.approx(0.7)
+    assert m["思考"].value == "max"
     # model, context, provider and wall time live in the footer and status line, not here
     assert not {"上下文（末次）", "服务商", "总耗时", "缓存读取", "请求"} & set(m)
     assert "统计不完整" not in section.notes
@@ -81,23 +81,23 @@ def test_partial_turn_shows_floor_and_partial_note():
     complete(state, second)
     section = usage_section(state.snapshot(), None)
     m = by_label(section)
-    assert m["缓存命中"].value == "未知" and m["缓存命中"].ratio is None  # count known, rate not
-    assert m["缓存读取(部分)"].value == "≥70"
+    assert m["缓存"].value == "未知" and m["缓存"].ratio is None  # count known, rate not
+    assert m["缓存读取"].value == "≥70"
     assert "统计不完整" in section.notes and "服务商路径 opencode-go → other" in section.notes
     assert m["请求"].value == "2 · 错误 1"
 
 
 def test_cache_hit_lower_bound_is_labelled_and_never_rounded_up():
     section = usage_section(turn([40, None]).snapshot(), None)
-    metric = by_label(section)["缓存命中下限"]
-    assert (metric.value, metric.label_en) == ("≥20.0%", "Cache hit lower bound") and metric.ratio == 0.2
-    assert by_label(section)["缓存读取(部分)"].value == "≥40"
+    metric = by_label(section)["缓存"]
+    assert (metric.value, metric.label_en) == ("≥20.0%", "Cache") and metric.ratio == 0.2
+    assert by_label(section)["缓存读取"].value == "≥40"
 
 
 def test_missing_telemetry_is_unknown_not_zero():
     section = usage_section(None, None)
     m = by_label(section)
-    assert m["输入(含缓存)"].value == m["输出"].value == m["缓存命中"].value == "未知"
+    assert m["输入"].value == m["输出"].value == m["缓存"].value == "未知"
     assert "本轮统计待采集" in section.notes
     assert not any(x.ratio for x in section.metrics)
 
@@ -115,7 +115,7 @@ def test_history_rows_partial_models_and_status_notes():
     section = usage_section({}, history)
     m = by_label(section)
     assert m["今日"].value == "1.2k" and m["本月"].value == "≥1.55M" and m["总计"].value == "未知"
-    assert m["总计"].group == "累计 · 自 09-01" and m["今日"].group == m["总计"].group
+    assert m["总计"].group == "累计" and m["今日"].group == m["总计"].group
     models = [x for x in section.metrics if x.hint == "Go plan"]
     assert len(models) == 3 and models[0].label == "m" * 48  # top three, bounded
     assert any("下限" in n for n in section.notes)
@@ -154,7 +154,7 @@ def test_resources_have_ratios_where_meaningful_and_unknown_elsewhere():
     assert section.key == "resources" and section.layout == "grid"
     assert m["显存"].value == "2.0/8G" and m["显存"].ratio == 0.25
     assert m["内存"].ratio == 0.5 and m["磁盘"].ratio == 0.25 and m["GPU"].ratio == pytest.approx(0.4)
-    assert m["GPU 温度"].value == "61°C" and m["GPU 温度"].ratio is None
+    assert m["GPU"].value.endswith("·61°C") and "GPU 温度" not in m  # temperature rides along with GPU
     assert "WSL" in section.title and section.notes == ()  # sampled and complete: nothing to explain
 
 
@@ -181,9 +181,9 @@ def test_quota_windows_are_bars_with_value_ratio_and_reset_hint():
     assert (m["5小时"].value, m["5小时"].ratio, m["5小时"].hint) == ("38%", pytest.approx(0.38), "2h14m 后重置")
     assert m["每周"].value == "0%" and m["每月"].value == "47%"
     assert "siliconflow" not in text(section).lower() and "Never show" not in text(section)
-    assert "账户：Go Primary" in section.notes
+    assert "Go Primary" in section.notes
     assert "订阅到期：未知（API 未返回）" in section.notes
-    assert "API 快照 · 10-05 16:46" in section.notes
+    assert "快照 10-05 16:46" in section.notes
     assert section.notes[-1] == "Asia/Shanghai"  # reset clocks are in this zone
 
 
@@ -256,7 +256,7 @@ def test_http_failure_reason_and_retained_snapshot():
         snapshot(stale=True, last_http_status=401, last_attempt_at="2026-10-05T04:10:00Z"), "Asia/Shanghai", now=NOW
     )
     assert "保留上次成功快照；最近读取失败 · HTTP 401 · 10-05 12:10" in retained.notes
-    assert "API 快照 · 10-05 16:46" in retained.notes
+    assert "快照 10-05 16:46" in retained.notes
     both = accounts_section({**snapshot(), "stale": True}, "UTC", now=NOW)
     assert "上次快照 · 待刷新" in both.notes
 

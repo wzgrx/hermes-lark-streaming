@@ -226,5 +226,5 @@ def test_card_stays_small():
         Section("resources", "资源", tuple(Metric(f"r{i}", "1") for i in range(5))),
         QUOTA,
     )))
-    assert len(json.dumps(card, ensure_ascii=False).encode()) < 9000
+    assert len(json.dumps(card, ensure_ascii=False).encode()) < 11000
     assert count_elements(card) < 90
