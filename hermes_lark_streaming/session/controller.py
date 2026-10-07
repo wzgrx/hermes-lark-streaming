@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 import threading
 import time
@@ -545,8 +546,11 @@ class Controller:
         provider = _provider(session)
         if provider and provider != session.provider:
             # Account readers are per provider, so they can only start once the turn's provider is known.
+            # Observer hooks run on agent worker threads and the readers start asyncio tasks: hop to the loop.
             session.provider = provider
-            self.collector.request(chat_id=session.chat_id, provider=provider)
+            request = functools.partial(self.collector.request, chat_id=session.chat_id, provider=provider)
+            with contextlib.suppress(RuntimeError):  # loop closed during shutdown
+                session.loop.call_soon_threadsafe(request)
         self._wake(session)
         return True
 

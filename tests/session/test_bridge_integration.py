@@ -85,6 +85,15 @@ async def test_provider_known_from_telemetry_starts_account_reads(wired, client)
     wired.collector.request = lambda **kw: requests.append(kw)  # type: ignore[method-assign]
     payload = {"platform": "feishu", "session_id": "s", "turn_id": "t", "api_request_id": "r",
                "started_at": time.time() + 1, "provider": "opencode-go", "model": "m"}
-    wired.observe("pre_api_request", payload, session_key="sk4")
-    wired.observe("pre_api_request", payload, session_key="sk4")  # unchanged provider: no second request
+    import asyncio
+    import threading
+
+    def from_worker() -> None:  # Hermes calls observers from agent worker threads, never the loop
+        wired.observe("pre_api_request", payload, session_key="sk4")
+        wired.observe("pre_api_request", payload, session_key="sk4")  # unchanged provider: no second request
+
+    worker = threading.Thread(target=from_worker)
+    worker.start()
+    worker.join()
+    await asyncio.sleep(0.05)  # the request runs on the loop
     assert requests == [{"chat_id": "oc_1", "provider": "opencode-go"}] and session.provider == "opencode-go"
