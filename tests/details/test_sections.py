@@ -120,7 +120,7 @@ def test_history_rows_partial_models_and_status_notes():
     assert len(models) == 3 and models[0].label == "m" * 48  # top three, bounded
     assert any("下限" in n for n in section.notes)
     assert not [x for x in usage_section({}, history, show_models=False).metrics if x.hint == "Go plan"]
-    assert "尚无已记录的主请求" in usage_section({}, {"status": "no_history"}).notes
+    assert "尚无已记录的请求" in usage_section({}, {"status": "no_history"}).notes
     assert "本轮历史快照尚未就绪；后续消息可重试" in usage_section({}, {"status": "pending"}, terminal=True).notes
     assert "正在读取本机历史" in usage_section({}, {"status": "pending"}).notes
 

@@ -15,7 +15,7 @@ from .fmt import UNKNOWN, compact, percent
 _HISTORY_NOTES = {
     "pending": "正在读取本机历史",
     "unavailable": "历史读取失败或超时，稍后重试",
-    "no_history": "尚无已记录的主请求",
+    "no_history": "尚无已记录的请求",
 }
 
 

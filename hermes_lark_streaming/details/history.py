@@ -48,7 +48,8 @@ def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict
         # WAL writers keep running, but the totals and model groups must share
         # the same read snapshot. No write transaction/checkpoint is performed.
         db.execute("BEGIN")
-        row = db.execute("SELECT " + ", ".join(columns) + " FROM usage_events WHERE scope='main'", params).fetchone()
+        # main and auxiliary requests both spend the subscription; the ledger already keeps them apart, never doubled
+        row = db.execute("SELECT " + ", ".join(columns) + " FROM usage_events", params).fetchone()
         first = row[0]
         if first is None:
             return result
@@ -66,7 +67,7 @@ def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict
             f"SELECT subscription, CASE WHEN response_model!='' THEN response_model ELSE requested_model END model, "
             f"COUNT(*), SUM(CASE WHEN {measured} THEN 1 ELSE 0 END), "
             f"SUM(CASE WHEN {measured} THEN input_tokens+output_tokens END) FROM usage_events "
-            "WHERE scope='main' GROUP BY subscription, model ORDER BY 5 DESC, subscription, model LIMIT 3"
+            "GROUP BY subscription, model ORDER BY 5 DESC, subscription, model LIMIT 3"
         ):
             result["models"].append(
                 {"subscription": subscription, "model": model, "tokens": tokens, "partial": requests != (known or 0)}

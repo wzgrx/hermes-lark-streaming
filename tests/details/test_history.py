@@ -184,3 +184,18 @@ async def test_cancelled_history_wait_does_not_cancel_shared_read(tmp_path):
             if task is not None:
                 await task
     assert reader.snapshot()["status"] == "ok"
+
+
+def test_summary_counts_auxiliary_requests_too(tmp_path):
+    import time
+
+    from hermes_lark_streaming.details.history import read_summary
+    from hermes_lark_streaming.details.ledger import UsageLedger
+
+    ledger = UsageLedger(tmp_path / "u.sqlite3")
+    now = time.time()
+    base = {"session_id": "s", "turn_id": "t", "provider": "p", "model": "m", "started_at": now - 5}
+    ledger.record("post_api_request", {**base, "api_request_id": "a", "usage": {"input_tokens": 100, "output_tokens": 10}})
+    ledger.record("post_auxiliary_call", {**base, "api_request_id": "b", "usage": {"input_tokens": 50, "output_tokens": 5}})
+    summary = read_summary(tmp_path / "u.sqlite3", "UTC", now=now)
+    assert summary["today"]["requests"] == 2 and summary["today"]["tokens"] == 165
