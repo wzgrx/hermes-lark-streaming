@@ -4,11 +4,11 @@ import asyncio
 
 import pytest
 
-from hermes_lark_streaming.card.render import ANSWER_ID, FOOTER_ID, PROCESS_ID, STATUS_ID
+from hermes_lark_streaming.card.render import ANSWER_ID, STATUS_ID
 from hermes_lark_streaming.session.state import State
 from hermes_lark_streaming.transport import FeishuAPIError
 
-from .conftest import settle
+from .conftest import settle, state_tag
 
 pytestmark = pytest.mark.asyncio
 
@@ -35,9 +35,10 @@ async def test_happy_path_streams_then_finalizes(make_controller, client):
     ctl.on_answer(message_id="om_1", text="先看")
     ctl.on_answer(message_id="om_1", text="状态。")
     await settle(ctl)
-    # the process panel is inserted before the answer, then the answer streams
+    # the live line is patched in place (no structural inserts in v2), then the answer streams
     batch = client.of("batch_update")[-1][2]
-    assert any(a["action"] == "add_elements" and a["params"]["target_element_id"] == ANSWER_ID for a in batch)
+    assert all(a["action"] == "partial_update_element" for a in batch)
+    assert any(a["params"]["element_id"] == STATUS_ID and "git status" in str(a) for a in batch)
     assert client.of("stream")[-1][2:] == (ANSWER_ID, "先看状态。")
 
     ctl.on_tool_update(message_id="om_1", tool_name="terminal", status="completed", result="{}")
@@ -48,8 +49,8 @@ async def test_happy_path_streams_then_finalizes(make_controller, client):
     assert [c[0] for c in client.calls][-2:] == ["close", "update_card"]
     final = client.of("update_card")[-1][2]
     assert "streaming_mode" not in final["config"]
-    assert element_ids(final)[:2] == [STATUS_ID, PROCESS_ID] and FOOTER_ID in element_ids(final)
-    assert final["body"]["elements"][0]["content"].startswith("<font color='green'>")
+    assert final["header"]["template"] == "green" and state_tag(final) == "已完成"
+    assert STATUS_ID not in element_ids(final) and any(str(i).startswith("details_") for i in element_ids(final))
     assert ctl._sessions == {} and ctl.consume_text_fallback("om_1") is False
 
 
@@ -61,13 +62,13 @@ async def test_failed_tool_and_failed_turn_are_distinct(make_controller, client)
                        result='{"exit_code": 7, "output": "boom"}')
     assert await ctl.on_completed_wait(message_id="om_1", answer="done") is True
     final = client.of("update_card")[-1][2]
-    assert "1 failed" in final["body"]["elements"][0]["content"]
-    assert final["body"]["elements"][1]["expanded"] is True
+    assert state_tag(final) == "有失败" and final["header"]["template"] == "red"
+    assert final["body"]["elements"][0]["background_style"] == "red-50" and "Exit code 7" in str(final)
 
     ctl2 = make_controller()
     await start(ctl2, "om_2")
     assert await ctl2.on_completed_wait(message_id="om_2", answer="", is_error=True) is True
-    assert "Failed" in client.of("update_card")[-1][2]["body"]["elements"][0]["content"]
+    assert state_tag(client.of("update_card")[-1][2]) == "失败"
 
 
 async def test_creation_rejected_yields_to_gateway(make_controller, client):
@@ -94,7 +95,7 @@ async def test_interrupt_stops_old_and_redirects_completion(make_controller, cli
     await start(ctl, "om_a")
     ctl.on_interrupted(old_message_id="om_a", new_message_id="om_b", chat_id="oc_1")
     await settle(ctl, 0.3)
-    assert "已停止" in client.of("update_card")[0][2]["body"]["elements"][0]["i18n_content"]["zh_cn"]
+    assert state_tag(client.of("update_card")[0][2]) == "已停止"
     assert "om_b" in ctl._sessions
     ctl.on_answer(message_id="om_b", text="新的回答")
     assert await ctl.on_completed_wait(message_id="om_a", answer="新的回答") is True  # redirected
@@ -105,7 +106,7 @@ async def test_stop_by_session_key(make_controller, client):
     ctl = make_controller()
     await start(ctl, session_key="sk")
     assert await ctl.on_session_aborted(session_key="sk") is True
-    assert "已停止" in client.of("update_card")[-1][2]["body"]["elements"][0]["i18n_content"]["zh_cn"]
+    assert state_tag(client.of("update_card")[-1][2]) == "已停止"
 
 
 async def test_time_limit_handoff_seals_old_and_continues(make_controller, client):
@@ -118,7 +119,7 @@ async def test_time_limit_handoff_seals_old_and_continues(make_controller, clien
     await settle(ctl, 0.6)
     assert client.cards == 2
     sealed = next(c for c in client.of("update_card") if c[0] == "card_1")[2]
-    assert "已分页" in sealed["body"]["elements"][0]["i18n_content"]["zh_cn"]
+    assert state_tag(sealed) == "已分页"
     assert "第一段第二段" in str(sealed) or "第一段" in str(sealed)
     ctl.on_answer(message_id="om_1", text="第三段")
     assert await ctl.on_completed_wait(message_id="om_1", answer="") is True

@@ -113,9 +113,15 @@ def make_controller(tmp_path, client):
     return build
 
 
+def state_tag(card: dict[str, Any]) -> str:
+    """The zh state tag of a card header (运行中 / 已完成 / 有失败 / 失败 / 已停止 / 已分页)."""
+    text = card["header"]["text_tag_list"][0]["text"]
+    return str(text.get("i18n_content", {}).get("zh_cn") or text["content"])
+
+
 async def settle(ctl: Controller, delay: float = 0.4) -> None:
     """Let throttled flushes run."""
     await asyncio.sleep(delay)
 
 
-__all__ = ["FakeClient", "FeishuAPIError", "settle"]
+__all__ = ["FakeClient", "FeishuAPIError", "settle", "state_tag"]

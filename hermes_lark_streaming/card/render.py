@@ -1,12 +1,13 @@
-"""Card 2.0 renderer: ``TurnView`` in, card JSON out. Pure functions, no I/O.
+"""Card 2.0 renderer (v2): ``TurnView`` in, card JSON out. Pure functions, no I/O.
 
 Layout, top to bottom (see docs/design/card-redesign.html):
 
-    status line        one line: dot, state, step counter, elapsed
-    process panel      tools and reasoning, one collapsible panel
+    header             native title bar: agent name, state tag, subtitle; its colour is the state
+    live line          running only: what is happening now, step counter, clock
+    failures           finished only, when a step failed: each failure with its command and output
     answer             the body; streamed through a single element while running
-    footer             one grey line: model, context, cache, identity tag
-    details panel      usage / resources / accounts, only after the turn ends
+    meta chips         finished only: model, context, cache hit, quota warning
+    details panel      finished only, collapsed: steps, reasoning, usage, resources, quota, reviews
 """
 
 from __future__ import annotations
@@ -20,10 +21,10 @@ from .markdown import downgrade_tables, optimize_markdown_style, split_long_text
 from .model import Footer, Metric, Phase, RenderOptions, Section, Step, StepStatus, TurnView
 from .redact import redact
 
-STATUS_ID = "status"
-PROCESS_ID = "process"
+STATUS_ID = "live"  # the live line; patched while running
+PROCESS_ID = "process"  # reserved: v2 has no live process panel
 ANSWER_ID = "answer"
-FOOTER_ID = "footer"
+FOOTER_ID = "meta"  # reserved: chips only appear on the finished card
 DETAILS_ID = "details"
 
 ELEMENT_LIMIT = 200  # CardKit hard cap on elements per card, counted over every nested tag
@@ -35,8 +36,10 @@ _STREAMING_CONFIG = {
 }
 _THOUGHT_CHARS = 1200
 _SUMMARY_CHARS = 120
-_ERROR_CHARS = 240
+_ERROR_CHARS = 600
 _STEP_SUMMARY_CHARS = 90
+_MAX_FAILURES = 3
+_UNKNOWN = "未知"
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +74,13 @@ def _markdown(text: Bi, size: str, *, element_id: str | None = None) -> dict[str
     return element
 
 
+def _plain(text: Bi) -> dict[str, Any]:
+    element: dict[str, Any] = {"tag": "plain_text", "content": text.en}
+    if text.zh != text.en:
+        element["i18n_content"] = {"zh_cn": text.zh}
+    return element
+
+
 def esc(value: str) -> str:
     """Escape untrusted text for a markdown element: HTML first, then markdown specials."""
     out = html.escape(value, quote=False)
@@ -86,6 +96,13 @@ def code(value: str) -> str:
     return f"`{value}`"
 
 
+def fence(value: str) -> str:
+    """A fenced code block that its own content cannot close."""
+    longest = max((len(run) for run in value.split("\n") if set(run) == {"`"}), default=0)
+    ticks = "`" * max(3, longest + 1)
+    return f"{ticks}\n{value}\n{ticks}"
+
+
 def clip(value: str, limit: int, *, single_line: bool = True) -> str:
     """Redact, fold whitespace, and cut at ``limit`` characters (escaping happens afterwards)."""
     text = redact(value)
@@ -95,6 +112,10 @@ def clip(value: str, limit: int, *, single_line: bool = True) -> str:
 
 def grey(text: str) -> str:
     return f"<font color='grey'>{text}</font>"
+
+
+def chip(text: str, color: str = "neutral") -> str:
+    return f"<text_tag color='{color}'>{text}</text_tag>"
 
 
 def duration(seconds: float | None, *, whole: bool = False) -> str:
@@ -126,49 +147,192 @@ def compact(value: int) -> str:
     return str(value)
 
 
-# --------------------------------------------------------------------------- status
-
-def _dot(color: str) -> str:
-    return f"<font color='{color}'>●</font>"
-
-
-def _line(color: str, label: Bi, bits: Iterable[Bi]) -> Bi:
-    """``● label  grey(bit · bit)``; empty bits are skipped."""
-    parts = [b for b in bits if b.zh or b.en]
-    zh = " · ".join(b.zh for b in parts)
-    en = " · ".join(b.en for b in parts)
-    return Bi(f"{_dot(color)} {label.zh}" + (f" {grey(zh)}" if zh else ""),
-              f"{_dot(color)} {label.en}" + (f" {grey(en)}" if en else ""))
+def _panel_id(base: str, view: TurnView) -> str:
+    """Per-card id: Feishu remembers a panel's expanded state by id, so reuse would leak it across cards."""
+    return f"{base}_{view.card_key}"[:20] if view.card_key else base
 
 
-def status_text(view: TurnView) -> Bi:
+# --------------------------------------------------------------------------- header
+
+_STATE = {
+    # key: (template colour, tag colour, zh tag, en tag)
+    "running": ("blue", "blue", "运行中", "Running"),
+    "done": ("green", "green", "已完成", "Done"),
+    "step_failed": ("red", "red", "有失败", "Step failed"),
+    "failed": ("red", "red", "失败", "Failed"),
+    "stopped": ("grey", "neutral", "已停止", "Stopped"),
+    "continued": ("grey", "neutral", "已分页", "Continued"),
+}
+
+
+def state_key(view: TurnView) -> str:
     if view.continued:
-        return _line("grey", Bi("**已分页**", "**Continued**"), [Bi("内容见下一张卡片", "see the next card")])
-    clock = Bi.same(duration(view.elapsed_s, whole=view.phase is Phase.RUNNING))
-    steps = view.total_steps
+        return "continued"
     if view.phase is Phase.RUNNING:
-        done = view.finished_steps
-        counter = Bi(f"步骤 {done}/{steps}", f"step {done}/{steps}") if steps else Bi("", "")
-        return _line("blue", Bi("**运行中**", "**Running**"), [counter, clock])
+        return "running"
     if view.phase is Phase.FAILED:
-        return _line("red", Bi("**<font color='red'>本轮失败</font>**", "**<font color='red'>Failed</font>**"), [clock])
+        return "failed"
     if view.phase is Phase.STOPPED:
-        return _line("grey", Bi("**已停止**", "**Stopped**"), [clock])
-    failed = view.failed_steps
-    if failed:
-        return _line(
-            "red",
-            Bi(f"**<font color='red'>{failed} 步失败</font>**", f"**<font color='red'>{failed} failed</font>**"),
-            [Bi("回答已完成", "answer finished"), clock],
-        )
-    return _line("green", Bi("**已完成**", "**Done**"), [clock])
+        return "stopped"
+    return "step_failed" if view.failed_steps else "done"
+
+
+def _subtitle(view: TurnView, key: str) -> Bi:
+    if key == "running":
+        return Bi("处理中…", "Working…")
+    if key == "continued":
+        return Bi("内容见下一张卡片", "Continued on the next card")
+    parts_zh: list[str] = []
+    parts_en: list[str] = []
+    clock = duration(view.elapsed_s)
+    if clock:
+        parts_zh.append(clock)
+        parts_en.append(clock)
+    if view.total_steps:
+        parts_zh.append(f"{view.total_steps} 步")
+        parts_en.append(f"{view.total_steps} steps")
+    if view.failed_steps:
+        parts_zh.append(f"{view.failed_steps} 步失败")
+        parts_en.append(f"{view.failed_steps} failed")
+    return Bi(" · ".join(parts_zh), " · ".join(parts_en))
+
+
+def header(view: TurnView) -> dict[str, Any]:
+    key = state_key(view)
+    template, tag_color, zh, en = _STATE[key]
+    title = clip(view.footer.tag, 30) if view.footer.tag else "Hermes"
+    result: dict[str, Any] = {
+        "title": _plain(Bi.same(title)),
+        "text_tag_list": [{"tag": "text_tag", "text": _plain(Bi(zh, en)), "color": tag_color}],
+        "template": template,
+        "icon": {"tag": "standard_icon", "token": "robot_outlined"},
+    }
+    subtitle = _subtitle(view, key)
+    if subtitle.zh:
+        result["subtitle"] = _plain(subtitle)
+    return result
+
+
+# --------------------------------------------------------------------------- live line (running)
+
+def live_text(view: TurnView) -> Bi:
+    running = next((s for s in reversed(view.steps) if s.status is StepStatus.RUNNING), None)
+    clock = duration(view.elapsed_s, whole=True)
+    counter_zh = f"步骤 {view.finished_steps}/{view.total_steps}" if view.total_steps else ""
+    counter_en = f"step {view.finished_steps}/{view.total_steps}" if view.total_steps else ""
+    if running is not None:
+        target = f"**{esc(clip(running.name, 40))}**"
+        if running.summary:
+            target += f" {code(clip(running.summary, 60))}"
+        head = Bi(f"正在执行 {target}", f"Running {target}")
+    elif view.answers:
+        head = Bi("正在回答", "Answering")
+    elif view.thoughts:
+        head = Bi("正在思考", "Thinking")
+    else:
+        head = Bi("正在处理", "Working")
+    tail_zh = " · ".join(t for t in (counter_zh, clock) if t)
+    tail_en = " · ".join(t for t in (counter_en, clock) if t)
+    dot = "<font color='blue'>◌</font> "
+    return Bi(dot + head.zh + (f" {grey('· ' + tail_zh)}" if tail_zh else ""),
+              dot + head.en + (f" {grey('· ' + tail_en)}" if tail_en else ""))
 
 
 def status_element(view: TurnView, opts: RenderOptions) -> dict[str, Any]:
-    return _markdown(status_text(view), opts.text_size, element_id=STATUS_ID)
+    """The live line while running; on a sealed (continued) card a one-line pointer to the next card."""
+    if view.continued:
+        return _markdown(Bi(grey("内容见下一张卡片"), grey("Continued on the next card")), "notation",
+                         element_id=STATUS_ID)
+    return _markdown(live_text(view), "notation", element_id=STATUS_ID)
 
 
-# --------------------------------------------------------------------------- process
+def process_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
+    """v2 shows no live process panel; steps live in the finished card's details panel."""
+    return None
+
+
+def footer_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
+    """v2 shows the meta chips only on the finished card."""
+    return None
+
+
+# --------------------------------------------------------------------------- failures (finished)
+
+def _failure_element(step: Step, size: str) -> dict[str, Any]:
+    head = f"<font color='red'>✕</font> **{esc(clip(step.name, 40))}**"
+    if step.summary:
+        head += f" {code(clip(step.summary, _STEP_SUMMARY_CHARS))}"
+    timing = step_time(step.elapsed_ms)
+    if timing:
+        head += f" {grey(timing)}"
+    children = [_markdown(Bi.same(head), size)]
+    if step.error:
+        children.append(_markdown(Bi.same(fence(clip(step.error, _ERROR_CHARS, single_line=False))), "notation"))
+    return {
+        "tag": "column_set",
+        "flex_mode": "none",
+        "background_style": "red-50",
+        "horizontal_spacing": "0px",
+        "margin": "0px",
+        "columns": [{"tag": "column", "width": "weighted", "weight": 1, "vertical_spacing": "4px",
+                     "padding": "8px 10px 8px 10px", "elements": children}],
+    }
+
+
+def failure_elements(view: TurnView, opts: RenderOptions) -> list[dict[str, Any]]:
+    if not opts.show_process:
+        return []
+    failed = [s for s in view.steps if s.status is StepStatus.FAILED]
+    elements = [_failure_element(s, opts.text_size) for s in failed[-_MAX_FAILURES:]]
+    hidden = len(failed) - len(elements) + view.steps_before_failed
+    if hidden > 0:
+        elements.append(_markdown(Bi(grey(f"另有 {hidden} 步失败,见下方过程"),
+                                     grey(f"{hidden} more failed steps in the process below")), "notation"))
+    return elements
+
+
+# --------------------------------------------------------------------------- meta chips (finished)
+
+def _quota_chip(view: TurnView) -> str:
+    """The most constrained quota window, only once it is worth a glance (≥ 50 %)."""
+    worst: Metric | None = None
+    for section in view.sections:
+        if section.key != "accounts":
+            continue
+        for m in section.metrics:
+            if m.ratio is not None and (worst is None or m.ratio > (worst.ratio or 0)):
+                worst = m
+    if worst is None or (worst.ratio or 0) < 0.5:
+        return ""
+    color = "red" if (worst.ratio or 0) >= 0.8 else "orange"
+    return chip(f"额度 {esc(worst.label)} {esc(worst.value)}", color)
+
+
+def meta_text(footer: Footer, view: TurnView) -> str:
+    chips: list[str] = []
+    if footer.model:
+        chips.append(chip(esc(clip(footer.model, 60))))
+    if footer.context_used is not None and footer.context_max:
+        ratio = footer.context_used / footer.context_max
+        color = "red" if ratio >= 0.85 else "orange" if ratio >= 0.6 else "neutral"
+        chips.append(chip(f"上下文 {compact(footer.context_used)}/{compact(footer.context_max)} · {ratio:.0%}", color))
+    if footer.cache_hit is not None:
+        sign = "≥" if footer.cache_hit_is_floor else ""
+        chips.append(chip(f"缓存 {sign}{footer.cache_hit:.0%}", "green" if footer.cache_hit >= 0.5 else "neutral"))
+    quota = _quota_chip(view)
+    if quota:
+        chips.append(quota)
+    if footer.partial:
+        chips.append(chip("用量不完整"))
+    return " ".join(chips)
+
+
+def meta_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
+    text = meta_text(view.footer, view)
+    return _markdown(Bi.same(text), "notation") if text else None
+
+
+# --------------------------------------------------------------------------- details panel (finished)
 
 _STEP_ICON = {
     StepStatus.OK: "<font color='green'>✓</font>",
@@ -181,31 +345,13 @@ _STEP_ICON = {
 def _step_line(step: Step) -> str:
     parts = [_STEP_ICON[step.status], f"**{esc(clip(step.name, 40))}**"]
     if step.summary:
-        parts.append("· " + code(clip(step.summary, _STEP_SUMMARY_CHARS)))
+        parts.append(code(clip(step.summary, _STEP_SUMMARY_CHARS)))
     timing = step_time(step.elapsed_ms)
     if timing:
         parts.append(grey(timing))
     if step.status is StepStatus.UNCONFIRMED:
         parts.append(grey("结果未确认"))
     return " ".join(parts)
-
-
-def _step_element(step: Step, size: str) -> dict[str, Any]:
-    line = _step_line(step)
-    if step.status is not StepStatus.FAILED:
-        return _markdown(Bi.same(line), size)
-    if step.error:
-        line += "\n<font color='red'>" + esc(clip(step.error, _ERROR_CHARS, single_line=False)) + "</font>"
-    return {
-        "tag": "column_set",
-        "flex_mode": "none",
-        "background_style": "red-50",
-        "horizontal_spacing": "0px",
-        "columns": [{
-            "tag": "column", "width": "weighted", "weight": 1, "vertical_align": "top",
-            "elements": [_markdown(Bi.same(line), size)],
-        }],
-    }
 
 
 def _visible_steps(steps: tuple[Step, ...], limit: int) -> tuple[list[Step], int]:
@@ -221,39 +367,94 @@ def _visible_steps(steps: tuple[Step, ...], limit: int) -> tuple[list[Step], int
     return shown, len(steps) - len(shown)
 
 
-def _process_open(view: TurnView, opts: RenderOptions) -> bool:
-    if opts.process == "open":
-        return True
-    if opts.process == "closed":
-        return False
-    return view.phase is Phase.RUNNING or view.failed_steps > 0
+def known(section: Section) -> Section:
+    """Drop what is not known: a metric whose value is unknown, an unknown hint, and notes that say so."""
+    metrics = tuple(
+        replace(m, hint="" if _UNKNOWN in m.hint else m.hint) for m in section.metrics if m.value != _UNKNOWN
+    )
+    notes = tuple(n for n in section.notes if _UNKNOWN not in n)
+    return replace(section, metrics=metrics, notes=notes)
 
 
-def _process_title(view: TurnView) -> Bi:
-    total = view.total_steps
-    if not total:
-        return Bi("**过程** " + grey("· 思考"), "**Process** " + grey("· thinking"))
-    running = sum(s.status is StepStatus.RUNNING for s in view.steps)
-    unconfirmed = sum(s.status is StepStatus.UNCONFIRMED for s in view.steps)
-    failed = view.failed_steps
-    if failed:
-        return Bi(
-            f"**过程** {grey(f'· {view.finished_steps}/{total} 步结束')} <font color='red'>· {failed} 失败</font>",
-            f"**Process** {grey(f'· {view.finished_steps}/{total} steps ended')} "
-            f"<font color='red'>· {failed} failed</font>",
-        )
-    if running and view.phase is Phase.RUNNING:
-        return Bi(f"**过程** {grey(f'· {total} 步 · {running} 进行中')}",
-                  f"**Process** {grey(f'· {total} steps · {running} running')}")
-    if unconfirmed:
-        return Bi(f"**过程** {grey(f'· {total} 步 · {unconfirmed} 未确认')}",
-                  f"**Process** {grey(f'· {total} steps · {unconfirmed} unconfirmed')}")
-    return Bi(f"**过程** {grey(f'· {total} 步 · 全部成功')}", f"**Process** {grey(f'· {total} steps · all ok')}")
+def _bar(ratio: float) -> str:
+    ratio = min(max(ratio, 0.0), 1.0)
+    filled = round(ratio * 10)
+    color = "red" if ratio >= 0.8 else "orange" if ratio >= 0.5 else "blue"
+    return f"<font color='{color}'>{'▓' * filled}</font>{grey('░' * (10 - filled))}"
+
+
+def _inline(metrics: Iterable[Metric]) -> str:
+    """``label **value** · label **value**`` on one line, two-per-line for long lists."""
+    cells = [f"{esc(m.label)} **{esc(m.value)}**" + (f" {grey(esc(m.hint))}" if m.hint else "") for m in metrics]
+    lines = [" · ".join(cells[i:i + 4]) for i in range(0, len(cells), 4)]
+    return "\n".join(lines)
+
+
+def _bars(metrics: Iterable[Metric]) -> str:
+    rows = []
+    for m in metrics:
+        bar = _bar(m.ratio) + " " if m.ratio is not None else ""
+        hint = " " + grey(esc(m.hint)) if m.hint else ""
+        rows.append(f"{esc(m.label)}　{bar}**{esc(m.value)}**{hint}")
+    return "\n".join(rows)
+
+
+def _section_block(title: str, body: str, notes: Iterable[str], size: str) -> list[dict[str, Any]]:
+    text = f"**{esc(title)}**"
+    if body:
+        text += "\n" + body
+    note_line = " · ".join(esc(n) for n in dict.fromkeys(notes) if n)
+    if note_line:
+        text += "\n" + grey(note_line)
+    return [_markdown(Bi.same(text), size)]
+
+
+_SECTION_NAMES = {"usage": "用量", "resources": "资源", "accounts": "额度"}
+
+
+def details_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
+    if not opts.show_details or view.phase is Phase.RUNNING or view.continued:
+        return None
+    size = "notation"
+    blocks: list[list[dict[str, Any]]] = []
+    names: list[str] = []
+    if opts.show_process and (view.steps or view.steps_before):
+        shown, hidden = _visible_steps(view.steps, opts.max_steps)
+        lines = [_step_line(s) for s in shown]
+        earlier = view.steps_before + hidden
+        if earlier:
+            lines.insert(0, grey(f"另有 {earlier} 步较早的步骤未列出"))
+        blocks.append(_section_block("过程", "\n".join(lines), (), size))
+        names.append(f"{view.total_steps} 步")
+    if view.thoughts:
+        text = view.thoughts.strip()
+        if len(text) > _THOUGHT_CHARS:
+            text = "…" + text[-_THOUGHT_CHARS:]
+        blocks.append(_section_block("思考", grey(esc(text)), (), size))
+        names.append("思考")
+    for section in (known(s) for s in view.sections):
+        if not section.metrics:
+            continue
+        body = _bars(section.metrics) if section.layout == "bars" else _inline(section.metrics)
+        blocks.append(_section_block(section.title, body, section.notes, size))
+        names.append(_SECTION_NAMES.get(section.key, section.title.split(" · ")[0]))
+    if view.notices:
+        blocks.append(_section_block("后台复盘", "\n".join(esc(n) for n in view.notices), (), size))
+        names.append("后台复盘")
+    if not blocks:
+        return None
+    children: list[dict[str, Any]] = []
+    for index, block in enumerate(blocks):
+        if index:
+            children.append({"tag": "hr", "margin": "2px 0px 2px 0px"})
+        children.extend(block)
+    title = Bi("**过程与详情** " + grey("· " + " · ".join(names)), "**Details** " + grey("· " + " · ".join(names)))
+    return panel(title=title, elements=children, expanded=False, element_id=_panel_id(DETAILS_ID, view))
 
 
 def panel(*, title: Bi, elements: list[dict[str, Any]], expanded: bool, element_id: str,
           border: str = "grey") -> dict[str, Any]:
-    title_el: dict[str, Any] = {"tag": "markdown", "content": title.en, "text_size": "notation"}
+    title_el: dict[str, Any] = {"tag": "markdown", "content": title.en}
     if title.zh != title.en:
         title_el["i18n_content"] = {"zh_cn": title.zh}
     return {
@@ -267,154 +468,11 @@ def panel(*, title: Bi, elements: list[dict[str, Any]], expanded: bool, element_
             "icon_position": "right",
             "icon_expanded_angle": -180,
         },
-        "border": {"color": border, "corner_radius": "6px"},
-        "vertical_spacing": "6px",
-        "padding": "6px 8px 6px 8px",
+        "border": {"color": border, "corner_radius": "8px"},
+        "vertical_spacing": "8px",
+        "padding": "8px 10px 8px 10px",
         "elements": elements,
     }
-
-
-def process_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
-    if not opts.show_process or not (view.steps or view.thoughts or view.steps_before):
-        return None
-    size = "notation"
-    children: list[dict[str, Any]] = []
-    if view.thoughts:
-        text = view.thoughts.strip()
-        if len(text) > _THOUGHT_CHARS:
-            text = "…" + text[-_THOUGHT_CHARS:]
-        children.append(_markdown(Bi(grey("思考 · ") + esc(text), grey("Thinking · ") + esc(text)), size))
-    shown, hidden = _visible_steps(view.steps, opts.max_steps)
-    if hidden:
-        children.append(_markdown(Bi(grey(f"已省略 {hidden} 步较早的成功步骤"),
-                                     grey(f"{hidden} earlier successful steps omitted")), size))
-    children.extend(_step_element(s, size) for s in shown)
-    if not children:
-        return None
-    return panel(
-        title=_process_title(view), elements=children, expanded=_process_open(view, opts),
-        element_id=PROCESS_ID, border="red" if view.failed_steps else "grey",
-    )
-
-
-# --------------------------------------------------------------------------- footer & details
-
-def footer_text(footer: Footer, view: TurnView) -> Bi | None:
-    parts: list[str] = []
-    if footer.model:
-        parts.append(esc(clip(footer.model, 60)))
-    if footer.context_used is not None or footer.context_max:
-        used = compact(footer.context_used) if footer.context_used is not None else "—"
-        cap = compact(footer.context_max) if footer.context_max else "—"
-        text = f"{used} / {cap}"
-        if footer.context_used is not None and footer.context_max:
-            text += f" · {footer.context_used / footer.context_max:.0%}"
-        parts.append(text)
-    zh = en = ""
-    if footer.cache_hit is not None:
-        sign = "≥" if footer.cache_hit_is_floor else ""
-        zh, en = f"缓存命中 {sign}{footer.cache_hit:.0%}", f"cache hit {sign}{footer.cache_hit:.0%}"
-    if footer.partial and view.phase.terminal:
-        zh_tail, en_tail = "用量不完整", "usage partial"
-    else:
-        zh_tail = en_tail = ""
-    base = " · ".join(parts)
-    tag = f" <text_tag color='neutral'>{esc(clip(footer.tag, 30))}</text_tag>" if footer.tag else ""
-    bits_zh = [b for b in (base, zh, zh_tail) if b]
-    bits_en = [b for b in (base, en, en_tail) if b]
-    if not bits_zh and not tag:
-        return None
-    return Bi(grey(" · ".join(bits_zh)) + tag if bits_zh else tag.strip(),
-              grey(" · ".join(bits_en)) + tag if bits_en else tag.strip())
-
-
-def footer_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
-    if view.continued:
-        return None
-    text = footer_text(view.footer, view)
-    return _markdown(text, "notation", element_id=FOOTER_ID) if text else None
-
-
-def _bar(ratio: float) -> str:
-    ratio = min(max(ratio, 0.0), 1.0)
-    filled = round(ratio * 10)
-    color = "red" if ratio >= 0.95 else "orange" if ratio >= 0.8 else "blue"
-    return f"<font color='{color}'>{'▓' * filled}</font>{grey('░' * (10 - filled))}"
-
-
-def _metric_cell(metric: Metric, size: str) -> dict[str, Any]:
-    zh = grey(esc(metric.label)) + f"  **{esc(metric.value)}**"
-    en = grey(esc(metric.label_en or metric.label)) + f"  **{esc(metric.value)}**"
-    return {
-        "tag": "column", "width": "weighted", "weight": 1, "vertical_align": "top",
-        "elements": [_markdown(Bi(zh, en), size)],
-    }
-
-
-def _grid(metrics: Iterable[Metric], size: str) -> list[dict[str, Any]]:
-    items = list(metrics)
-    rows = []
-    for i in range(0, len(items), 2):
-        cells = [_metric_cell(m, size) for m in items[i:i + 2]]
-        if len(cells) == 1:
-            cells.append({"tag": "column", "width": "weighted", "weight": 1, "elements": []})
-        rows.append({"tag": "column_set", "flex_mode": "none", "horizontal_spacing": "12px", "columns": cells})
-    return rows
-
-
-def _bars(metrics: Iterable[Metric], size: str) -> list[dict[str, Any]]:
-    out = []
-    for m in metrics:
-        bar = _bar(m.ratio) + " " if m.ratio is not None else ""
-        hint = grey("· " + esc(m.hint)) if m.hint else ""
-        zh = f"{esc(m.label)}  {bar}**{esc(m.value)}** {hint}".rstrip()
-        en = f"{esc(m.label_en or m.label)}  {bar}**{esc(m.value)}** {hint}".rstrip()
-        out.append(_markdown(Bi(zh, en), size))
-    return out
-
-
-_UNKNOWN = "未知"
-
-
-def known(section: Section) -> Section:
-    """Drop what is not known: a metric whose value is unknown, an unknown hint, and notes that say so."""
-    metrics = tuple(
-        replace(m, hint="" if _UNKNOWN in m.hint else m.hint) for m in section.metrics if m.value != _UNKNOWN
-    )
-    notes = tuple(n for n in section.notes if _UNKNOWN not in n)
-    return replace(section, metrics=metrics, notes=notes)
-
-
-def details_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
-    sections = [k for k in (known(s) for s in view.sections) if k.metrics]
-    if not opts.show_details or not sections or view.phase is Phase.RUNNING or view.continued:
-        return None
-    size = "notation"
-    children: list[dict[str, Any]] = []
-    for index, section in enumerate(sections):
-        if index:
-            children.append({"tag": "hr", "margin": "2px 0px 2px 0px"})
-        heading = Bi(f"**{esc(section.title)}**", f"**{esc(section.title_en or section.title)}**")
-        children.append(_markdown(heading, size))
-        body = _bars if section.layout == "bars" else _grid
-        children.extend(body(section.metrics, size))
-        notes = [n for n in dict.fromkeys(section.notes) if n]
-        if notes:  # one quiet line per section instead of a stack of footnotes
-            children.append(_markdown(Bi.same(grey(" · ".join(esc(n) for n in notes))), size))
-    names_zh = " · ".join(s.title for s in sections)
-    names_en = " · ".join(s.title_en or s.title for s in sections)
-    title = Bi("**详情** " + grey("· " + names_zh), "**Details** " + grey("· " + names_en))
-    return panel(title=title, elements=children, expanded=False, element_id=DETAILS_ID)
-
-
-def notice_element(view: TurnView) -> dict[str, Any] | None:
-    """Background-review messages captured during the turn, kept apart from the answer."""
-    if not view.notices:
-        return None
-    children = [_markdown(Bi.same(esc(text)), "notation") for text in view.notices]
-    return panel(
-        title=Bi("**后台复盘**", "**Background review**"), elements=children, expanded=False, element_id="notices",
-    )
 
 
 # --------------------------------------------------------------------------- answer
@@ -470,19 +528,13 @@ def _summary(view: TurnView) -> str:
 
 
 def render_streaming(view: TurnView, opts: RenderOptions | None = None) -> dict[str, Any]:
-    """Initial card for CardKit creation. Later updates target the element ids above."""
+    """Initial card for CardKit creation. Later updates target the live line and the answer."""
     opts = opts or RenderOptions()
-    elements: list[dict[str, Any]] = [status_element(view, opts)]
-    process = process_element(view, opts)
-    if process:
-        elements.append(process)
-    elements.append(streaming_answer_element("\n\n".join(view.answers), opts))
-    footer = footer_element(view, opts)
-    if footer:
-        elements.append(footer)
+    elements = [status_element(view, opts), streaming_answer_element("\n\n".join(view.answers), opts)]
     return {
         "schema": "2.0",
         "config": _config(opts, streaming=True, summary="处理中…"),
+        "header": header(view),
         "body": {"elements": elements},
     }
 
@@ -490,21 +542,21 @@ def render_streaming(view: TurnView, opts: RenderOptions | None = None) -> dict[
 def render_final(view: TurnView, opts: RenderOptions | None = None) -> dict[str, Any]:
     """Terminal card for a full-card update (also used for a sealed, rolled-over card)."""
     opts = opts or RenderOptions()
-    elements: list[dict[str, Any]] = [status_element(view, opts)]
-    process = process_element(view, opts)
-    if process:
-        elements.append(process)
-    notices = notice_element(view)
-    if notices:
-        elements.append(notices)
+    elements: list[dict[str, Any]] = []
+    if view.continued:
+        elements.append(status_element(view, opts))
+    else:
+        elements.extend(failure_elements(view, opts))
     elements.extend(answer_elements(view, opts))
-    for build in (footer_element, details_element):
-        element = build(view, opts)
-        if element:
-            elements.append(element)
+    if not view.continued:
+        for build in (meta_element, details_element):
+            element = build(view, opts)
+            if element:
+                elements.append(element)
     return {
         "schema": "2.0",
         "config": _config(opts, streaming=False, summary=_summary(view)),
+        "header": header(view),
         "body": {"elements": elements},
     }
 
@@ -515,8 +567,8 @@ _PANEL_FIELDS = ("header", "elements", "border")
 def partial_for(element: dict[str, Any], *, reset_state: bool = False) -> dict[str, Any]:
     """Fields for a ``partial_update_element`` of ``element``.
 
-    Panels keep the reader's expanded/collapsed choice unless ``reset_state`` (used once, when the
-    renderer itself decides the panel should open). Markdown elements update their text only.
+    Panels keep the reader's expanded/collapsed choice unless ``reset_state``. Markdown elements update
+    their text only.
     """
     if element.get("tag") == "collapsible_panel":
         fields = {k: element[k] for k in _PANEL_FIELDS if k in element}

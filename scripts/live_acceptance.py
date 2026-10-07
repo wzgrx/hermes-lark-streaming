@@ -94,7 +94,7 @@ async def main(chat_id: str, home: Path, *, ok_only: bool = False) -> int:
     code = 0 if ok_only else 7
     ctl.on_tool_update(message_id=mid, tool_name="terminal", status="started", detail=f"sh -c 'exit {code}'")
     await asyncio.sleep(0.8)
-    output = "" if ok_only else "V1_EXPECTED_FAILURE\\nline two"
+    output = "" if ok_only else "V1_EXPECTED_FAILURE\nline two"
     failed = json.dumps({"exit_code": code, "output": output})
     ctl.on_tool_update(message_id=mid, tool_name="terminal", status="completed", result=failed)
     usage = {"prompt_tokens": 70300, "output_tokens": 1200, "cache_read_tokens": 58000}

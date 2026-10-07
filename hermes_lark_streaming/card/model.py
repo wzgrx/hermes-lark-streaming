@@ -86,6 +86,7 @@ class TurnView:
     footer: Footer = field(default_factory=Footer)
     sections: tuple[Section, ...] = ()
     continued: bool = False  # card rolled over; more cards follow, so no terminal chrome
+    card_key: str = ""  # short per-card token; keeps panel ids unique so clients don't carry state across cards
 
     @property
     def failed_steps(self) -> int:

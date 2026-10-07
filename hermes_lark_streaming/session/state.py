@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import threading
 import time
 from dataclasses import dataclass, field
@@ -142,6 +143,7 @@ class Session:
             footer=footer if not self.tag else _tagged(footer, self.tag),
             sections=self.sections if finished else (),
             continued=continued,
+            card_key=hashlib.sha1(f"{self.message_id}:{self.delivery_generation}".encode()).hexdigest()[:6],
         )
 
 

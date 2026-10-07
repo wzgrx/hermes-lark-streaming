@@ -7,7 +7,7 @@ import pytest
 from hermes_lark_streaming import session as session_pkg
 from hermes_lark_streaming.hooks import bridge
 
-from .conftest import settle
+from .conftest import settle, state_tag
 
 pytestmark = pytest.mark.asyncio
 
@@ -35,8 +35,8 @@ async def test_turn_through_the_bridge(wired, client):
     )
     assert sent is True
     final = client.of("update_card")[-1][2]
-    assert "1 failed" in final["body"]["elements"][0]["content"]
-    assert "5 / 100" in str(final)  # the result payload fills in the footer when telemetry saw nothing
+    assert state_tag(final) == "有失败"
+    assert "5/100" in str(final)  # the result payload fills in the context chip when telemetry saw nothing
 
 
 async def test_every_bridge_target_exists_on_the_controller(wired):
@@ -56,7 +56,7 @@ async def test_stop_and_fallback_paths(wired, client):
     assert bridge.on_message_needs_text_fallback(message_id="om_2") is False
 
 
-async def test_telemetry_reaches_the_live_footer(wired, client):
+async def test_telemetry_reaches_the_final_meta_chips(wired, client):
     import time
 
     bridge.on_message_started(message_id="om_3", chat_id="oc_1", session_key="sk3")
@@ -64,12 +64,10 @@ async def test_telemetry_reaches_the_live_footer(wired, client):
     payload = {"platform": "feishu", "session_id": "s", "turn_id": "t", "api_request_id": "r",
                "started_at": time.time() + 1, "provider": "p", "model": "deepseek-v4.1-flash"}
     assert wired.observe("pre_api_request", payload, session_key="sk3") is True
-    await settle(wired)
-    actions = [a for batch in client.of("batch_update") for a in batch[2]]
-    assert any(a["action"] == "add_elements" and a["params"]["elements"][0]["element_id"] == "footer"
-               and "deepseek" in str(a).lower() for a in actions)
     assert wired.observe("pre_api_request", payload, session_key="unknown") is False
     assert session.state.value == "streaming"
+    assert await bridge.on_message_completed_wait(message_id="om_3", answer="ok") is True
+    assert "deepseek" in str(client.of("update_card")[-1][2]).lower()
 
 
 async def _ready(ctl, mid):
