@@ -94,15 +94,38 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
     return tuple(metrics), notes
 
 
+def _money(value: float, currency: str) -> str:
+    return f"{currency}{value:.2f}" if value >= 0.01 else f"{currency}{value:.4f}".rstrip("0").rstrip(".")
+
+
+def _cost(data: Mapping[str, Any], pricing: Mapping[str, Mapping[str, Any]]) -> Metric | None:
+    """Turn cost from user-supplied per-million prices; nothing is shown without a price for the model."""
+    model = label(data.get("response_model") or data.get("model")).lower()
+    prices = pricing.get(model) or next((p for key, p in pricing.items() if model.endswith(key)), None)
+    total_in, out = count(data.get("input_tokens")), count(data.get("output_tokens"))
+    if not prices or total_in is None or out is None:
+        return None
+    cached = min(count(data.get("cache_read_tokens")) or 0, total_in)
+    cache_price = prices.get("cache_read", prices["input"])
+    cost = ((total_in - cached) * prices["input"] + cached * cache_price + out * prices["output"]) / 1_000_000
+    partial = bool(data.get("usage_partial"))
+    return Metric("费用", ("≥" if partial else "") + _money(cost, str(prices["currency"])), label_en="Cost",
+                  group="本轮")
+
+
 def usage_section(
     turn: Mapping[str, Any] | None,
     history: Mapping[str, Any] | None,
     *,
     terminal: bool = False,
     show_models: bool = True,
+    pricing: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> Section:
     data = turn or {}
     metrics = list(_turn_metrics(data))
+    cost = _cost(data, pricing or {})
+    if cost is not None:
+        metrics.append(cost)
     notes: list[str] = []
     if not data or data.get("telemetry_missing"):
         notes.append("本轮统计待采集")

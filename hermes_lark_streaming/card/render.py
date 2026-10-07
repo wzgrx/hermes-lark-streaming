@@ -296,43 +296,49 @@ def footer_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None
 
 
 def footer_text(view: TurnView) -> Bi:
-    """``✅ **已完成** · 2m 01s`` then the run's figures in grey; failures in red."""
+    """Two lines: ``✅ 已完成 · ⏱️ 2m 01s · 🛠️ 2 步``, then grey ``🤖 model · 📑 context · ⚡ cache · 🧠 effort``."""
     if view.phase is Phase.FAILED:
         head = ("<font color='red'>❌ **出错**</font>", "<font color='red'>❌ **Error**</font>")
     elif view.phase is Phase.STOPPED:
         head = ("🛑 **已停止**", "🛑 **Stopped**")
     else:
         head = ("✅ **已完成**", "✅ **Completed**")
+    zh, en = [head[0]], [head[1]]
     clock = duration(view.elapsed_s)
-    zh, en = head[0] + (f" · {clock}" if clock else ""), head[1] + (f" · {clock}" if clock else "")
+    if clock:
+        zh.append(f"⏱️ {clock}")
+        en.append(f"⏱️ {clock}")
+    if view.total_steps:
+        zh.append(f"🛠️ {view.total_steps} 步")
+        en.append(f"🛠️ {view.total_steps} step{'s' if view.total_steps != 1 else ''}")
     if view.failed_steps:
-        zh += f" · <font color='red'>{view.failed_steps} 步失败</font>"
-        en += f" · <font color='red'>{view.failed_steps} failed</font>"
+        zh.append(f"❗ <font color='red'>{view.failed_steps} 步失败</font>")
+        en.append(f"❗ <font color='red'>{view.failed_steps} failed</font>")
     footer = view.footer
-    meta_zh: list[str] = []
-    meta_en: list[str] = []
+    meta: list[str] = []
     if footer.model:
-        model = esc(clip(footer.model, 60))
-        meta_zh.append(model)
-        meta_en.append(model)
+        meta.append(f"🤖 {esc(clip(footer.model, 60))}")
     if footer.context_used is not None and footer.context_max:
-        ratio = f"{compact(footer.context_used)}/{compact(footer.context_max)} " \
-                f"({footer.context_used / footer.context_max:.0%})"
-        meta_zh.append(f"上下文 {ratio}")
-        meta_en.append(f"context {ratio}")
+        meta.append(f"📑 {compact(footer.context_used)}/{compact(footer.context_max)} "
+                    f"({footer.context_used / footer.context_max:.0%})")
     if footer.cache_hit is not None:
-        hit = f"{'≥' if footer.cache_hit_is_floor else ''}{footer.cache_hit:.0%}"
-        meta_zh.append(f"缓存 {hit}")
-        meta_en.append(f"cache {hit}")
-    if meta_zh:
-        zh += "　" + grey(" · ".join(meta_zh))
-        en += "　" + grey(" · ".join(meta_en))
-    return Bi(zh, en)
+        meta.append(f"⚡ 缓存 {'≥' if footer.cache_hit_is_floor else ''}{footer.cache_hit:.0%}")
+    if footer.reasoning:
+        meta.append(f"🧠 {esc(footer.reasoning)}")
+    line_zh, line_en = " · ".join(zh), " · ".join(en)
+    if meta:
+        tail = grey(" · ".join(meta))
+        line_zh += "\n" + tail
+        line_en += "\n" + tail.replace("缓存", "cache")
+    return Bi(line_zh, line_en)
 
 
 # --------------------------------------------------------------------------- details panel (finished)
 
 _SECTION_NAMES = {"usage": "用量", "resources": "资源", "accounts": "额度"}
+_ROW_EMOJI = {"本轮": "📊", "用量": "📊", "累计": "🪙", "模型累计": "🤖", "资源": "🖥️"}
+_WINDOW_EMOJI = {"5小时": "⏱️", "每周": "📅", "每月": "🗓️"}
+_CELL_LABELS = {"输入": "↑", "输出": "↓"}  # input / output read as arrows, like the token counters people know
 
 
 def known(section: Section) -> Section:
@@ -370,6 +376,9 @@ def _row(columns: list[dict[str, Any]]) -> dict[str, Any]:
 def _cell(metric: Metric) -> Bi:
     value = f"**{esc(metric.value)}**"
     hint = f" {grey(esc(metric.hint))}" if metric.hint else ""
+    arrow = _CELL_LABELS.get(metric.label)
+    if arrow:
+        return Bi.same(f"{grey(arrow)} {value}{hint}")
     return Bi(f"{grey(esc(metric.label))} {value}{hint}",
               f"{grey(esc(metric.label_en or metric.label))} {value}{hint}")
 
@@ -379,7 +388,8 @@ def _grid_rows(heading: str, metrics: list[Metric]) -> list[dict[str, Any]]:
     rows = []
     for start in range(0, len(metrics), _CELLS_PER_ROW):
         chunk = metrics[start:start + _CELLS_PER_ROW]
-        head = Bi.same(f"**{esc(heading)}**") if start == 0 else None
+        emoji = _ROW_EMOJI.get(heading, "")
+        head = Bi.same(f"{emoji} **{esc(heading)}**".strip()) if start == 0 else None
         columns = [_column(_HEAD_WEIGHT, head)]
         columns += [_column(_CELL_WEIGHT, _cell(m)) for m in chunk]
         columns += [_column(_CELL_WEIGHT, None) for _ in range(_CELLS_PER_ROW - len(chunk))]
@@ -402,7 +412,8 @@ def _bar_rows(metrics: list[Metric]) -> list[dict[str, Any]]:
         value = f"**{esc(m.value)}**" if not color else f"**<font color='{color}'>{esc(m.value)}</font>**"
         bar = _bar(m.ratio) + " " if m.ratio is not None else ""
         rows.append(_row([
-            _column(_HEAD_WEIGHT, Bi(f"**{esc(m.label)}**", f"**{esc(m.label_en or m.label)}**")),
+            _column(_HEAD_WEIGHT, Bi(f"{_WINDOW_EMOJI.get(m.label, '🎫')} **{esc(m.label)}**",
+                                     f"{_WINDOW_EMOJI.get(m.label, '🎫')} **{esc(m.label_en or m.label)}**")),
             _column(4, Bi.same(bar + value)),
             _column(5, Bi.same(grey(esc(m.hint))) if m.hint else None),
         ]))

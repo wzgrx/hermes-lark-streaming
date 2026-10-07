@@ -174,6 +174,7 @@ class TurnTelemetry:
             cache_hit=ratio,
             cache_hit_is_floor=floor,
             partial=bool(data.get("usage_partial")),
+            reasoning=label(data.get("reasoning"))[:20],
         )
 
     def _snapshot(self) -> dict[str, Any]:

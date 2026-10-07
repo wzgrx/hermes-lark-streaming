@@ -121,8 +121,9 @@ def test_footer_line_is_one_status_row():
     elements = card["body"]["elements"]
     hr = next(i for i, e in enumerate(elements) if e["tag"] == "hr")
     footer = zh(elements[hr + 1])
-    assert footer.startswith("✅ **已完成** · 10.4s · <font color='red'>1 步失败</font>")
-    assert footer.endswith("<font color='grey'>deepseek-v4-flash · 上下文 20k/1M (2%) · 缓存 83%</font>")
+    first, second = footer.split("\n")
+    assert first == "✅ **已完成** · ⏱️ 10.4s · 🛠️ 2 步 · ❗ <font color='red'>1 步失败</font>"
+    assert second == "<font color='grey'>🤖 deepseek-v4-flash · 📑 20k/1M (2%) · ⚡ 缓存 83%</font>"
     assert "龙虾3号" not in footer  # the identity tag is not shown
     assert zh(render_final(done_view(phase=Phase.STOPPED))["body"]["elements"][hr + 1]).startswith("🛑 **已停止**")
     error = render_final(done_view(phase=Phase.FAILED))["body"]["elements"][hr + 1]
@@ -140,7 +141,8 @@ def test_details_panel_after_the_footer():
     assert details["element_id"] == "details_abc123"
     assert title(details).endswith("详情 · 用量 · 额度 · 后台复盘</font>")
     text = dumps(details)
-    for needle in ("输入", "**70.3k**", "统计不完整", "<font color='red'>86%</font>", "已保存记忆"):
+    needles = ("📊 **用量**", "**70.3k**", "统计不完整", "<font color='red'>86%</font>", "🗓️ **每月**", "已保存记忆")
+    for needle in needles:
         assert needle in text
 
 
@@ -228,3 +230,10 @@ def test_card_stays_small():
     )))
     assert len(json.dumps(card, ensure_ascii=False).encode()) < 11000
     assert count_elements(card) < 90
+
+
+def test_footer_shows_reasoning_effort_and_cost_needs_a_price():
+    view = done_view(footer=Footer(model="m", reasoning="max"))
+    elements = render_final(view)["body"]["elements"]
+    hr = next(i for i, e in enumerate(elements) if e["tag"] == "hr")
+    assert "🧠 max" in zh(elements[hr + 1])

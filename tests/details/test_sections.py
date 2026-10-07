@@ -473,3 +473,20 @@ async def test_terminal_collector_starts_no_background_reads(tmp_path, monkeypat
 def test_snapshot_scoping_helper_matches_section_input():
     scoped = current_provider_snapshot({"accounts": snapshot()["accounts"]}, "opencode-go", terminal=True)
     assert [r["provider"] for r in scoped["accounts"]] == ["opencode-go"] and scoped["terminal"] is True
+
+
+def test_cost_appears_only_with_a_user_price():
+    data = {"model": "deepseek-v4-flash", "input_tokens": 1_000_000, "output_tokens": 100_000,
+            "cache_read_tokens": 800_000}
+    assert "费用" not in by_label(usage_section(data, None))
+    prices = {"deepseek-v4-flash": {"input": 1.0, "output": 2.0, "cache_read": 0.1, "currency": "¥"}}
+    # 200k fresh × 1 + 800k cached × 0.1 + 100k out × 2, per million
+    assert by_label(usage_section(data, None, pricing=prices))["费用"].value == "¥0.48"
+    assert "费用" not in by_label(usage_section(data, None, pricing={"other": prices["deepseek-v4-flash"]}))
+
+
+def test_pricing_config_drops_malformed_entries():
+    from hermes_lark_streaming.details.config import DetailsConfig
+
+    cfg = DetailsConfig.from_mapping({"pricing": {"A": {"input": 1, "output": 2}, "b": {"input": "x"}, "c": 3}})
+    assert cfg.pricing == {"a": {"input": 1, "output": 2, "currency": "¥"}}

@@ -47,6 +47,7 @@ def build_sections(
                 _resolve(history) if config.history else None,
                 terminal=terminal,
                 show_models=config.show_models,
+                pricing=config.pricing,
             )
         )
     if config.resources:

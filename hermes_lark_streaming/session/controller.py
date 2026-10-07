@@ -415,6 +415,7 @@ class Controller:
         return Footer(
             model=footer.model or model, context_used=used, context_max=cap, cache_hit=footer.cache_hit,
             cache_hit_is_floor=footer.cache_hit_is_floor, partial=footer.partial, tag=session.tag,
+            reasoning=footer.reasoning,
         )
 
     async def on_completed_wait(

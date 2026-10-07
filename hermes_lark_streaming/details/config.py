@@ -53,6 +53,20 @@ def _chats(value: Any) -> tuple[str, ...]:
     return tuple(c for c in value if isinstance(c, str) and c) if isinstance(value, list | tuple) else ()
 
 
+def _pricing(raw: Any) -> dict[str, dict[str, Any]]:
+    """``{model: {input, output, cache_read, currency}}`` per million tokens; anything malformed is dropped."""
+    out: dict[str, dict[str, Any]] = {}
+    for model, value in mapping(raw).items():
+        prices = mapping(value)
+        numbers = {k: prices[k] for k in ("input", "output", "cache_read")
+                   if isinstance(prices.get(k), int | float) and not isinstance(prices.get(k), bool) and prices[k] >= 0}
+        if isinstance(model, str) and model and {"input", "output"} <= set(numbers):
+            currency = prices.get("currency")
+            numbers["currency"] = currency if isinstance(currency, str) and len(currency) <= 4 else "¥"
+            out[model.strip().lower()] = numbers
+    return out
+
+
 @dataclass(frozen=True, slots=True)
 class DetailsConfig:
     usage: bool = True  # turn + history section
@@ -67,6 +81,7 @@ class DetailsConfig:
     history_path: Path | None = None  # None: <hermes home>/state/card-usage.sqlite3
     provider_labels: Mapping[str, str] = field(default_factory=dict)
     show_models: bool = True  # top models in the history rows
+    pricing: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)  # model -> per-million prices; user supplied
     history_ttl_s: float = 60.0
     resources_ttl_s: float = 10.0
     accounts_ttl_s: float = 300.0
@@ -108,4 +123,5 @@ class DetailsConfig:
             history_path=Path(path).expanduser() if isinstance(path, str) and path else None,
             provider_labels={k: v for k, v in labels.items() if isinstance(k, str) and isinstance(v, str)},
             show_models=_flag(history.get("show_models"), True),
+            pricing=_pricing(data.get("pricing")),
         )

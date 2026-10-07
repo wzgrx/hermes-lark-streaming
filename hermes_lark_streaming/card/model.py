@@ -90,6 +90,7 @@ class Footer:
     cache_hit: float | None = None  # 0..1
     cache_hit_is_floor: bool = False
     partial: bool = False  # some requests in the turn reported no usage
+    reasoning: str = ""  # requested reasoning effort, e.g. max / high
     tag: str = ""  # identity badge, e.g. the agent name
 
 

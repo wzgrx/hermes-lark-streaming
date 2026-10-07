@@ -41,8 +41,12 @@ streaming:
           label: Go 主账户
           provider: opencode-go
           key_env: OPENCODE_GO_API_KEY
+
+    pricing:                  # 可选:按模型的每百万 token 单价,用于显示 💸 费用;不填就不显示
+      deepseek-v4-flash: {input: 1.0, output: 2.0, cache_read: 0.1, currency: "¥"}
 ```
 
+- 费用只按你填写的单价计算(输入扣除缓存部分按 cache_read 计),不内置任何价格。
 - 只读采集:不开后台进程,不自动换号;凭据只写环境变量名。
 - 缺失的数据不显示,也不补造;整块都没有数据时,该分区不出现。订阅到期与 Key 到期分开显示;“重置≠到期”。
 - 缓存命中率只有在请求全部覆盖时才给精确值,否则标“≥”下限或“未知”。
