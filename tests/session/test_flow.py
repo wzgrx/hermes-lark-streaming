@@ -159,3 +159,86 @@ async def test_disabled_controller_is_inert(make_controller, client):
     ctl.on_message_started(message_id="om_1", chat_id="oc_1")
     assert ctl._sessions == {} and client.calls == []
     assert ctl.on_answer(message_id="om_1", text="x") is False
+
+
+async def test_cron_card_shows_this_runs_slot_and_dedupes_by_execution(make_controller, client):
+    import time as _time
+
+    ctl = make_controller()
+    loop = asyncio.get_running_loop()
+    slot = "2026-10-07T19:00:00+00:00"  # Hermes hands over the run's slot as a UTC instant
+    kw = dict(chat_id="oc_1", content="日报", loop=loop, task_name="晨报", run_time=slot, job_id="j1")
+    first = await asyncio.to_thread(ctl.on_cron_deliver, execution_id="e1", **kw)
+    again = await asyncio.to_thread(ctl.on_cron_deliver, execution_id="e1", **kw)
+    assert first["message_id"] == again["message_id"] and len(client.of("send_card")) == 1
+    local = _time.strftime("%Y-%m-%d %H:%M", _time.localtime(1791399600))  # 2026-10-07 19:00 UTC
+    assert local in str(client.of("send_card")[0])
+    await asyncio.to_thread(ctl.on_cron_deliver, execution_id="e2", **kw)  # a manual re-run is a new card
+    assert len(client.of("send_card")) == 2
+
+
+# ---------------------------------------------------------------- long turns, failures, crashed gateways
+
+
+async def test_a_long_running_turn_is_never_pruned_for_its_age(make_controller, client):
+    ctl = make_controller({"card_ttl_sec": 60})
+    session = await start(ctl, "om_long")
+    session.created_at -= 3600  # an hour-long agent task
+    session.touched -= 120  # quiet for two minutes (one slow tool)
+    await start(ctl, "om_other", chat="oc_2")  # another chat's message used to prune it
+    assert "om_long" in ctl._sessions
+    ctl.on_answer(message_id="om_long", text="还在")
+    assert await ctl.on_completed_wait(message_id="om_long", answer="还在") is True
+
+
+async def test_an_abandoned_turn_is_closed_as_stopped(make_controller, client):
+    from hermes_lark_streaming.session import controller as controller_module
+
+    ctl = make_controller({"card_ttl_sec": 60})
+    session = await start(ctl, "om_lost")
+    session.touched -= controller_module._ABANDONED_SEC + 1  # its completion never came
+    await start(ctl, "om_next", chat="oc_2")
+    await settle(ctl, 0.3)
+    assert "om_lost" not in ctl._sessions
+    assert "🛑 **已停止**" in state_tag(client.of("update_card")[-1][2])
+
+
+async def test_a_failed_session_still_finalizes_its_card(make_controller, client):
+    from hermes_lark_streaming.session.state import State as S
+
+    ctl = make_controller()
+    session = await start(ctl)
+    ctl.on_answer(message_id="om_1", text="答案")
+    session.state = S.FAILED  # writes kept failing mid-turn
+    assert await ctl.on_completed_wait(message_id="om_1", answer="答案") is True  # no second text reply
+    assert "答案" in str(client.of("update_card")[-1][2]) and ctl.consume_text_fallback("om_1") is False
+
+
+async def test_open_cards_are_registered_until_finalized(make_controller, client):
+    ctl = make_controller()
+    session = await start(ctl)
+    assert [c.card_id for c in ctl.open_cards.orphans(set(), min_age=0)] == [session.channel.card_id]
+    assert await ctl.on_completed_wait(message_id="om_1", answer="ok") is True
+    assert ctl.open_cards.orphans(set(), min_age=0) == []
+
+
+async def test_cards_left_live_by_a_dead_gateway_are_marked_interrupted(make_controller, client, tmp_path):
+    from hermes_lark_streaming.card.render import STATUS_ID as LIVE
+
+    ctl = make_controller()
+    ctl.open_cards.add("card_dead", "oc_9", "om_dead")  # the previous process died mid-turn
+    ctl.open_cards._write({c.card_id: c.__class__(c.card_id, c.chat_id, c.message_id, c.opened_at - 600)
+                           for c in ctl.open_cards.orphans(set(), min_age=0)})
+    await start(ctl)
+    await settle(ctl, 0.3)
+    patched = [b for b in client.of("batch_update") if b[0] == "card_dead"]
+    assert patched and patched[0][2][0]["params"]["element_id"] == LIVE and "已中断" in str(patched[0][2])
+    assert patched[0][1] > 1_000_000_000  # a wall-clock sequence, above anything the dead turn used
+    assert all(c.card_id != "card_dead" for c in ctl.open_cards.orphans(set(), min_age=0))
+
+
+async def test_a_failed_card_create_is_not_left_pending(make_controller, client):
+    ctl = make_controller()
+    client.fail["create_card"] = TimeoutError()
+    await start(ctl)
+    assert ctl.ledger.summary()["counts"].get("pending", 0) == 0

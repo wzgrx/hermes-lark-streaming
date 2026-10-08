@@ -23,7 +23,7 @@ class StaticDelivery:
 
     async def cron(
         self, chat_id: str, content: str, *, task_name: str = "", run_time: str = "", job_id: str = "",
-        media_files: object = None, text_size: str = "normal_v2",
+        media_files: object = None, text_size: str = "normal_v2", execution_id: str = "",
     ) -> str:
         client = await self._client_for(chat_id)
         # Hermes strips MEDIA tags into media_files before calling the hook, and a True return skips its own
@@ -31,8 +31,11 @@ class StaticDelivery:
         paths = hook_media_paths(media_files)
         card = render_cron(strip_media_directives(content) if paths else content, task_name=task_name,
                            run_time=run_time, text_size=text_size)
-        # A scheduled occurrence has a stable job id and due time; a prior unknown result is held, not resent.
-        key = f"cron:{job_id}:{run_time}:{chat_id}" if job_id and run_time else ""
+        # One Hermes execution (or one scheduled occurrence) is one card; a prior unknown result is held, not resent.
+        if execution_id:
+            key = f"cron:exec:{execution_id}:{chat_id}"
+        else:
+            key = f"cron:{job_id}:{run_time}:{chat_id}" if job_id and run_time else ""
         request_uuid: str | None = None
         if key:
             entry, should_send = self._ledger.claim_send(key, "cron.card")

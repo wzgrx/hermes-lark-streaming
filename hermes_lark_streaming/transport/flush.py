@@ -42,6 +42,7 @@ class Flusher:
         self._waiters: list[asyncio.Future[None]] = []
         self._tasks: set[asyncio.Task[None]] = set()
         self._loop = loop if loop is not None else asyncio.get_running_loop()
+        self._fn: FlushFn | None = None  # the last flush function, for delayed retries
 
     @property
     def completed(self) -> bool:
@@ -67,6 +68,7 @@ class Flusher:
 
     def schedule_update(self, do_flush: FlushFn) -> None:
         """Request a throttled flush."""
+        self._fn = do_flush
         if self._completed or not self._ready:
             return
         elapsed = time.monotonic() - self._last_update_time
@@ -81,6 +83,7 @@ class Flusher:
 
     async def flush_now(self, do_flush: FlushFn) -> None:
         """Flush immediately and wait for it."""
+        self._fn = do_flush
         if self._completed or not self._ready:
             return
         self._cancel_timer()
@@ -104,6 +107,12 @@ class Flusher:
         """Run another flush right after the current one (used when a flush self-heals a server race)."""
         if not self._completed:
             self._needs_reflush = True
+
+    def request_reflush_after(self, delay: float) -> None:
+        """Flush again once a backoff has passed, even if no new content arrives meanwhile."""
+        if self._completed or self._fn is None or self._pending_timer is not None:
+            return
+        self._schedule(max(delay, self._interval), self._fn)
 
     def configure_adaptive(self, *, enabled: bool, min_ms: float, max_ms: float) -> None:
         """Enable back-pressure between ``min_ms`` and ``max_ms`` (public values are milliseconds)."""

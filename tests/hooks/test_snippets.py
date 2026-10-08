@@ -297,7 +297,10 @@ class TestCron:
         }  # fmt: skip
         return SimpleNamespace(**{**base, **values})
 
-    JOB: ClassVar[dict[str, str]] = {"name": "daily", "next_run_at": "2026-06-10T14:30:00+08:00", "id": "job-1"}
+    JOB: ClassVar[dict[str, str]] = {  # next_run_at already points at the following occurrence
+        "name": "daily", "next_run_at": "2026-06-11T14:30:00+08:00", "id": "job-1",
+        "_scheduled_instant": "2026-06-10T06:30:00+00:00", "execution_id": "exec-1",
+    }
 
     def test_verified_receipt_mirrors_and_skips_native(self) -> None:
         with patch(f"{BRIDGE}.on_cron_deliver", return_value={"message_id": "om_1"}) as hook:
@@ -307,7 +310,8 @@ class TestCron:
         assert unverified == [] and len(mirrored) == 1
         assert hook.call_args.kwargs == {
             "chat_id": "oc_1", "content": "body", "loop": hook.call_args.kwargs["loop"], "task_name": "daily",
-            "run_time": "2026-06-10T14:30:00+08:00", "job_id": "job-1", "media_files": [("/a", False)],
+            "run_time": "2026-06-10T06:30:00+00:00", "job_id": "job-1", "media_files": [("/a", False)],
+            "execution_id": "exec-1",
         }  # fmt: skip
 
     def test_receipt_without_message_id_is_unverified(self) -> None:

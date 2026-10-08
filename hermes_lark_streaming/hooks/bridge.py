@@ -268,6 +268,7 @@ def on_cron_deliver(
     run_time: str = "",
     job_id: str = "",
     media_files: object = None,
+    execution_id: str = "",
 ) -> dict[str, object] | bool:
     """Send a cron result as a card; returns a receipt dict (with ``message_id``) on verified delivery.
 
@@ -282,6 +283,7 @@ def on_cron_deliver(
         run_time=run_time,
         job_id=job_id,
         media_files=media_files,
+        execution_id=execution_id,
     )
     return result
 

@@ -12,12 +12,14 @@ _SUMMARY_CHARS = 120
 
 
 def _run_time(value: str) -> str:
+    """The run's due time in local time (Hermes hands over a UTC instant); a manual run has none: now."""
     if not value:
-        return ""
+        return datetime.now().strftime("%Y-%m-%d %H:%M")
     try:
-        return datetime.fromisoformat(value).strftime("%Y-%m-%d %H:%M")
+        moment = datetime.fromisoformat(value)
     except (ValueError, TypeError):
         return value
+    return (moment.astimezone() if moment.tzinfo else moment).strftime("%Y-%m-%d %H:%M")
 
 
 def _card(title: Bi, subtitle: str, template: str, tag: Bi, body: str, text_size: str) -> dict[str, Any]:

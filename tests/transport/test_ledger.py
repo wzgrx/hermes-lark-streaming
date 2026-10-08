@@ -250,15 +250,15 @@ def test_ledger_prunes_old_rows_and_bounds_entries(tmp_path: Path, monkeypatch: 
     assert ledger.fingerprint("expired") not in payload["entries"]
 
 
-def test_unresolved_delivery_evidence_survives_age_and_capacity(
+def test_unresolved_delivery_evidence_survives_capacity_until_retention(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ledger = DeliveryLedger(tmp_path / "delivery.json", max_entries=32, retention_sec=3600)
     now = time.time()
-    monkeypatch.setattr(time, "time", lambda: now - 7200)
-    pending = ledger.begin("old-pending", "card.reply")
-    unknown = ledger.begin("old-unknown", "cron.card")
-    ledger.failed("old-unknown", DeliveryStatus.UNKNOWN)
+    monkeypatch.setattr(time, "time", lambda: now - 1800)  # inside the retention window
+    pending = ledger.begin("recent-pending", "card.reply")
+    unknown = ledger.begin("recent-unknown", "cron.card")
+    ledger.failed("recent-unknown", DeliveryStatus.UNKNOWN)
     monkeypatch.setattr(time, "time", lambda: now)
     for index in range(40):
         key = f"fresh:{index}"
@@ -267,9 +267,13 @@ def test_unresolved_delivery_evidence_survives_age_and_capacity(
 
     restarted = DeliveryLedger(ledger.path, max_entries=32, retention_sec=3600)
     assert restarted.summary()["entries"] == 32
-    assert restarted.get("old-pending").request_uuid == pending.request_uuid
-    assert restarted.get("old-unknown").request_uuid == unknown.request_uuid
-    assert restarted.get("old-unknown").status is DeliveryStatus.UNKNOWN
+    assert restarted.get("recent-pending").request_uuid == pending.request_uuid
+    assert restarted.get("recent-unknown").status is DeliveryStatus.UNKNOWN
+    assert restarted.get("recent-unknown").request_uuid == unknown.request_uuid
+
+    monkeypatch.setattr(time, "time", lambda: now + 7200)  # nothing retries a message this late
+    restarted.begin("later", "card.reply")
+    assert restarted.get("recent-pending") is None and restarted.get("recent-unknown") is None
 
 
 def test_summary_reports_unresolved_capacity_and_expired_pending(
@@ -292,16 +296,18 @@ def test_summary_reports_unresolved_capacity_and_expired_pending(
     assert "old-pending" not in json.dumps(summary)
 
 
-def test_unresolved_capacity_holds_new_send_without_erasing_evidence(tmp_path: Path) -> None:
+def test_unresolved_capacity_drops_the_oldest_instead_of_stopping_replies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     ledger = DeliveryLedger(tmp_path / "delivery.json", max_entries=32)
+    now = time.time()
     for index in range(32):
+        monkeypatch.setattr(time, "time", lambda index=index: now + index)
         ledger.begin(f"pending:{index}", "card.reply")
-    original = ledger.path.read_bytes()
+    monkeypatch.setattr(time, "time", lambda: now + 100)
 
-    with pytest.raises(DeliveryLedgerError, match="capacity reached"):
-        ledger.begin("overflow", "card.reply")
-
-    assert ledger.path.read_bytes() == original
+    assert ledger.begin("overflow", "card.reply").status is DeliveryStatus.PENDING  # replies keep flowing
+    assert ledger.get("pending:0") is None and ledger.get("pending:31") is not None
     assert ledger.summary()["counts"]["pending"] == 32
 
 

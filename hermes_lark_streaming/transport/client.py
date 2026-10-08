@@ -45,6 +45,7 @@ from lark_oapi.api.im.v1 import (
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
+from lark_oapi.core.token.manager import TokenManager
 
 from .channel import CardChannel
 from .errors import (
@@ -149,11 +150,24 @@ class CardKitClient:
     ) -> None:
         self.config = config
         self._fetch_image = fetch_image
+        self._token: Callable[[], Any] | None = None
         if sdk is not None:
             self._sdk = sdk
         else:
             domain = config.base_url.strip().rstrip("/").removesuffix(_OPEN_APIS_SUFFIX) or DEFAULT_DOMAIN
             self._sdk = lark.Client.builder().app_id(config.app_id).app_secret(config.app_secret).domain(domain).build()
+            sdk_config = self._sdk.config
+            self._token = lambda: TokenManager.get_self_tenant_token(sdk_config)
+
+    async def _warm_token(self) -> None:
+        """The SDK's async calls refresh ``tenant_access_token`` with a blocking HTTP request (about every
+        two hours, up to its 30s timeout) right on the event loop. Fetch it in a thread first: a cache hit
+        costs a thread hop, a refresh no longer stalls the gateway. A failure here is left to the call."""
+        if self._token is not None:
+            try:
+                await asyncio.to_thread(self._token)
+            except Exception:
+                _logger.debug("tenant token pre-fetch failed", exc_info=True)
 
     # -- plumbing -----------------------------------------------------------------------------
 
@@ -164,6 +178,7 @@ class CardKitClient:
             started = time.monotonic()
             metrics.increment(f"api.{operation}.attempt")
             try:
+                await self._warm_token()
                 resp = await call()
                 _check(resp, operation)
                 metrics.increment(f"api.{operation}.success")
@@ -498,6 +513,7 @@ class CardKitClient:
             .build()
         )
         try:
+            await self._warm_token()
             resp = await self._sdk.im.v1.image.acreate(request)
         except Exception:
             _logger.warning("image upload failed: %s", label, exc_info=True)
@@ -522,6 +538,7 @@ class CardKitClient:
                     )
                     .build()
                 )
+                await self._warm_token()
                 resp = await self._sdk.im.v1.file.acreate(request)
         except Exception:
             _logger.warning("file upload failed: %s", path.name, exc_info=True)

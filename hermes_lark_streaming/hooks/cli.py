@@ -48,6 +48,9 @@ def cmd_verify(engine: Engine) -> int:
             print(f"Incompatible: {error}")
         return 1
     print(f"Compatible ({len(plan.included)} injection points).")
+    status = engine.status()
+    if status.installed and not status.up_to_date:
+        print("Installed hooks are out of date with this plugin version; run install to refresh them.")
     return 0
 
 

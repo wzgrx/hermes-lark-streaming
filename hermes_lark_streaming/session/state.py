@@ -60,6 +60,7 @@ class Session:
     state: State = State.IDLE
     created_at: float = field(default_factory=time.time)
     started: float = field(default_factory=time.monotonic)
+    touched: float = field(default_factory=time.monotonic)  # last hook activity, for pruning
 
     # content of the whole turn, across cards
     tracker: ToolTracker = field(default_factory=ToolTracker)
@@ -97,6 +98,7 @@ class Session:
     rollover_retry_after: float = 0.0
     handoff_in_progress: bool = False
     recovery_attempts: int = 0
+    resync_needed: bool = False  # a write's outcome is unknown; rebuild the card before the next diff
 
     # delivery bookkeeping
     create_task: asyncio.Future[Any] | ConcurrentFuture[Any] | None = None

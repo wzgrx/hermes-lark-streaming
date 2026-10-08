@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
 import os
 import threading
 import time
@@ -38,6 +39,7 @@ def default_ledger_path() -> Path:
 # A Gateway and cron worker can touch the same ledger in separate processes. A
 # per-instance RLock alone does not protect the read/modify/replace sequence.
 _PROCESS_LOCK = threading.RLock()
+_logger = logging.getLogger("hermes_lark_streaming")
 # Lark IM request UUID deduplication lasts one hour. Stop retrying five minutes
 # early so scheduling and network latency cannot cross the server-side boundary.
 IDEMPOTENCY_RETRY_WINDOW_SEC = 55 * 60
@@ -163,14 +165,21 @@ class DeliveryLedger:
 
     def _write(self, entries: dict[str, DeliveryEntry]) -> None:
         now = time.time()
-        # Pending and unknown sends may already have reached Feishu. Expiring or
-        # evicting their UUID would let a later retry create a second visible
-        # delivery. Keep them until an explicit terminal result is recorded.
+        # Pending and unknown sends may already have reached Feishu, so their UUID is held while a retry of
+        # the same message is still possible. Nothing retries a message days later (keys are per message and
+        # generation, cron per execution), so after the retention window they are only clutter: once the
+        # ledger filled up with them, every reply used to stop. Past the cap the oldest go, with a warning.
         unresolved = [
-            entry for entry in entries.values() if entry.status in {DeliveryStatus.PENDING, DeliveryStatus.UNKNOWN}
+            entry
+            for entry in entries.values()
+            if entry.status in {DeliveryStatus.PENDING, DeliveryStatus.UNKNOWN}
+            and now - entry.updated_at <= self.retention_sec
         ]
         if len(unresolved) > self.max_entries:
-            raise DeliveryLedgerError("delivery ledger unresolved capacity reached; existing evidence preserved")
+            unresolved.sort(key=lambda entry: entry.updated_at, reverse=True)
+            _logger.warning("delivery ledger: %d unresolved entries over the cap, oldest dropped",
+                            len(unresolved) - self.max_entries)
+            unresolved = unresolved[: self.max_entries]
         resolved = [
             entry
             for entry in entries.values()

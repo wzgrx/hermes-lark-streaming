@@ -32,6 +32,7 @@ from ..transport import (
     classify_delivery_failure,
 )
 from ..transport.media import deliver_media_files, media_paths_to_deliver
+from ..transport.open_cards import OPEN_CARDS_FILE, OpenCards
 from ..transport.routing import BotRegistry
 from .pipeline import Pipeline, Runtime, guard_for
 from .state import Session, State
@@ -41,6 +42,9 @@ from .text import split_reasoning_text, strip_reasoning_tags
 _logger = logging.getLogger("hermes_lark_streaming")
 _CARD_CREATION_WAIT_SEC = 10.0
 _PROMPT_SPLIT_WAIT_SEC = _CARD_CREATION_WAIT_SEC * 2 + 30
+_ABANDONED_SEC = 6 * 3600.0  # a turn silent this long has lost its completion
+_SWEEP_INTERVAL_SEC = 300.0  # look for cards left live by a dead gateway at most this often
+_ORPHAN_MIN_AGE_SEC = 120.0
 _STARTED = frozenset({"running", "started", "tool.started"})
 
 
@@ -59,7 +63,10 @@ class Controller:
         self.details_config = DetailsConfig.from_mapping(self.source.settings().details)
         self.collector = DetailsCollector(self.details_config)
         self.ledger = DeliveryLedger()
-        self.pipeline = Pipeline(Runtime(self.source, self.ledger, self._client_for, self.collector))
+        self.open_cards = OpenCards(self.home / "state" / OPEN_CARDS_FILE)
+        self.pipeline = Pipeline(Runtime(self.source, self.ledger, self._client_for, self.collector,
+                                         open_cards=self.open_cards))
+        self._swept_at = 0.0
         self.static = StaticDelivery(self.ledger, self._client_for)
 
     # ------------------------------------------------------------------ plumbing
@@ -129,6 +136,7 @@ class Controller:
             return None
         if session.guard is not None and session.guard.should_skip("hook"):
             return None
+        session.touched = time.monotonic()
         return session
 
     def _register(self, session: Session) -> None:
@@ -171,12 +179,42 @@ class Controller:
             session.images.cancel_pending()
 
     def _prune(self) -> None:
+        """Forget finished sessions after ``card_ttl_sec``. A running turn is never cut short for its age
+        (agent tasks run for hours); only one silent for ``_ABANDONED_SEC`` has lost its completion, and
+        its card is closed as stopped instead of being left spinning."""
         ttl = self.source.settings().card_ttl_sec
-        now = time.time()
+        now = time.monotonic()
         for session in {id(s): s for s in self._sessions.values()}.values():
-            if now - session.created_at > ttl:
-                _logger.warning("pruning stale session: msg=%s", session.message_id[:12])
+            idle = now - session.touched
+            if session.state.terminal and idle > ttl:
                 self._drop(session)
+            elif idle > max(ttl, _ABANDONED_SEC):
+                _logger.warning("closing abandoned session: msg=%s idle=%.0fs", session.message_id[:12], idle)
+                self._fire(self._abandon(session), session.loop)
+
+    async def _sweep_open_cards(self) -> None:
+        """Close cards a previous gateway (or a turn that lost its completion) left with the running look."""
+        live = {s.channel.card_id for s in self._sessions.values() if s.channel is not None}
+        for card in self.open_cards.orphans(live, min_age=_ORPHAN_MIN_AGE_SEC):
+            try:
+                client = await self._client_for(card.chat_id)
+                await asyncio.wait_for(self.pipeline.mark_interrupted(client, card.card_id), timeout=30)
+            except Exception as exc:
+                _logger.warning("closing interrupted card failed: card=%s error=%s", card.card_id[:12],
+                                type(exc).__name__)
+                self.open_cards.attempted(card, give_up_after=3)
+            else:
+                self.open_cards.remove(card.card_id)
+                _logger.info("interrupted card closed: card=%s chat=%s", card.card_id[:12], card.chat_id[:12])
+
+    async def _abandon(self, session: Session) -> None:
+        try:
+            if session.has_card and not session.state.terminal:
+                await asyncio.wait_for(self.pipeline.finalize(session, Phase.STOPPED), timeout=30)
+        except Exception:
+            _logger.warning("abandoned card close failed: msg=%s", session.message_id[:12], exc_info=True)
+        finally:
+            self._drop(session)
 
     # ------------------------------------------------------------------ turn start
 
@@ -196,6 +234,9 @@ class Controller:
         if loop is None:
             _logger.warning("no event loop available, skipping: msg=%s", message_id[:12])
             return
+        if time.monotonic() - self._swept_at >= _SWEEP_INTERVAL_SEC:
+            self._swept_at = time.monotonic()
+            self._fire(self._sweep_open_cards(), loop)
         reply = anchor_id if anchor_id and anchor_id != message_id else None
         session = self._new_session(message_id, chat_id, loop, anchor_id=reply, session_key=session_key)
         session.create_task = self._fire(self.pipeline.create(session), loop)
@@ -358,18 +399,24 @@ class Controller:
 
     # ------------------------------------------------------------------ completion
 
+    def _close_late_card(self, session: Session) -> None:
+        """Creation finished after the turn gave up on it (the answer went out as text): close the card."""
+        if session.has_card:
+            self._fire(self.pipeline.finalize(session, Phase.STOPPED), session.loop)
+
     async def _wait_creation(self, session: Session) -> bool:
         task = session.create_task
         if task is None:
             return True
         try:
             future = task if isinstance(task, asyncio.Future) else asyncio.wrap_future(task)
-            await asyncio.wait_for(future, timeout=_CARD_CREATION_WAIT_SEC)
+            # shielded: cancelling mid reply_card would leave a visible card nobody finalizes
+            await asyncio.wait_for(asyncio.shield(future), timeout=_CARD_CREATION_WAIT_SEC)
             return True
         except TimeoutError:
             _logger.warning("card creation timed out: msg=%s", session.message_id[:12])
-            task.cancel()
             session.mark_failed()
+            future.add_done_callback(lambda _f: self._close_late_card(session))
             return False
         except asyncio.CancelledError:
             session.mark_failed()
@@ -439,11 +486,12 @@ class Controller:
             await self.pipeline.notify_ledger_unavailable(session)
             self._drop(session)
             return True  # own this outcome so Hermes does not replay an uncertain answer
-        if session.state is State.FAILED or not session.has_card:
-            if not session.has_card:
-                self._need_text_fallback(session)
+        if not session.has_card:
+            self._need_text_fallback(session)
             self._drop(session)
             return False
+        # A FAILED session (writes kept failing mid-turn) still owns a visible card: one terminal update
+        # usually lands and carries the whole answer; only if it does not does Hermes send text.
 
         if answer and not session.answers:
             final = strip_reasoning_tags(answer)
@@ -562,12 +610,13 @@ class Controller:
 
     def on_cron_deliver(
         self, *, chat_id: str, content: str, loop: asyncio.AbstractEventLoop | None, task_name: str = "",
-        run_time: str = "", job_id: str = "", media_files: object = None,
+        run_time: str = "", job_id: str = "", media_files: object = None, execution_id: str = "",
     ) -> dict[str, object] | bool:
         if not self.enabled or not content or not chat_id:
             return False
         coro = self.static.cron(chat_id, content, task_name=task_name, run_time=run_time, job_id=job_id,
-                                media_files=media_files, text_size=self.source.settings().text_size)
+                                media_files=media_files, text_size=self.source.settings().text_size,
+                                execution_id=execution_id)
         try:
             if loop is not None and loop.is_running() and not loop.is_closed():
                 try:

@@ -7,6 +7,7 @@ Everything here runs on the gateway event loop. The :class:`Flusher` serializes 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -32,9 +33,10 @@ from ..transport import (
     UnavailableGuard,
     classify_delivery_failure,
 )
-from ..transport.errors import CARDKIT_CONTENT_FAILED, ElementNotFoundError
+from ..transport.errors import CARDKIT_CONTENT_FAILED, CARDKIT_RATE_LIMITED, ElementNotFoundError
 from ..transport.ledger import IDEMPOTENCY_RETRY_WINDOW_SEC
 from ..transport.media import strip_media_directives
+from ..transport.open_cards import OpenCards
 from .state import Session, State
 
 _logger = logging.getLogger("hermes_lark_streaming")
@@ -57,6 +59,7 @@ class Runtime:
     ledger: DeliveryLedger
     client_for: Callable[[str], Awaitable[CardKitClient]]
     details: Any  # details.Runtime: sections(), footer hooks
+    open_cards: OpenCards | None = None  # live cards on disk, so a crashed turn's card can be closed later
 
     @property
     def settings(self) -> Settings:
@@ -136,7 +139,12 @@ class Pipeline:
 
         channel = existing if existing is not None else (CardChannel(entry.card_id) if entry.card_id else None)
         if channel is None:
-            channel = await client.create_card(card)
+            try:
+                channel = await client.create_card(card)
+            except Exception:
+                ledger.failed(key, DeliveryStatus.NOT_SENT)  # no message was attached; never left pending
+                session.delivery_status = DeliveryStatus.NOT_SENT
+                raise
             ledger.card_created(key, channel.card_id)
         try:
             if reply_to:
@@ -224,6 +232,8 @@ class Pipeline:
         elements = card["body"]["elements"]
         session.pushed = {e["element_id"]: signature(e) for e in elements if e.get("element_id")}
         session.inserted = set(session.pushed)
+        if message_id and self.rt.open_cards is not None:
+            self.rt.open_cards.add(channel.card_id, session.chat_id, message_id)
 
     async def _notify_uncertain(self, session: Session) -> None:
         if session.delivery_notice_sent:
@@ -307,8 +317,18 @@ class Pipeline:
             return
         if session.streaming_closed:
             return
+        if time.monotonic() < session.stream_retry_after:  # one backoff gate for every write, not just streams
+            metrics.increment("cardkit.flush.backoff_skipped")
+            if session.flusher is not None:
+                session.flusher.request_reflush_after(session.stream_retry_after - time.monotonic())
+            return
         channel, client = session.channel, session.client
         assert client is not None
+        if session.resync_needed:  # an earlier write's outcome is unknown: replace the card from local state
+            session.resync_needed = False
+            session.recovery_attempts = 0
+            await self._recover(session, "resync")
+            return
         view = self._view(session)
         elements = render.streaming_elements(view, self.opts())
         too_big = render.count_elements(elements) > render.ELEMENT_BUDGET and len(view.blocks) > 1
@@ -347,6 +367,12 @@ class Pipeline:
             except FeishuAPIError as exc:
                 self._defer_retry(session, exc.code)
                 return
+            except Exception:
+                # unknown outcome (timeout, connection reset): the channel already spent the sequence; an
+                # add_elements may or may not have landed, so rebuild the card from local state next time
+                self._defer_retry(session, 0)
+                session.resync_needed = True
+                return
             session.pushed.update(committed)
             session.inserted = present
 
@@ -370,6 +396,7 @@ class Pipeline:
                 return
             session.pushed[element_id] = sig
             session.stream_failures, session.stream_retry_after = 0, 0.0
+        session.recovery_attempts = 0  # a clean flush: a later, unrelated element race may recover again
 
     def _on_stream_closed(self, session: Session) -> None:
         session.streaming_closed = True
@@ -381,7 +408,12 @@ class Pipeline:
     def _defer_retry(session: Session, code: int) -> None:
         session.stream_failures = min(16, session.stream_failures + 1)
         delay = min(30.0, 0.5 * (2 ** min(session.stream_failures - 1, 6)))
+        if code == CARDKIT_RATE_LIMITED:
+            delay = max(delay, 2.0)
         session.stream_retry_after = time.monotonic() + delay
+        if session.flusher is not None:
+            session.flusher.record_failure(rate_limited=code == CARDKIT_RATE_LIMITED)
+            session.flusher.request_reflush_after(delay)  # the text that failed still has to arrive
         metrics.increment("cardkit.stream.retry_deferred")
         if session.stream_failures in (1, 4, 8):
             _logger.warning("card stream retry deferred: code=%s streak=%d delay=%.1fs",
@@ -451,11 +483,13 @@ class Pipeline:
             )
             if not message_id:
                 raise RuntimeError("replacement card attach unconfirmed")
-        except Exception:
+        except BaseException as exc:  # a cancelled handoff must roll back too, or content lands on no card
             session.delivery_key, session.delivery_status = prior
             (session.steps_offset, session.steps_offset_failed, session.answers_offset,
              session.thoughts_offset) = old_offsets
             session.blocks_offset = old_blocks
+            if not isinstance(exc, Exception):
+                raise
             _logger.warning("card handoff failed; keeping the current card: msg=%s", session.message_id[:12],
                             exc_info=True)
             return False
@@ -480,8 +514,24 @@ class Pipeline:
                 except StreamingClosedError:
                     channel.streaming = False
             await client.update_card(channel, card)
+            if self.rt.open_cards is not None:
+                self.rt.open_cards.remove(channel.card_id)
         except Exception:
             _logger.warning("sealing the old card failed; continuing", exc_info=True)
+
+    async def mark_interrupted(self, client: CardKitClient, card_id: str) -> None:
+        """Close a card left live by a turn that died with its gateway, keeping what it already shows.
+
+        The old process's sequence counter is gone; a wall-clock second is above anything a turn uses
+        (a few hundred writes), and the channel skips ahead on a conflict anyway.
+        """
+        channel = CardChannel(card_id, sequence=int(time.time()))
+        partial = render.partial_for(render.interrupted_status())
+        await client.batch_update(channel, [{"action": "partial_update_element", "params": {
+            "element_id": render.STATUS_ID, "partial_element": partial,
+        }}])
+        with contextlib.suppress(Exception):  # already closed by Feishu after ten minutes, usually
+            await client.close_streaming(channel)
 
     async def handoff_for_prompt(self, session: Session) -> bool:
         """Clarify/approval: flush, then move the rest of the turn onto a fresh card."""
@@ -525,6 +575,8 @@ class Pipeline:
                     closed = True
                 await client.update_card(channel, card)
                 session.state = {Phase.FAILED: State.FAILED, Phase.STOPPED: State.ABORTED}.get(phase, State.COMPLETED)
+                if self.rt.open_cards is not None:
+                    self.rt.open_cards.remove(channel.card_id)
                 metrics.increment("card.completed")
                 _logger.info("card finalized: msg=%s card=%s phase=%s steps=%d failed=%d elapsed=%.1fs",
                              session.message_id[:12], channel.card_id[:12], phase.value, view.total_steps,

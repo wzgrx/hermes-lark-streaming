@@ -119,7 +119,8 @@ def test_cron_deliver_forwards_all_arguments(controller: MagicMock) -> None:
     result = bridge.on_cron_deliver(chat_id="c1", content="hello", loop=loop, task_name="t", run_time="r", job_id="j")
     assert result == {"message_id": "om"}
     controller.on_cron_deliver.assert_called_once_with(
-        chat_id="c1", content="hello", loop=loop, task_name="t", run_time="r", job_id="j", media_files=None
+        chat_id="c1", content="hello", loop=loop, task_name="t", run_time="r", job_id="j", media_files=None,
+        execution_id="",
     )
 
 

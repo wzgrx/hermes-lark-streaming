@@ -344,8 +344,11 @@ def clarify() -> list[str]:
         "            _lark_clarify_msg_id = ctx.event_message_id",
         "            _lark_clarify_chat_id = ctx._status_chat_id",
         "            _lark_clarify_sk = ctx.session_key",
-        "        except NameError:",
-        "            _lark_clarify_msg_id = event_message_id",
+        "        except Exception:",  # a renamed Hermes attribute must never break clarify itself
+        "            try:",
+        "                _lark_clarify_msg_id = event_message_id",
+        "            except Exception:",
+        "                _lark_clarify_msg_id = None",
         "            _lark_clarify_chat_id = None",
         "            _lark_clarify_sk = None",
         "        on_clarify_enter(",
@@ -376,7 +379,11 @@ def cron_deliver() -> list[str]:
         "        _hermes_lark_cron_receipt = on_cron_deliver(",
         "            chat_id=t.chat_id, content=cleaned_delivery_content.strip(),",
         "            loop=loop, task_name=job.get('name', ''),",
-        "            run_time=job.get('next_run_at', ''), job_id=job.get('id', ''),",
+        # next_run_at has already moved on to the following occurrence; this run's slot is _scheduled_instant
+        "            run_time=job.get('_scheduled_instant') or '', job_id=job.get('id', ''),",
+        # a failure notice for the same execution is its own card, not a duplicate of the result
+        "            execution_id=str(job.get('execution_id') or '')",
+        "            + (':failure' if locals().get('for_failure') else ''),",
         "            media_files=locals().get('media_files') or [])",
         "        if _hermes_lark_cron_receipt:",
         "            if (isinstance(_hermes_lark_cron_receipt, dict)",

@@ -23,22 +23,46 @@ async def test_write_allocates_increasing_sequence_and_commits_on_success() -> N
 
 
 @pytest.mark.asyncio
-async def test_failed_write_does_not_commit_and_retry_reuses_sequence() -> None:
+async def test_feishu_rejection_keeps_the_sequence_but_an_unknown_outcome_spends_it() -> None:
+    from hermes_lark_streaming.transport.errors import FeishuAPIError
+
     channel = CardChannel("c", sequence=5)
     seen: list[int] = []
 
-    async def boom(seq: int) -> None:
+    async def rejected(seq: int) -> None:
         seen.append(seq)
-        raise RuntimeError("x")
+        raise FeishuAPIError("bad request", 99991)  # the server answered: nothing was committed
+
+    async def timed_out(seq: int) -> None:
+        seen.append(seq)
+        raise TimeoutError  # may have landed after Feishu committed it
 
     async def fine(seq: int) -> None:
         seen.append(seq)
 
-    with pytest.raises(RuntimeError):
-        await channel.write(boom)
+    with pytest.raises(FeishuAPIError):
+        await channel.write(rejected)
+    with pytest.raises(TimeoutError):
+        await channel.write(timed_out)
     await channel.write(fine)
-    assert seen == [6, 6]
-    assert channel.sequence == 6
+    assert seen == [6, 6, 7]  # 6 reused after a rejection, 7 after the ambiguous attempt spent 6
+    assert channel.sequence == 7
+
+
+@pytest.mark.asyncio
+async def test_sequence_conflict_skips_ahead_and_retries_once() -> None:
+    from hermes_lark_streaming.transport.errors import SequenceConflictError
+
+    channel = CardChannel("c", sequence=5)
+    seen: list[int] = []
+
+    async def behind_once(seq: int) -> None:
+        seen.append(seq)
+        if len(seen) == 1:
+            raise SequenceConflictError("conflict", 300317)
+
+    await channel.write(behind_once)
+    assert seen == [6, 15] and channel.sequence == 15
 
 
 @pytest.mark.asyncio

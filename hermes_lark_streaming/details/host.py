@@ -132,6 +132,9 @@ class HostSampler:
             if process is not None and process.returncode is None:
                 with suppress(ProcessLookupError):
                     process.kill()
-                await process.wait()
+                # a GPU driver stuck in the kernel can ignore SIGKILL; never let that pin the sampler (and
+                # every final card behind it) to the 2s finish() wait for good
+                with suppress(TimeoutError):
+                    await asyncio.wait_for(process.wait(), 1.0)
             self._at = time.monotonic()
             self._task = None

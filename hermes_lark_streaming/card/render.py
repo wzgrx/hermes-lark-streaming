@@ -292,6 +292,13 @@ def status_element(view: TurnView, opts: RenderOptions) -> dict[str, Any]:
     return _markdown(live_text(view), "notation", element_id=STATUS_ID)
 
 
+def interrupted_status() -> dict[str, Any]:
+    """The live line of a card whose turn died with the gateway (killed, crashed, restarted mid-turn)."""
+    text = Bi("<font color='orange'>⚠️ 本轮回复已中断 · 网关重启或异常退出 · 内容可能不完整 · 请重新发送</font>",
+              "<font color='orange'>⚠️ Interrupted · the gateway restarted or exited · reply may be incomplete</font>")
+    return _markdown(text, "notation", element_id=STATUS_ID)
+
+
 def process_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
     return None  # v3 inserts blocks as they arrive; see streaming_elements
 
