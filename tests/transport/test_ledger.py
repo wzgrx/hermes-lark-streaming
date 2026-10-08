@@ -322,3 +322,23 @@ def test_unresolved_capacity_drops_the_oldest_instead_of_stopping_replies(
 )
 def test_delivery_failure_classification(error: BaseException, expected: DeliveryStatus) -> None:
     assert classify_delivery_failure(error) is expected
+
+
+@pytest.mark.asyncio
+async def test_async_calls_do_the_file_work_off_the_event_loop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    ledger = DeliveryLedger(tmp_path / "delivery.json")
+    loop_thread = threading.current_thread()
+    seen: list[threading.Thread] = []
+    original = DeliveryLedger._write
+
+    def spy(self: DeliveryLedger, entries: dict) -> None:
+        seen.append(threading.current_thread())
+        original(self, entries)
+
+    monkeypatch.setattr(DeliveryLedger, "_write", spy)
+    entry = await ledger.abegin("k", "card.reply")
+    await ledger.adelivered("k", card_id="c", message_id="om")
+    assert (await ledger.aget("k")).status is DeliveryStatus.DELIVERED and entry.request_uuid
+    assert seen and all(thread is not loop_thread for thread in seen)

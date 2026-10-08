@@ -96,13 +96,42 @@ def test_latest_request_not_arrival_controls_context_and_model():
     assert data["input_tokens"] == 300 and data["output_tokens"] == 10
 
 
-def test_rotated_storage_identity_is_partial_not_misattributed():
+def test_compression_rotating_the_session_keeps_counting_the_same_turn():
     state = TurnTelemetry()
     first = event()
     state.observe("pre_api_request", first)
-    complete(state, first)
-    assert not state.observe("pre_api_request", event(session_id="rotated", api_request_id="r2"))
-    assert state.finish()["usage_partial"]
+    complete(state, first, usage={"prompt_tokens": 950_000, "output_tokens": 5})  # near the limit
+    after = event(session_id="rotated", api_request_id="r2")  # same turn id: compression, not another turn
+    assert state.observe("pre_api_request", after)
+    complete(state, after, usage={"prompt_tokens": 120_000, "output_tokens": 9})
+    assert not state.observe("pre_api_request", event(session_id="other", turn_id="t2", api_request_id="r3"))
+    data = state.finish()
+    assert data["context_used"] == 120_000  # the footer shows the compressed context, not the stale one
+    assert data["api_calls"] == 2 and data["input_tokens"] == 1_070_000 and not data["usage_partial"]
+
+
+def test_every_failed_attempt_of_one_call_counts_as_a_retry():
+    state = TurnTelemetry()
+    call = event()  # Hermes keeps the request id and start time across retries of one call
+    for _ in range(3):
+        assert state.observe("pre_api_request", call)
+        state.observe("api_request_error", {**call, "error_type": "RateLimitError"})
+    assert state.observe("pre_api_request", call)
+    complete(state, call)
+    data = state.finish()
+    assert data["api_calls"] == 1 and data["retries"] == 3 and data["last_error_type"] == "RateLimitError"
+
+
+def test_a_retry_attempt_still_reads_its_reasoning_controls():
+    state = TurnTelemetry()
+    call = event()
+    state.observe("pre_api_request", call)
+    state.observe("api_request_error", call)
+    state.observe("pre_api_request", call)  # the retry is in flight again
+    assert state.observe_execution({**call, "request": {"reasoning_effort": "high"}})  # was refused: "failed"
+    complete(state, call)
+    data = state.finish()
+    assert data["reasoning"] == "high" and data["reasoning_source"] == "llm_execution" and data["retries"] == 1
 
 
 def test_bounded_requests_are_marked_partial():

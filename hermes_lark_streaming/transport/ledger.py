@@ -8,6 +8,7 @@ The file is local operator state, created with mode 0600 and updated atomically.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hashlib
 import json
@@ -354,6 +355,27 @@ class DeliveryLedger:
         if status not in {DeliveryStatus.NOT_SENT, DeliveryStatus.UNKNOWN}:
             raise ValueError("failed delivery status must be not_sent or unknown")
         return self.update(logical_key, status=status, error_code=error_code)
+
+    # Async callers (the gateway event loop) use these: every call reads, rewrites and fsyncs the JSON file
+    # under a file lock, which must not stall the loop when the disk or a cron worker holding the lock is slow.
+
+    async def aget(self, logical_key: str) -> DeliveryEntry | None:
+        return await asyncio.to_thread(self.get, logical_key)
+
+    async def abegin(self, logical_key: str, operation: str, *, retry_not_sent: bool = True) -> DeliveryEntry:
+        return await asyncio.to_thread(self.begin, logical_key, operation, retry_not_sent=retry_not_sent)
+
+    async def aclaim_send(self, logical_key: str, operation: str) -> tuple[DeliveryEntry, bool]:
+        return await asyncio.to_thread(self.claim_send, logical_key, operation)
+
+    async def acard_created(self, logical_key: str, card_id: str) -> DeliveryEntry:
+        return await asyncio.to_thread(self.card_created, logical_key, card_id)
+
+    async def adelivered(self, logical_key: str, *, card_id: str, message_id: str) -> DeliveryEntry:
+        return await asyncio.to_thread(self.delivered, logical_key, card_id=card_id, message_id=message_id)
+
+    async def afailed(self, logical_key: str, status: DeliveryStatus, *, error_code: int = 0) -> DeliveryEntry:
+        return await asyncio.to_thread(self.failed, logical_key, status, error_code=error_code)
 
     def summary(self) -> dict[str, Any]:
         with self._transaction():

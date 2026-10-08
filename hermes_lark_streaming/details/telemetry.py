@@ -30,8 +30,10 @@ class Request:
     context_max: int | None = None
     usage: Usage = field(default_factory=Usage)
     finished: bool = False
-    failed: bool = False
+    failed: bool = False  # the latest attempt failed (a new attempt clears it)
     error_type: str = ""
+    attempts: int = 0  # Hermes retries reuse the request id and start time: one Request, several attempts
+    errors: int = 0
 
 
 class TurnTelemetry:
@@ -64,11 +66,12 @@ class TurnTelemetry:
                     return False
                 self._identity = identity
             if identity != self._identity:
-                # Compression can rotate the storage session during the same logical
-                # turn. Without a proven remap, keep prior measurements visibly partial.
-                if tid == self._identity[1]:
-                    self._overflow = True
-                return False
+                if tid != self._identity[1]:
+                    return False
+                # Compression rotated the storage session mid-turn. The turn id carries a per-turn
+                # random suffix, so an equal turn id proves the same logical turn: keep counting,
+                # so the context shown afterwards is the compressed one, not the stale near-full one.
+                self._identity = identity
             key = (str(rid), started)  # same logical call may have several physical attempts
             if key not in self._requests:
                 if event != "pre_api_request":
@@ -83,6 +86,9 @@ class TurnTelemetry:
             request.provider = label(payload.get("provider")) or request.provider
             request.model = label(payload.get("model")) or request.model
             request.api_mode = label(payload.get("api_mode")) or request.api_mode
+            if event == "pre_api_request":
+                request.attempts += 1
+                request.failed = False  # a fresh attempt is in flight
             if event == "pre_api_request" and request.reasoning_source != "llm_execution":
                 request.reasoning = requested_reasoning(payload) or request.reasoning
                 if request.reasoning:
@@ -90,6 +96,7 @@ class TurnTelemetry:
                 request.request_truncated = mapping(payload.get("request")).get("_truncated") is True
             elif event == "api_request_error":
                 request.failed = True  # do not retain the error message/body
+                request.errors += 1
                 error_type = mapping(payload.get("error")).get("type") or payload.get("error_type")
                 if (
                     isinstance(error_type, str)
@@ -185,7 +192,7 @@ class TurnTelemetry:
             return data
         requests.sort(key=lambda r: r.started or 0)
         last = requests[-1]
-        failures = [r for r in requests if r.failed and r.error_type]
+        failures = [r for r in requests if r.errors and r.error_type]
         if failures:
             data["last_error_type"] = failures[-1].error_type
         measured = [r for r in requests if r.usage.prompt is not None and r.usage.output is not None]
@@ -198,7 +205,7 @@ class TurnTelemetry:
             reasoning=last.reasoning,
             reasoning_source=last.reasoning_source,
             api_calls=len(requests),
-            retries=sum(r.failed for r in requests),
+            retries=sum(r.errors for r in requests),  # every failed attempt, not one per call
             usage_partial=self._overflow or len(measured) != len(requests),
         )
         if not last.reasoning and last.request_truncated:

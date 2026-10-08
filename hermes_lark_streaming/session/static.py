@@ -38,7 +38,7 @@ class StaticDelivery:
             key = f"cron:{job_id}:{run_time}:{chat_id}" if job_id and run_time else ""
         request_uuid: str | None = None
         if key:
-            entry, should_send = self._ledger.claim_send(key, "cron.card")
+            entry, should_send = await self._ledger.aclaim_send(key, "cron.card")
             if not should_send:
                 if entry.status is DeliveryStatus.DELIVERED and entry.message_id:
                     await self._media(client, chat_id, paths, entry.message_id, key)
@@ -49,14 +49,14 @@ class StaticDelivery:
             message_id = await client.send_card(chat_id, card, request_uuid=request_uuid)
         except FeishuAPIError as exc:
             if key:
-                self._ledger.failed(key, classify_delivery_failure(exc), error_code=exc.code)
+                await self._ledger.afailed(key, classify_delivery_failure(exc), error_code=exc.code)
             raise
         except Exception as exc:
             raise CronDeliveryOutcomeUnknown("cron card send outcome unknown") from exc
         if not message_id:
             raise CronDeliveryOutcomeUnknown("cron card send returned no message_id")
         if key:
-            self._ledger.delivered(key, card_id="", message_id=str(message_id))
+            await self._ledger.adelivered(key, card_id="", message_id=str(message_id))
         await self._media(client, chat_id, paths, message_id, key)
         return str(message_id)
 

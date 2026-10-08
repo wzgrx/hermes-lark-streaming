@@ -125,7 +125,7 @@ class Pipeline:
         ledger = self.rt.ledger
         route = "reply" if reply_to else "chat"
         key = self._delivery_key(session, generation, route)
-        entry = ledger.begin(key, f"card.{route}")
+        entry = await ledger.abegin(key, f"card.{route}")
         session.delivery_key, session.delivery_status = key, entry.status
 
         if entry.status is DeliveryStatus.DELIVERED and entry.card_id and entry.message_id:
@@ -142,10 +142,10 @@ class Pipeline:
             try:
                 channel = await client.create_card(card)
             except Exception:
-                ledger.failed(key, DeliveryStatus.NOT_SENT)  # no message was attached; never left pending
+                await ledger.afailed(key, DeliveryStatus.NOT_SENT)  # no message was attached; never left pending
                 session.delivery_status = DeliveryStatus.NOT_SENT
                 raise
-            ledger.card_created(key, channel.card_id)
+            await ledger.acard_created(key, channel.card_id)
         try:
             if reply_to:
                 message_id = await client.reply_card(reply_to, channel, request_uuid=entry.request_uuid)
@@ -153,14 +153,14 @@ class Pipeline:
                 message_id = await client.send_card_entity(session.chat_id, channel, request_uuid=entry.request_uuid)
         except Exception as exc:
             status = classify_delivery_failure(exc)
-            ledger.failed(key, status, error_code=exc.code if isinstance(exc, FeishuAPIError) else 0)
+            await ledger.afailed(key, status, error_code=exc.code if isinstance(exc, FeishuAPIError) else 0)
             session.delivery_status = status
             metrics.increment(f"delivery.{status.value}")
             if status is DeliveryStatus.UNKNOWN:
                 _logger.warning("card attach outcome unknown: msg=%s route=%s", session.message_id[:12], route)
                 return channel, ""
             raise
-        ledger.delivered(key, card_id=channel.card_id, message_id=message_id)
+        await ledger.adelivered(key, card_id=channel.card_id, message_id=message_id)
         session.delivery_status = DeliveryStatus.DELIVERED
         metrics.increment("delivery.delivered")
         return channel, message_id
@@ -181,7 +181,7 @@ class Pipeline:
         try:
             return await self._attach(session, client, card, generation=f"{generation}-retry", reply_to=reply_to)
         except FeishuAPIError:
-            previous = self.rt.ledger.get(self._delivery_key(session, f"{generation}-retry", "reply"))
+            previous = await self.rt.ledger.aget(self._delivery_key(session, f"{generation}-retry", "reply"))
             existing = CardChannel(previous.card_id) if previous and previous.card_id else None
             return await self._attach(
                 session, client, card, generation=f"{generation}-standalone", reply_to=None, existing=existing,
@@ -240,7 +240,7 @@ class Pipeline:
             return
         key = f"stream:{session.message_id}:uncertain-notice"
         try:
-            entry = self.rt.ledger.begin(key, "notice.unknown")
+            entry = await self.rt.ledger.abegin(key, "notice.unknown")
             if entry.status is DeliveryStatus.DELIVERED:
                 session.delivery_notice_sent = True
                 return
@@ -252,7 +252,7 @@ class Pipeline:
                 session.chat_id, _UNCERTAIN_NOTICE, reply_to=session.anchor_id or session.message_id,
                 request_uuid=entry.request_uuid,
             )
-            self.rt.ledger.delivered(key, card_id="", message_id=message_id)
+            await self.rt.ledger.adelivered(key, card_id="", message_id=message_id)
             session.delivery_notice_sent = True
         except DeliveryLedgerError:
             await self.notify_ledger_unavailable(session)

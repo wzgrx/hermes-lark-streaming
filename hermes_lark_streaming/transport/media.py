@@ -13,6 +13,7 @@ await self._deliver_media_from_response(...)``)。流式卡片路径上有两处
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
@@ -351,9 +352,9 @@ async def deliver_media_files(
     use_legacy_keys = bool(
         delivery_key_prefix
         and ledger is not None
-        and any(
+        and await asyncio.to_thread(lambda: any(
             ledger.get(f"{delivery_key_prefix}:media:{index}") is not None for index in range(MAX_MEDIA_FILES_PER_TURN)
-        )
+        ))
     )
     sent = 0
     for index, path in enumerate(selected_paths):
@@ -365,7 +366,7 @@ async def deliver_media_files(
             key = _media_delivery_key(delivery_key_prefix, path)
         try:
             if key and ledger is not None:
-                previous = ledger.get(key)
+                previous = await ledger.aget(key)
                 if previous is not None and previous.status in {DeliveryStatus.DELIVERED, DeliveryStatus.UNKNOWN}:
                     continue
             image_key = await client.upload_local_image(path) if _is_image_path(path) else None
@@ -378,7 +379,7 @@ async def deliver_media_files(
                     continue
             request_uuid: str | None = None
             if key and ledger is not None:
-                entry, should_send = ledger.claim_send(key, "cron.media")
+                entry, should_send = await ledger.aclaim_send(key, "cron.media")
                 if not should_send:
                     continue
                 request_uuid = entry.request_uuid
@@ -398,12 +399,13 @@ async def deliver_media_files(
             except Exception as exc:
                 if key and ledger is not None:
                     try:
-                        ledger.failed(key, classify_delivery_failure(exc), error_code=getattr(exc, "code", 0) or 0)
+                        code = getattr(exc, "code", 0) or 0
+                        await ledger.afailed(key, classify_delivery_failure(exc), error_code=code)
                     except Exception:
                         _logger.warning("media delivery ledger update failed", exc_info=True)
                 raise
             if key and ledger is not None:
-                ledger.delivered(key, card_id="", message_id=str(message_id))
+                await ledger.adelivered(key, card_id="", message_id=str(message_id))
             sent += 1
         except Exception:
             _logger.warning("media delivery failed for %s", path, exc_info=True)
