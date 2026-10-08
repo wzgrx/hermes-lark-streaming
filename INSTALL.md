@@ -31,7 +31,7 @@ hermes plugins update hermes-lark-streaming
 hermes pm install
 ```
 
-Hermes 升级后、或本插件的钩子内容变化后,先在网关空闲时 `uninstall` 再 `install`:引擎会重写不一致的标记块,并拒绝在锚点缺失或不唯一时写入任何文件。
+插件更新后在网关空闲时运行 `install`:引擎会重写内容变化的标记块,并拒绝在锚点缺失或不唯一时写入任何文件。`verify` 会提示已注入的钩子是否落后于当前插件版本。
 
 ## 随 Hermes 更新
 

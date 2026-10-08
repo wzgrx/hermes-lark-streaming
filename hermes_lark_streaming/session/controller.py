@@ -149,7 +149,6 @@ class Controller:
     def _new_session(self, message_id: str, chat_id: str, loop: asyncio.AbstractEventLoop, *,
                      anchor_id: str | None, session_key: str | None) -> Session:
         session = Session(message_id, chat_id, loop, anchor_id=anchor_id, session_key=session_key)
-        session.tag = self.source.settings().agent_name
         session.telemetry = TurnTelemetry()
         session.flusher = self.pipeline.new_flusher(session)
         session.guard = guard_for(session, lambda: self._on_terminated(session))
@@ -461,7 +460,7 @@ class Controller:
             cap = cap or _int(context.get("max_tokens"))
         return Footer(
             model=footer.model or model, context_used=used, context_max=cap, cache_hit=footer.cache_hit,
-            cache_hit_is_floor=footer.cache_hit_is_floor, partial=footer.partial, tag=session.tag,
+            cache_hit_is_floor=footer.cache_hit_is_floor, partial=footer.partial,
             reasoning=footer.reasoning,
         )
 

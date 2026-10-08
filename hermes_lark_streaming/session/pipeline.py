@@ -431,7 +431,6 @@ class Pipeline:
             card = self._initial_card(session)
             await session.client.update_card(session.channel, card)
             self._adopt(session, session.channel, session.card_msg_id or "", card)
-            session.pushed.pop(render.ANSWER_ID, None)
             session.stream_failures, session.stream_retry_after = 0, 0.0
             if session.flusher is not None:
                 session.flusher.request_reflush()

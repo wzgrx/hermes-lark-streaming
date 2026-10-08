@@ -69,8 +69,7 @@ def done_view(**kw):
         steps=timeline(failed=failed)[1].steps + timeline(failed=failed)[3].steps,
         blocks=timeline(failed=failed),
         answers=("第一步已完成。", "结论如下。"),
-        footer=Footer(model="deepseek-v4-flash", context_used=20000, context_max=1_000_000, cache_hit=0.83,
-                      tag="龙虾3号"),
+        footer=Footer(model="deepseek-v4-flash", context_used=20000, context_max=1_000_000, cache_hit=0.83),
     )
     base.update(kw)
     return TurnView(**base)
@@ -129,7 +128,6 @@ def test_footer_line_is_one_status_row():
         "<font color='grey'>🤖 deepseek-v4-flash</font>", "<font color='grey'>📑 20k/1M (2%)</font>",
         "<font color='grey'>⚡ 缓存 83%</font>"]
     assert chips["columns"][2]["elements"][0]["content"] == "<font color='grey'>⚡ cache 83%</font>"
-    assert "龙虾3号" not in footer  # the identity tag is not shown
     assert zh(render_final(done_view(phase=Phase.STOPPED))["body"]["elements"][hr + 1]).startswith("🛑 **已停止**")
     error = render_final(done_view(phase=Phase.FAILED))["body"]["elements"][hr + 1]
     assert "❌ **出错**" in zh(error) and zh(error).startswith("<font color='red'>")

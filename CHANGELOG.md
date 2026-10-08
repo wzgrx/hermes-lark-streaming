@@ -1,5 +1,14 @@
 # 更新记录
 
+## [1.5.1] - 2026-10-08
+
+整理,不改变卡片行为:
+
+- 删除无效代码:v3 已不用的元素 id 与渲染函数(`ANSWER_ID` `PROCESS_ID` `FOOTER_ID`、`process_element`、`footer_element`);`agent_name` 配置与页脚身份标签的整条链路(页脚早已不显示,配置里留着会被忽略)。
+- 删除已被否定的 v1 设计稿 `docs/design/card-redesign.html`,文档改以 README 截图为准。
+- README 截图全部换成当前版本(运行中 / 已完成 / 有失败 / 详情默认宽度 / 窄屏);README、AGENTS、架构、配置、迁移、安装文档同步到当前行为。
+- `scripts/live_acceptance.py` 新增 `--hold` 便于截取运行中的卡片,全部成功模式的示例文案不再提“预期失败”。
+
 ## [1.5.0] - 2026-10-08
 
 稳定性修复(来自代码审查与真实日志排查):

@@ -1,6 +1,6 @@
-# 架构(1.0 重写)
+# 架构
 
-目标:让 Hermes 的飞书回复成为一张持续更新的 CardKit 2.0 卡片。设计稿见 [design/card-redesign.html](design/card-redesign.html)。
+目标:让 Hermes 的飞书回复成为一张持续更新的 CardKit 2.0 卡片。卡片样式见 README 截图。
 
 ## 分层与依赖方向
 
@@ -13,19 +13,20 @@ config ◀── 所有层只读
 
 下层不得 import 上层。`card` 与 `details` 不做网络 I/O 之外的副作用;`card` 完全无 I/O。
 
-| 包 | 职责 | 来源(legacy/) |
-|---|---|---|
-| `card/` | `TurnView → card JSON`,Markdown 规整,脱敏 | 新写;`markdown`、`redact` 为移植 |
-| `details/` | 一轮遥测、历史用量账本、资源、订阅账户 → `Footer` / `Section` | `footer/*`、`host`、`account_*` |
-| `transport/` | CardKit 客户端、序号、重试、投递台账、节流、图片、媒体 | `feishu.py`、`delivery.py`、`streaming/flush|image|media`、`card_limits.py` |
-| `session/` | 每条消息的状态机、分段、工具追踪、续卡、打断/审批/clarify | `controller.py`、`streaming/*` |
-| `hooks/` | 对 Hermes 的唯一接入点(AST 注入表 + 原生观察钩子) | `patcher.py`、`modular_patcher.py`、`native_hooks.py` |
-| `config.py` `cli.py` `doctor.py` | 配置、命令行、自检 | 新写 |
+| 包 | 职责 |
+|---|---|
+| `card/` | `TurnView → card JSON`(时间线、页脚、详情面板、定时任务卡片),Markdown 规整,脱敏 |
+| `details/` | 一轮遥测、历史用量台账、资源采样、订阅账户 → `Footer` / `Section` |
+| `transport/` | CardKit 客户端、序号通道、重试、投递台账、运行中卡片登记、节流、图片、媒体 |
+| `session/` | 每条消息的状态机、时间线块、工具追踪、换卡、打断/审批/clarify、定时任务与后台投递 |
+| `hooks/` | 对 Hermes 的唯一接入点(声明式 AST 注入表 + 引擎 + 原生观察钩子) |
+| `compat/` | 原先打在 Hermes 上的本地补丁:日志脱敏、OpenCode Go 403 轮换、技能索引只列名称 |
+| `config.py` `__main__.py` | 配置解析、`--run-module` 命令(verify / install / uninstall / status) |
 
 ## 数据契约
 
 - `card.model`:`TurnView`、`Step`、`Footer`、`Section`、`Metric`、`RenderOptions`。`details` 只产出 `Footer` 与 `Section`,不关心布局。
-- `card.render`:`render_streaming(view)`、`render_final(view)`,以及 `status_element/process_element/footer_element/details_element` 供增量更新;元素 id 常量 `STATUS_ID PROCESS_ID ANSWER_ID FOOTER_ID DETAILS_ID`。
+- `card.render`:`render_streaming(view)`、`render_final(view)`、`streaming_elements(view)`(带 id 的全部元素,供按 id 对比)、`details_element`;实时状态行 `STATUS_ID`,块元素 id 为 `块键_卡片键`(卡片键按消息与换卡代数生成,飞书按元素 id 记住面板展开状态)。
 - 流式阶段按块对比:新块插在实时状态行之前,回答块用打字机更新,面板局部更新;终态用整卡更新。
 - 空内容的 markdown 元素 CardKit 可能丢弃,新增元素用 insert 而不是预占位。
 

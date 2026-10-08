@@ -10,8 +10,7 @@
 | `text_size` | `normal_v2` | 回答正文字号(`normal_v2` `heading` `notation` `normal` `small` `large`) |
 | `width_mode` | `default` | `default` `compact` `fill` |
 | `process` | `auto` | 过程面板:`auto` 运行或失败时展开,`open` 常开,`closed` 常闭,`off` 不显示 |
-| `agent_name` | 空 | 底栏身份标签(最多 30 字符) |
-| `card_ttl_sec` | `600` | 会话残留清理时限 |
+| `card_ttl_sec` | `600` | 已结束的会话在内存中保留的秒数;运行中的回合不受影响(只有静默 6 小时的才会被收尾为“已停止”) |
 | `rollover_sec` | `480` | 卡片存活到此秒数后换新卡,上限 570(飞书流式窗口约 10 分钟) |
 | `adaptive_backpressure` | 开 | `{enabled, min_ms: 100, max_ms: 1500}`,飞书限频时自动放慢刷新 |
 | `bots` | 空 | 多机器人:`{default, chat_bindings: {chat_id: bot_id}, items: {bot_id: {app_id_env, app_secret_env, base_url}}}`,只写环境变量名 |

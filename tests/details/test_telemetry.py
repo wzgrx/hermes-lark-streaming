@@ -193,7 +193,6 @@ def test_footer_values():
     assert footer == Footer(
         model="DeepSeek V4.1 Flash", context_used=100, context_max=1000, cache_hit=0.7, cache_hit_is_floor=False
     )
-    assert footer.tag == ""
 
 
 def test_footer_humanizes_known_bare_id_only():

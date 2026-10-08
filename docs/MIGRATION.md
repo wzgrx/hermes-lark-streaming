@@ -13,7 +13,8 @@
 | `resources.enabled` | `details.resources` |
 | `footer.details: false` | `details.usage/resources/accounts` 分别设为 false |
 | `history_compaction.*`、`callback_ttl_sec` | 删除 |
-| `agent_name`、`bots`、`width_mode`、`adaptive_backpressure`、`card_ttl_sec` | 不变 |
+| `agent_name` | 删除(页脚不再显示身份标签,配置里留着也会被忽略) |
+| `bots`、`width_mode`、`adaptive_backpressure`、`card_ttl_sec` | 不变 |
 
 ## 步骤
 

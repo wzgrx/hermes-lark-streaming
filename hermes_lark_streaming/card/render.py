@@ -24,9 +24,6 @@ from .model import Block, BlockKind, Metric, Phase, RenderOptions, Section, Step
 from .redact import redact
 
 STATUS_ID = "live"  # the trailing live line while streaming
-ANSWER_ID = "answer"  # reserved; v3 streams each answer block into its own element
-PROCESS_ID = "process"  # reserved
-FOOTER_ID = "footer"  # reserved
 DETAILS_ID = "details"
 
 ELEMENT_LIMIT = 200  # CardKit hard cap on elements per card, counted over every nested tag
@@ -297,14 +294,6 @@ def interrupted_status() -> dict[str, Any]:
     text = Bi("<font color='orange'>⚠️ 本轮回复已中断 · 网关重启或异常退出 · 内容可能不完整 · 请重新发送</font>",
               "<font color='orange'>⚠️ Interrupted · the gateway restarted or exited · reply may be incomplete</font>")
     return _markdown(text, "notation", element_id=STATUS_ID)
-
-
-def process_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
-    return None  # v3 inserts blocks as they arrive; see streaming_elements
-
-
-def footer_element(view: TurnView, opts: RenderOptions) -> dict[str, Any] | None:
-    return None  # the footer line only appears on the finished card
 
 
 def footer_text(view: TurnView) -> Bi:

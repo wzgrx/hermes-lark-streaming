@@ -79,7 +79,6 @@ class Settings:
     text_size: str = "normal_v2"
     width_mode: str = "default"
     process: str = "auto"
-    agent_name: str = ""
     card_ttl_sec: int = 600
     rollover_sec: float = 480.0
     backpressure: Backpressure = field(default_factory=Backpressure)
@@ -98,7 +97,6 @@ class Settings:
             text_size=_choice(raw.get("text_size", body.get("text_size")), _TEXT_SIZES, "normal_v2"),
             width_mode=_choice(raw.get("width_mode"), _WIDTH_MODES, "default"),
             process=_choice(raw.get("process"), _PROCESS_MODES, "auto"),
-            agent_name=str(raw.get("agent_name") or "").strip()[:30],
             card_ttl_sec=int(_number(raw.get("card_ttl_sec"), 600, 60, 86400)),
             rollover_sec=_number(raw.get("rollover_sec"), 480.0, 60.0, 570.0),
             backpressure=Backpressure(

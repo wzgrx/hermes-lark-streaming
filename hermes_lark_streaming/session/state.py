@@ -71,7 +71,6 @@ class Session:
     timeline: list[Entry] = field(default_factory=list)
     blocks_offset: int = 0  # timeline entries already shown on earlier (sealed) cards
     notices: list[str] = field(default_factory=list)
-    tag: str = ""
     provider: str = ""  # provider the turn is actually using, once telemetry has seen a request
     telemetry: Any = None  # details.TurnTelemetry
     final_footer: Footer | None = None
@@ -204,7 +203,7 @@ class Session:
             thoughts=self.thoughts[self.thoughts_offset:],
             answers=tuple(self.answers[self.answers_offset:]),
             notices=tuple(self.notices),
-            footer=footer if not self.tag else _tagged(footer, self.tag),
+            footer=footer,
             sections=self.sections if finished else (),
             continued=continued,
             card_key=hashlib.sha1(f"{self.message_id}:{self.delivery_generation}".encode()).hexdigest()[:6],
@@ -216,8 +215,3 @@ def _live_footer(session: Session) -> Footer:
     telemetry = session.telemetry
     return telemetry.footer() if telemetry is not None else Footer()
 
-
-def _tagged(footer: Footer, tag: str) -> Footer:
-    from dataclasses import replace
-
-    return replace(footer, tag=tag)

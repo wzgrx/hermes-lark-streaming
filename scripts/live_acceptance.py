@@ -43,7 +43,7 @@ def report(card: dict) -> None:
         print("  ", element.get("element_id") or element.get("tag"), "->", str(text)[:110])
 
 
-async def main(chat_id: str, home: Path, *, ok_only: bool = False) -> int:
+async def main(chat_id: str, home: Path, *, ok_only: bool = False, hold: float = 0.0) -> int:
     load_env(home)
     from hermes_lark_streaming.session import controller as controller_module
     from hermes_lark_streaming.session.controller import Controller
@@ -70,7 +70,7 @@ async def main(chat_id: str, home: Path, *, ok_only: bool = False) -> int:
 
     client.update_card = capture  # type: ignore[method-assign]
     stamp = time.strftime("%H:%M:%S")
-    anchor = await client.send_text(chat_id, f"【插件 1.0 自动验收 {stamp}】下面是一轮模拟对话的卡片。")
+    anchor = await client.send_text(chat_id, f"【插件自动验收 {stamp}】下面是一轮模拟对话的卡片。")
     mid = f"e2e-{anchor}"
     ctl.on_message_started(message_id=mid, chat_id=chat_id, anchor_id=anchor, session_key="live-acceptance")
     session = ctl._sessions[mid]
@@ -80,7 +80,8 @@ async def main(chat_id: str, home: Path, *, ok_only: bool = False) -> int:
     print("card created:", session.channel.card_id if session.channel else None)
 
     with session.lock:  # reasoning display is a config switch; feed the timeline directly for the check
-        session.add_thought("用户想看卡片的完整效果。先执行一个成功的命令,再执行一个预期失败的命令。")
+        session.add_thought("用户想看卡片的完整效果。先执行一个成功的命令,再执行"
+                            + ("另一个命令。" if ok_only else "一个预期失败的命令。"))
     await asyncio.sleep(1.5)
     ctl.on_tool_update(message_id=mid, tool_name="terminal", status="started", detail="printf 'V1_OK\\n'")
     await asyncio.sleep(1.2)
@@ -93,14 +94,17 @@ async def main(chat_id: str, home: Path, *, ok_only: bool = False) -> int:
     }
     ctl.observe("pre_api_request", payload, session_key="live-acceptance")
     chunks = (
-        "第一步已完成。", "接下来执行一个预期失败的命令,", "用来检查失败行的显示。\n\n", "- 退出码应为 7\n- 回答仍然完整",  # noqa: E501
+        ("第一步已完成。", "接下来再执行一个命令,", "确认整轮顺利结束。\n\n", "- 两个命令都应成功\n- 回答完整")
+        if ok_only else
+        ("第一步已完成。", "接下来执行一个预期失败的命令,", "用来检查失败行的显示。\n\n",
+         "- 退出码应为 7\n- 回答仍然完整")
     )
     for chunk in chunks:
         ctl.on_answer(message_id=mid, text=chunk)
         await asyncio.sleep(1.0)
     code = 0 if ok_only else 7
     ctl.on_tool_update(message_id=mid, tool_name="terminal", status="started", detail=f"sh -c 'exit {code}'")
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(0.8 + hold)  # --hold keeps the card in its running state for a screenshot
     output = "" if ok_only else "V1_EXPECTED_FAILURE\nline two"
     failed = json.dumps({"exit_code": code, "output": output})
     ctl.on_tool_update(message_id=mid, tool_name="terminal", status="completed", result=failed)
@@ -125,5 +129,6 @@ if __name__ == "__main__":
     parser.add_argument("chat_id")
     parser.add_argument("--ok", action="store_true", help="make every tool succeed (the common case)")
     parser.add_argument("--hermes-home", type=Path, default=Path.home() / ".hermes")
+    parser.add_argument("--hold", type=float, default=0.0, help="seconds to stay mid-tool, for a running screenshot")
     args = parser.parse_args()
-    sys.exit(asyncio.run(main(args.chat_id, args.hermes_home, ok_only=args.ok)))
+    sys.exit(asyncio.run(main(args.chat_id, args.hermes_home, ok_only=args.ok, hold=args.hold)))
