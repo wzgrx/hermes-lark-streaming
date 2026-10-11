@@ -66,7 +66,7 @@ class Controller:
         self.open_cards = OpenCards(self.home / "state" / OPEN_CARDS_FILE)
         self.pipeline = Pipeline(Runtime(self.source, self.ledger, self._client_for, self.collector,
                                          open_cards=self.open_cards))
-        self._swept_at = 0.0
+        self._swept_at: float | None = None
         self.static = StaticDelivery(self.ledger, self._client_for)
 
     # ------------------------------------------------------------------ plumbing
@@ -233,8 +233,9 @@ class Controller:
         if loop is None:
             _logger.warning("no event loop available, skipping: msg=%s", message_id[:12])
             return
-        if time.monotonic() - self._swept_at >= _SWEEP_INTERVAL_SEC:
-            self._swept_at = time.monotonic()
+        now = time.monotonic()
+        if self._swept_at is None or now - self._swept_at >= _SWEEP_INTERVAL_SEC:
+            self._swept_at = now
             self._fire(self._sweep_open_cards(), loop)
         reply = anchor_id if anchor_id and anchor_id != message_id else None
         session = self._new_session(message_id, chat_id, loop, anchor_id=reply, session_key=session_key)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -222,19 +223,36 @@ async def test_open_cards_are_registered_until_finalized(make_controller, client
     assert ctl.open_cards.orphans(set(), min_age=0) == []
 
 
-async def test_cards_left_live_by_a_dead_gateway_are_marked_interrupted(make_controller, client, tmp_path):
+@pytest.mark.parametrize("uptime", [5.0, 500.0])
+async def test_cards_left_live_by_a_dead_gateway_are_marked_interrupted(make_controller, client, monkeypatch, uptime):
     from hermes_lark_streaming.card.render import STATUS_ID as LIVE
+    from hermes_lark_streaming.session import controller as controller_module
 
+    # A newly booted CI runner/WSL instance must sweep on its first message too.
+    # Patch only this module's clock, not the event loop's global time module.
+    monkeypatch.setattr(controller_module, "time", SimpleNamespace(monotonic=lambda: uptime))
     ctl = make_controller()
+    fired = []
+    fire = ctl._fire
+
+    def record_fire(coro, loop):
+        future = fire(coro, loop)
+        fired.append(future)
+        return future
+
+    monkeypatch.setattr(ctl, "_fire", record_fire)
     ctl.open_cards.add("card_dead", "oc_9", "om_dead")  # the previous process died mid-turn
     ctl.open_cards._write({c.card_id: c.__class__(c.card_id, c.chat_id, c.message_id, c.opened_at - 600)
                            for c in ctl.open_cards.orphans(set(), min_age=0)})
     await start(ctl)
-    await settle(ctl, 0.3)
+    assert len(fired) == 2  # initial sweep plus card creation
+    await asyncio.gather(*(asyncio.wrap_future(future) for future in fired))
     patched = [b for b in client.of("batch_update") if b[0] == "card_dead"]
     assert patched and patched[0][2][0]["params"]["element_id"] == LIVE and "已中断" in str(patched[0][2])
     assert patched[0][1] > 1_000_000_000  # a wall-clock sequence, above anything the dead turn used
     assert all(c.card_id != "card_dead" for c in ctl.open_cards.orphans(set(), min_age=0))
+    await start(ctl, mid="om_2")
+    assert len(fired) == 3  # only creation; the next sweep stays throttled
 
 
 async def test_a_failed_card_create_is_not_left_pending(make_controller, client):
