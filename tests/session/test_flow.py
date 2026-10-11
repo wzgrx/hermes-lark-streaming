@@ -242,3 +242,14 @@ async def test_a_failed_card_create_is_not_left_pending(make_controller, client)
     client.fail["create_card"] = TimeoutError()
     await start(ctl)
     assert ctl.ledger.summary()["counts"].get("pending", 0) == 0
+
+
+@pytest.mark.parametrize("message_id", [None, "", 42, []])
+async def test_completion_without_message_identity_preserves_active_card(make_controller, client, message_id):
+    ctl = make_controller()
+    session = await start(ctl)
+    calls = list(client.calls)
+    assert await ctl.on_completed_wait(message_id=message_id, answer="background result") is False
+    assert ctl._sessions["om_1"] is session
+    assert session.state is State.STREAMING
+    assert client.calls == calls

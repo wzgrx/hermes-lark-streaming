@@ -465,11 +465,12 @@ class Controller:
         )
 
     async def on_completed_wait(
-        self, *, message_id: str, answer: str = "", is_error: bool = False, duration: float = 0.0, model: str = "",
+        self, *, message_id: str | None, answer: str = "", is_error: bool = False,
+        duration: float = 0.0, model: str = "",
         tokens: dict[str, Any] | None = None, context: dict[str, Any] | None = None, deliver_all_media: bool = False,
     ) -> bool:
         """Finish the card and report whether it was delivered (the gateway then skips its own send)."""
-        if not self.enabled:
+        if not self.enabled or not isinstance(message_id, str) or not message_id:
             return False
         if (session := self._completion_session(message_id)) is None:
             _logger.info("completion for unknown session: msg=%s", message_id[:12])
