@@ -91,6 +91,7 @@ class Footer:
     cache_hit_is_floor: bool = False
     partial: bool = False  # some requests in the turn reported no usage
     reasoning: str = ""  # requested reasoning effort, e.g. max / high
+    route: str = ""  # which subscription served the turn, e.g. "OpenDesign" or "OpenDesign → Go" after a fallback
 
 
 @dataclass(frozen=True, slots=True)

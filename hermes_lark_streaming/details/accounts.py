@@ -24,6 +24,7 @@ class Account:
     key_env: str
     discovered: bool = False
     subscription_expires_at: str | None = None
+    subscription_started_at: str | None = None  # manual; with the expiry it draws the subscription period
 
 
 def configured(settings: Any) -> tuple[Account, ...]:
@@ -49,6 +50,7 @@ def configured(settings: Any) -> tuple[Account, ...]:
                 provider,
                 env if prefix else "",
                 subscription_expires_at=timestamp(row.get("subscription_expires_at")),
+                subscription_started_at=timestamp(row.get("subscription_started_at")),
             )
         )
         seen.add(ident)

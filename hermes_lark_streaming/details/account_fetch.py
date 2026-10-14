@@ -84,6 +84,8 @@ def fetch_account(account: Account, key: str) -> dict[str, Any]:
     }
     if account.subscription_expires_at:
         result.update(subscription_expires_at=account.subscription_expires_at, subscription_source="manual")
+        if account.subscription_started_at:
+            result["subscription_started_at"] = account.subscription_started_at
     endpoint = _ENDPOINTS.get(account.provider)
     if endpoint is None:
         return {**result, **UNAVAILABLE.get(account.provider, {}), "source": "none", "status": "unsupported"}

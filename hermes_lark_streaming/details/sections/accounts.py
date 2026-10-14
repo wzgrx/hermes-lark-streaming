@@ -17,6 +17,7 @@ from ..values import label, mapping
 from .fmt import UNKNOWN, parse_instant, percent_value, span, stamp, zone
 
 _TITLES = {
+    "opendesign": "OpenDesign",
     "opencode-go": "OpenCode Go",
     "deepseek": "DeepSeek",
     "openrouter": "OpenRouter",
@@ -143,6 +144,18 @@ def _balance_metrics(row: Mapping[str, Any], prefix: str, reason: str) -> list[M
     return metrics
 
 
+def _period_metric(row: Mapping[str, Any], tz: ZoneInfo, now: float, prefix: str) -> Metric | None:
+    """A subscription bought for a fixed period (manual start and end): how much of it has passed."""
+    start, end = parse_instant(row.get("subscription_started_at")), parse_instant(row.get("subscription_expires_at"))
+    if start is None or end is None or end <= start:
+        return None
+    total, left = end.timestamp() - start.timestamp(), end.timestamp() - now
+    ratio = min(1.0, max(0.0, (now - start.timestamp()) / total))
+    value = f"剩 {math.ceil(left / 86400)} 天" if left > 0 else "已到期"
+    return Metric(prefix + "订阅期", value, ratio=ratio, hint=f"{stamp(row.get('subscription_expires_at'), tz)} 到期",
+                  label_en="Subscription")
+
+
 def _expiry_notes(row: Mapping[str, Any], tz: ZoneInfo, reason: str) -> list[str]:
     notes = []
     expires = stamp(row.get("subscription_expires_at"), tz, year=True)
@@ -177,14 +190,20 @@ def _row(
     if status != "ok":
         if row.get("reason") == "endpoint_retired":
             reason = f"官方账户接口已退役 · {label(row.get('retired_on'))}"
+        elif row.get("reason") == "runtime_key_no_quota":
+            reason = "额度请在 OpenDesign 后台查看 · API 密钥无查询权限"
         elif status == "unavailable" and type(row.get("http_status")) is int:
             reason = f"查询失败 · {_failure(row.get('http_status'))}"
         notes.append(reason)
     metrics = _quota_metrics(row, tz, now, prefix) if status == "ok" else []
+    period = _period_metric(row, tz, now, prefix)
+    if period is not None:
+        metrics.append(period)
     metrics += _balance_metrics(row, prefix, reason)
     if status == "ok" and row.get("partial"):
         notes.append("部分额度窗口未返回")
-    notes += _expiry_notes(row, tz, reason)
+    if period is None:  # the period bar already says when it ends
+        notes += _expiry_notes(row, tz, reason)
     checked = stamp(row.get("checked_at"), tz)
     if checked != UNKNOWN and row.get("source") != "none":
         notes.append(f"{'快照' if status == 'ok' else '最近查询'} {checked}")

@@ -323,7 +323,8 @@ def footer_chips(view: TurnView) -> list[Bi]:
     footer = view.footer
     chips: list[Bi] = []
     if footer.model:
-        chips.append(Bi.same(f"🤖 {esc(clip(footer.model, 60))}"))
+        route = f" · {esc(clip(footer.route, 60))}" if footer.route else ""  # which subscription paid for it
+        chips.append(Bi.same(f"🤖 {esc(clip(footer.model, 60))}{route}"))
     if footer.reasoning:
         chips.append(Bi.same(f"🧠 {esc(footer.reasoning)}"))
     if footer.context_used is not None and footer.context_max:
@@ -430,12 +431,18 @@ def _section_elements(section: Section, columns: int) -> list[dict[str, Any]]:
     """Grid sections: a heading line, then a cell grid per group. Quota: one short bar line per window."""
     out: list[dict[str, Any]] = []
     if section.layout == "bars":
-        lines = []
-        names = [_wide(m.label) for m in section.metrics]
+        # Several accounts of one provider arrive as "Go a22 · 5小时": a heading line per account, then
+        # its windows by their own names, so every bar still starts at the same x.
+        split = [m.label.rsplit(" · ", 1) if " · " in m.label else ["", m.label] for m in section.metrics]
+        names = [_wide(window) for _account, window in split]
         width = max(len(n) for n in names)
         value_width = max(len(m.value) for m in section.metrics)
-        for m, name in zip(section.metrics, names, strict=True):
-            emoji = _WINDOW_EMOJI.get(m.label, "🎫")
+        lines, current = [], None
+        for m, (account, window), name in zip(section.metrics, split, names, strict=True):
+            if account and account != current:
+                lines.append(f"**{esc(account)}**")
+                current = account
+            emoji = _WINDOW_EMOJI.get(window, "🎫")
             pad = "\u3000" * (width - len(name))  # ideographic spaces: every bar starts at the same x
             vpad = "\u2007" * (value_width - len(m.value))  # figure spaces: the reset hints line up too
             m = replace(m, label=name)

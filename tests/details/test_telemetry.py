@@ -220,7 +220,8 @@ def test_footer_values():
     complete(state, p)
     footer = state.footer()
     assert footer == Footer(
-        model="DeepSeek V4.1 Flash", context_used=100, context_max=1000, cache_hit=0.7, cache_hit_is_floor=False
+        model="DeepSeek V4.1 Flash", context_used=100, context_max=1000, cache_hit=0.7, cache_hit_is_floor=False,
+        route="Go",
     )
 
 
@@ -380,3 +381,14 @@ def test_removed_control_is_not_replaced_with_stale_prehook_effort():
     state.observe("pre_api_request", event(provider="example", request={"reasoning_effort": "max"}))
     assert state.observe_execution(event(provider="example", request={"messages": []}))
     assert state.finish()["reasoning"] == ""
+
+
+def test_footer_route_names_the_subscriptions_in_order():
+    state = TurnTelemetry()
+    first = event(provider="opendesign")
+    state.observe("pre_api_request", first)
+    state.observe("api_request_error", {**first, "error_type": "APIStatusError"})  # 402: plan used up
+    fallback = event(provider="opencode-go", api_request_id="r2")
+    state.observe("pre_api_request", fallback)
+    complete(state, fallback)
+    assert state.footer().route == "OpenDesign → Go"

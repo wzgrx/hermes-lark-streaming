@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from ..card.model import Footer
+from .providers import short_name
 from .reasoning import requested_reasoning
 from .usage import Usage, cache_ratio, normalize_usage
 from .values import count, label, mapping, model_display, seconds
@@ -182,6 +183,7 @@ class TurnTelemetry:
             cache_hit_is_floor=floor,
             partial=bool(data.get("usage_partial")),
             reasoning=label(data.get("reasoning"))[:20],
+            route=" → ".join(short_name(r) for r in data.get("routes", []) if isinstance(r, str))[:60],
         )
 
     def _snapshot(self) -> dict[str, Any]:

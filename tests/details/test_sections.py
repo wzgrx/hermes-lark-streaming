@@ -506,3 +506,36 @@ def test_history_request_counts_fill_the_cumulative_row():
     m = by_label(usage_section({}, history, show_models=False))
     assert m["今日请求"].value == "10" and m["本月请求"].value == "12.5k" and m["本月请求"].group == "累计"
     assert "今日请求" not in by_label(usage_section({}, {**history, "today": {"tokens": 1}}, show_models=False))
+
+
+def test_opendesign_shows_its_subscription_period_and_where_the_quota_lives():
+    from hermes_lark_streaming.details.account_fetch import fetch_account
+    from hermes_lark_streaming.details.accounts import Account
+
+    now = datetime(2026, 10, 14, 12, 0, tzinfo=UTC).timestamp()
+    account = Account("od", "OpenDesign 订阅", "opendesign", "", subscription_expires_at="2026-11-12T00:00:00+00:00",
+                      subscription_started_at="2026-10-12T00:00:00+00:00")
+    row = fetch_account(account, "")  # no endpoint: never transmits a key
+    assert row["status"] == "unsupported" and row["reason"] == "runtime_key_no_quota"
+    section = accounts_section({"active_provider": "opendesign", "accounts": [row]}, "Asia/Shanghai", now=now)
+    period = by_label(section)["订阅期"]
+    assert period.value == "剩 29 天" and period.ratio == pytest.approx(2.5 / 31) and "11-12" in period.hint
+    assert section.title == "OpenDesign · 订阅与额度"
+    assert any("OpenDesign 后台" in n for n in section.notes) and not any("订阅到期" in n for n in section.notes)
+
+
+def test_two_go_accounts_render_one_heading_each_with_aligned_bars():
+    from hermes_lark_streaming.card.model import Phase, RenderOptions, TurnView
+    from hermes_lark_streaming.card.render import details_element
+
+    def go(label, monthly):
+        return {"provider": "opencode-go", "label": label, "status": "ok", "windows": [
+            {"name": "rolling", "used_percent": 0}, {"name": "weekly", "used_percent": 2},
+            {"name": "monthly", "used_percent": monthly}]}
+
+    section = accounts_section({"active_provider": "opencode-go", "accounts": [go("Go a22", 97), go("Go 221", 1)]},
+                               "Asia/Shanghai", now=NOW)
+    assert [m.label for m in section.metrics][:3] == ["Go a22 · 5小时", "Go a22 · 每周", "Go a22 · 每月"]
+    text = str(details_element(TurnView(phase=Phase.DONE, sections=(section,)), RenderOptions()))
+    assert "**Go a22**" in text and "**Go 221**" in text and "a２２" not in text  # names stay as typed
+    assert text.count("⏱️") == 2 and text.count("🗓️") == 2  # window emoji survive the account prefix

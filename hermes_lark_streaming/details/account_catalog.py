@@ -61,6 +61,9 @@ SOURCES = {
 # Preserve documented deprecation instead of treating old specifications as
 # proof of a working account endpoint. No retired URL is registered for GET.
 UNAVAILABLE = {
+    # The sk-amr runtime key only serves models; balance and plan windows need the control key from
+    # OpenDesign's own CLI login (amr-api.open-design.ai), which an API user does not have.
+    "opendesign": {"reason": "runtime_key_no_quota"},
     "siliconflow": {
         "reason": "endpoint_retired",
         "retired_on": "2026-08-14",

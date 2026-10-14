@@ -35,11 +35,20 @@ streaming:
       enabled: true
       allowed_chats: [oc_xxx] # 账户额度必须显式列出会话,留空则处处隐藏
       auto_detect: false      # 仅在当前提供商的已知凭据名中发现
-      accounts:
-        - id: go-main
-          label: Go 主账户
+      accounts:               # 最多 4 个;同一提供商的多个账户在额度区按账户分组显示
+        - id: go-a22
+          label: Go a22
           provider: opencode-go
-          key_env: OPENCODE_GO_API_KEY
+          key_env: OPENCODE_GO_API_KEY          # 第二个账户用 OPENCODE_GO_API_KEY_<后缀>
+        - id: go-221
+          label: Go 221
+          provider: opencode-go
+          key_env: OPENCODE_GO_API_KEY_221
+        - id: opendesign                         # 没有额度接口:显示订阅期进度条(需填起止时间)
+          label: OpenDesign 订阅
+          provider: opendesign
+          subscription_started_at: "2026-10-12T07:29:00+08:00"
+          subscription_expires_at: "2026-11-12T07:29:00+08:00"
 
     pricing:                  # 可选:按模型的每百万 token 单价,用于显示 💸 费用;不填就不显示
       deepseek-v4-flash: {input: 1.0, output: 2.0, cache_read: 0.1, currency: "¥"}
@@ -49,6 +58,9 @@ streaming:
 - 只读采集:不开后台进程,不自动换号;凭据只写环境变量名。
 - 缺失的数据不显示,也不补造;整块都没有数据时,该分区不出现。订阅到期与 Key 到期分开显示;“重置≠到期”。
 - 缓存命中率只有在请求全部覆盖时才给精确值,否则标“≥”下限或“未知”。
+- 提供商按请求地址识别:Hermes 对自定义提供商在主对话里只报 `custom`,插件按 `base_url` 认出 OpenDesign(`amr-link.open-design.ai` → `opendesign`)与 OpenCode Go,用量账本、额度区与页脚都用这个名字。
+- OpenDesign 的 `sk-amr` 运行密钥只能调用模型,查不到余额与套餐额度(需要其 CLI 登录得到的 control key),所以额度区显示订阅期进度条和“额度请在 OpenDesign 后台查看”。
+- 切换顺序由 Hermes 决定(`fallback_providers`、`delegation.fallback_providers`、`auxiliary.<任务>.fallback_chain`、`credential_pool_strategies`),插件只读不切换;页脚的服务名显示这一轮实际用了哪个订阅,中途切换时为 `OpenDesign → Go`。
 
 ## 校验
 

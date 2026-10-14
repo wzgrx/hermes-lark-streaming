@@ -22,6 +22,7 @@ from typing import Any
 from ..card.model import Footer, Phase
 from ..config import ConfigSource, hermes_home
 from ..details import DetailsCollector, DetailsConfig, TurnTelemetry, observe_history
+from ..details.providers import with_canonical_provider
 from ..metrics import metrics
 from ..transport import (
     CardKitClient,
@@ -461,7 +462,7 @@ class Controller:
             cap = cap or _int(context.get("max_tokens"))
         return Footer(
             model=footer.model or model, context_used=used, context_max=cap, cache_hit=footer.cache_hit,
-            cache_hit_is_floor=footer.cache_hit_is_floor, partial=footer.partial,
+            cache_hit_is_floor=footer.cache_hit_is_floor, partial=footer.partial, route=footer.route,
             reasoning=footer.reasoning,
         )
 
@@ -584,6 +585,7 @@ class Controller:
 
     def observe(self, event: str, payload: dict[str, Any], *, session_key: str | None = None) -> bool:
         """Provider/auxiliary request events from Hermes' observer hooks, bound by session key."""
+        payload = with_canonical_provider(payload)  # one product id per subscription, whatever Hermes calls it
         try:
             observe_history(self.details_config, event, payload)
         except Exception:
