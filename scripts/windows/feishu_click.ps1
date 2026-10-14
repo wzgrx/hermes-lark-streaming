@@ -10,6 +10,7 @@ public class F {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, int dx, int dy, int data, int extra);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, int extra);
@@ -24,6 +25,9 @@ $h = $p.MainWindowHandle
 Start-Sleep -Milliseconds 500
 if ([F]::GetForegroundWindow() -ne $h) { "Feishu is not in front; not clicked"; exit 2 }
 $r = New-Object F+RECT; [void][F]::GetWindowRect($h, [ref]$r)
+# A minimized window reports an off-screen rect: the click would miss and the keys would land wherever
+# Feishu's focus happens to be (another chat). Refuse instead of guessing.
+if ([F]::IsIconic($h) -or $r.L -lt -10000 -or ($r.R - $r.L) -lt 800) { "Feishu window is minimized or too small; nothing done"; exit 3 }
 $scale = 1.63
 [void][F]::SetCursorPos([int]($r.L + $X * $scale), [int]($r.T + $Y * $scale)); Start-Sleep -Milliseconds 150
 [F]::mouse_event(0x0002, 0, 0, 0, 0); [F]::mouse_event(0x0004, 0, 0, 0, 0); Start-Sleep -Milliseconds 800

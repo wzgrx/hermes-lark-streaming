@@ -7,6 +7,7 @@
 - 按请求地址识别订阅:Hermes 对自定义提供商在主对话里只报 `custom`、辅助任务报 `custom:opendesign`,同一订阅被记成两个名字且对不上账户;现在统一为 `opendesign`(OpenCode Go 同理),用量账本、额度区、页脚一致。
 - 页脚模型后标出服务名:`🤖 DeepSeek V4.1 Flash · OpenDesign`;一轮中途因额度用完切换时显示 `OpenDesign → Go`。
 - OpenDesign 额度区:运行密钥查不到额度,显示订阅期进度条(剩余天数、到期时间)并说明额度在后台查看;账户配置新增 `subscription_started_at`。
+- `scripts/windows/feishu_send.ps1` / `feishu_click.ps1`:飞书窗口最小化时拒绝操作(此前点击落在屏幕外,粘贴和回车会落进飞书当前焦点所在的聊天);发送后恢复原来的剪贴板。
 - 同一提供商的多个账户(如两个 Go 账户)在额度区按账户分组,每组一行账户名,窗口进度条仍然对齐;窗口表情在带账户前缀时也能正确显示。
 
 ## [1.5.3] - 2026-10-12
