@@ -60,6 +60,11 @@ def _safe_async(
     return decorator
 
 
+def _mid(ctrl: Any, message_id: str | None, session_key: str | None) -> str | None:
+    """The card a hook belongs to: its message id, or for a Hermes-generated turn (no message) its session's."""
+    return message_id or ctrl.synthetic_id_for(session_key)
+
+
 def _raw_message(event: Any) -> Any:
     raw = getattr(event, "raw_message", None)
     raw_event = raw.get("event") if isinstance(raw, dict) else getattr(raw, "event", None)
@@ -97,6 +102,23 @@ def on_feishu_normalize(
         event.source = source
 
 
+@_safe(False)
+def on_turn_folded(
+    ctrl: Any,
+    *,
+    message_id: str | None,
+    new_message_id: str | None,
+    anchor_id: str | None = None,
+    text: str = "",
+    session_key: str | None = None,
+) -> bool:
+    """A message sent while the turn ran was folded into it (Hermes steer / interrupt-mode redirect)."""
+    return bool(ctrl.on_turn_folded(
+        message_id=message_id, new_message_id=new_message_id, anchor_id=anchor_id, text=text,
+        session_key=session_key,
+    ))
+
+
 @_safe(None)
 def on_message_started(
     ctrl: Any,
@@ -105,8 +127,11 @@ def on_message_started(
     chat_id: str,
     anchor_id: str | None = None,
     session_key: str | None = None,
+    text: str = "",
 ) -> None:
-    ctrl.on_message_started(message_id=message_id, chat_id=chat_id, anchor_id=anchor_id, session_key=session_key)
+    ctrl.on_message_started(
+        message_id=message_id, chat_id=chat_id, anchor_id=anchor_id, session_key=session_key, text=text,
+    )
 
 
 @_safe_async(False)
@@ -121,11 +146,12 @@ async def on_message_completed_wait(
     tokens: dict[str, Any] | None = None,
     context: dict[str, Any] | None = None,
     deliver_all_media: bool = False,
+    session_key: str | None = None,
 ) -> bool:
     """Await card finalisation; True means the card carries the answer and Hermes must not resend it."""
     return bool(
         await ctrl.on_completed_wait(
-            message_id=message_id,
+            message_id=_mid(ctrl, message_id, session_key),
             answer=answer,
             is_error=is_error,
             duration=duration,
@@ -138,9 +164,9 @@ async def on_message_completed_wait(
 
 
 @_safe(False)
-def on_message_needs_text_fallback(ctrl: Any, *, message_id: str) -> bool:
+def on_message_needs_text_fallback(ctrl: Any, *, message_id: str, session_key: str | None = None) -> bool:
     """True once when CardKit failed and the gateway must send plain text."""
-    return bool(ctrl.consume_text_fallback(message_id))
+    return bool(ctrl.consume_text_fallback(_mid(ctrl, message_id, session_key)))
 
 
 @_safe_async(False)
@@ -199,24 +225,29 @@ def on_tool_updated(
     detail: str = "",
     result: Any = None,
     is_error: Any = None,
+    session_key: str | None = None,
 ) -> bool:
     status, detail = normalize_tool_completion(tool_name, status, detail, result=result, is_error=is_error)
-    return bool(ctrl.on_tool_update(message_id=message_id, tool_name=tool_name, status=status, detail=detail))
+    mid = _mid(ctrl, message_id, session_key)
+    return bool(mid) and bool(ctrl.on_tool_update(message_id=mid, tool_name=tool_name, status=status, detail=detail))
 
 
 @_safe(False, logging.DEBUG)
-def on_answer_delta(ctrl: Any, *, message_id: str, text: str) -> bool:
-    return bool(ctrl.on_answer(message_id=message_id, text=text))
+def on_answer_delta(ctrl: Any, *, message_id: str, text: str, session_key: str | None = None) -> bool:
+    mid = _mid(ctrl, message_id, session_key)
+    return bool(mid) and bool(ctrl.on_answer(message_id=mid, text=text))
 
 
 @_safe(False, logging.DEBUG)
-def on_thinking_delta(ctrl: Any, *, message_id: str, text: str) -> bool:
-    return bool(ctrl.on_thinking(message_id=message_id, text=text))
+def on_thinking_delta(ctrl: Any, *, message_id: str, text: str, session_key: str | None = None) -> bool:
+    mid = _mid(ctrl, message_id, session_key)
+    return bool(mid) and bool(ctrl.on_thinking(message_id=mid, text=text))
 
 
 @_safe(False, logging.DEBUG)
-def on_reasoning_delta(ctrl: Any, *, message_id: str, text: str) -> bool:
-    return bool(ctrl.on_reasoning(message_id=message_id, text=text))
+def on_reasoning_delta(ctrl: Any, *, message_id: str, text: str, session_key: str | None = None) -> bool:
+    mid = _mid(ctrl, message_id, session_key)
+    return bool(mid) and bool(ctrl.on_reasoning(message_id=mid, text=text))
 
 
 @_safe(False, logging.DEBUG)
@@ -225,8 +256,10 @@ def on_background_review_message(ctrl: Any, *, message_id: str, text: str, sende
 
 
 @_safe(None)
-def on_message_aborted(ctrl: Any, *, message_id: str) -> None:
-    ctrl.on_aborted(message_id=message_id)
+def on_message_aborted(ctrl: Any, *, message_id: str, session_key: str | None = None) -> None:
+    mid = _mid(ctrl, message_id, session_key)
+    if mid:
+        ctrl.on_aborted(message_id=mid)
 
 
 @_safe_async(False)

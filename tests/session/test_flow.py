@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -271,3 +272,46 @@ async def test_completion_without_message_identity_preserves_active_card(make_co
     assert ctl._sessions["om_1"] is session
     assert session.state is State.STREAMING
     assert client.calls == calls
+
+
+async def test_a_message_folded_into_the_turn_keeps_the_card_alive(make_controller, client):
+    ctl = make_controller()
+    await start(ctl, session_key="sk")
+    ctl.on_answer(message_id="om_1", text="先回答一部分。")
+    # Hermes redirected the running turn onto the new message: every later update carries om_2
+    assert ctl.on_turn_folded(message_id="om_1", new_message_id="om_2", anchor_id="om_2", text="再加一个条件",
+                              session_key="sk") is True
+    assert ctl.on_answer(message_id="om_2", text="已按新条件继续。") is True  # used to be refused: card froze
+    assert await ctl.on_completed_wait(message_id="om_2", answer="") is True  # used to fall back to plain text
+    body = [str(e) for e in client.of("update_card")[-1][2]["body"]["elements"]]
+    needles = ("先回答一部分", "再加一个条件", "已按新条件继续")
+    where = {needle: next(i for i, e in enumerate(body) if needle in e) for needle in needles}
+    assert where["先回答一部分"] < where["再加一个条件"] < where["已按新条件继续"]  # the note sits where it arrived
+    assert "💬 你补充" in body[where["再加一个条件"]]
+    assert ctl._sessions == {}  # aliases are dropped with the session
+
+
+async def test_subagent_results_turn_gets_its_own_card_in_the_chat(make_controller, client):
+    from hermes_lark_streaming import session as session_pkg
+    from hermes_lark_streaming.hooks import bridge
+
+    ctl = make_controller()
+    text = "[ASYNC DELEGATION BATCH COMPLETE — deleg_739765a9] A background fan-out unit you started finished."
+    ctl.on_message_started(message_id=None, chat_id="oc_1", session_key="sk", text=text)
+    mid = ctl.synthetic_id_for("sk")
+    assert mid and mid.startswith("synthetic-")
+    await ctl._wait_creation(ctl._sessions[mid])
+    assert client.of("reply_card") == [] and client.of("send_card_entity")  # posted into the chat, no reply
+    with patch.object(session_pkg, "get_controller", lambda: ctl):
+        assert bridge.on_answer_delta(message_id=None, text="两个子代理都完成了。", session_key="sk") is True
+        assert await bridge.on_message_completed_wait(message_id=None, answer="", session_key="sk") is True
+    final = client.of("update_card")[-1][2]
+    body = [str(e) for e in final["body"]["elements"]]
+    assert "🔀 后台子代理已完成" in body[0] and "两个子代理都完成了" in str(final)
+    assert ctl.synthetic_id_for("sk") is None and ctl._sessions == {}
+
+
+async def test_unknown_generated_turns_stay_native(make_controller, client):
+    ctl = make_controller()
+    ctl.on_message_started(message_id=None, chat_id="oc_1", session_key="sk", text="[SYSTEM: something else]")
+    assert ctl._sessions == {} and ctl.synthetic_id_for("sk") is None and client.calls == []

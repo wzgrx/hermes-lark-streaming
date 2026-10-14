@@ -50,7 +50,7 @@ def _turn_metrics(data: Mapping[str, Any]) -> tuple[Metric, ...]:
     ]
     if partial_cache:
         read = count(data.get("cache_read_tokens"))
-        metrics.append(Metric("缓存读取", "≥" + compact(read, lower_bound=True) if read is not None else UNKNOWN,
+        metrics.append(Metric("缓存读取", compact(read, lower_bound=True) if read is not None else UNKNOWN,
                               group=group))
     if calls is not None and (calls > 1 or errors):
         metrics.append(Metric("请求", f"{calls}" + (f" · 错误 {errors}" if errors else ""), label_en="Requests",
@@ -63,8 +63,7 @@ def _history_tokens(bucket: Mapping[str, Any]) -> str:
     tokens = count(bucket.get("tokens"))
     if tokens is None:
         return UNKNOWN
-    partial = bool(bucket.get("partial"))
-    return f"{'≥' if partial else ''}{compact(tokens, lower_bound=partial)}"
+    return compact(tokens, lower_bound=bool(bucket.get("partial")))  # "4.83B+" when some requests had no usage
 
 
 def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -> tuple[tuple[Metric, ...], list[str]]:
@@ -94,7 +93,7 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
                                   group="模型累计"))
     notes: list[str] = []
     if any(mapping(history.get(k)).get("partial") for k in ("today", "month", "total")):
-        notes.append("* 部分请求缺少用量，≥ 表示已观测下限")
+        notes.append("* 部分请求缺少用量，带 + 的数字是已观测下限")
     return tuple(metrics), notes
 
 

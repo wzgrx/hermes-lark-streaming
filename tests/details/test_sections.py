@@ -82,7 +82,7 @@ def test_partial_turn_shows_floor_and_partial_note():
     section = usage_section(state.snapshot(), None)
     m = by_label(section)
     assert m["缓存"].value == "未知" and m["缓存"].ratio is None  # count known, rate not
-    assert m["缓存读取"].value == "≥70"
+    assert m["缓存读取"].value == "70+"
     assert "统计不完整" in section.notes and "服务商路径 opencode-go → other" in section.notes
     assert m["请求"].value == "2 · 错误 1"
 
@@ -91,7 +91,7 @@ def test_cache_hit_lower_bound_is_labelled_and_never_rounded_up():
     section = usage_section(turn([40, None]).snapshot(), None)
     metric = by_label(section)["缓存"]
     assert (metric.value, metric.label_en) == ("≥20%", "Cache") and metric.ratio == 0.2
-    assert by_label(section)["缓存读取"].value == "≥40"
+    assert by_label(section)["缓存读取"].value == "40+"
 
 
 def test_missing_telemetry_is_unknown_not_zero():
@@ -114,7 +114,7 @@ def test_history_rows_partial_models_and_status_notes():
     }
     section = usage_section({}, history)
     m = by_label(section)
-    assert m["今日"].value == "1.2k" and m["本月"].value == "≥1.55M" and m["总计"].value == "未知"
+    assert m["今日"].value == "1.2k" and m["本月"].value == "1.55M+" and m["总计"].value == "未知"
     assert m["总计"].group == "累计" and m["今日"].group == m["总计"].group
     models = [x for x in section.metrics if x.hint == "Go plan"]
     assert len(models) == 3 and models[0].label == "m" * 48  # top three, bounded
@@ -539,3 +539,17 @@ def test_two_go_accounts_render_one_heading_each_with_aligned_bars():
     text = str(details_element(TurnView(phase=Phase.DONE, sections=(section,)), RenderOptions()))
     assert "**Go a22**" in text and "**Go 221**" in text and "a２２" not in text  # names stay as typed
     assert text.count("⏱️") == 2 and text.count("🗓️") == 2  # window emoji survive the account prefix
+
+
+@pytest.mark.parametrize(
+    ("value", "lower_bound", "expected"),
+    [
+        (164, False, "164"), (17_300, False, "17.3k"), (808_500, False, "809k"), (3_630_000, False, "3.63M"),
+        (304_300_000, False, "304M"), (4_827_600_000, False, "4.83B"), (4_827_600_000, True, "4.82B+"),
+        (999_700_000, False, "1B"), (1_250_000, False, "1.25M"),
+    ],
+)
+def test_counts_stay_three_digits_wide_however_large(value, lower_bound, expected):
+    from hermes_lark_streaming.details.sections.fmt import compact
+
+    assert compact(value, lower_bound=lower_bound) == expected  # was "≥4827.6M": too wide for a cell

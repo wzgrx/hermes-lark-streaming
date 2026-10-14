@@ -42,6 +42,7 @@ class BlockKind(StrEnum):
     THOUGHT = "thought"
     TOOLS = "tools"
     ANSWER = "answer"
+    NOTE = "note"  # a message folded into the running turn, or why a Hermes-generated turn exists
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +55,7 @@ class Block:
     steps: tuple[Step, ...] = ()  # tools only
     elapsed_s: float | None = None  # thought duration / tool batch wall time, once closed
     open: bool = False  # still receiving content
+    label: str = ""  # NOTE only: a Hermes-generated turn's reason ("🔀 后台子代理已完成"); empty = the user's message
 
 
 @dataclass(frozen=True, slots=True)

@@ -166,7 +166,7 @@ class Pipeline:
         return channel, message_id
 
     async def _attach_with_fallback(
-        self, session: Session, client: CardKitClient, card: dict[str, Any], *, generation: str, reply_to: str,
+        self, session: Session, client: CardKitClient, card: dict[str, Any], *, generation: str, reply_to: str | None,
     ) -> tuple[CardChannel, str]:
         """Reply path, then a second reply with a new entity, then a plain chat send.
 
@@ -197,7 +197,7 @@ class Pipeline:
             session.client = client
             card = self._initial_card(session)
             channel, message_id = await self._attach_with_fallback(
-                session, client, card, generation="0", reply_to=session.anchor_id or session.message_id,
+                session, client, card, generation="0", reply_to=session.reply_target,
             )
             self._adopt(session, channel, message_id, card)
             session.images = ImageResolver(client=client, on_image_resolved=lambda: self.schedule(session))
@@ -249,7 +249,7 @@ class Pipeline:
                 return
             assert session.client is not None
             message_id = await session.client.send_text(
-                session.chat_id, _UNCERTAIN_NOTICE, reply_to=session.anchor_id or session.message_id,
+                session.chat_id, _UNCERTAIN_NOTICE, reply_to=session.reply_target,
                 request_uuid=entry.request_uuid,
             )
             await self.rt.ledger.adelivered(key, card_id="", message_id=message_id)
@@ -268,7 +268,7 @@ class Pipeline:
         ).hex
         try:
             await session.client.send_text(
-                session.chat_id, _LEDGER_NOTICE, reply_to=session.anchor_id or session.message_id,
+                session.chat_id, _LEDGER_NOTICE, reply_to=session.reply_target,
                 request_uuid=request_uuid,
             )
             session.delivery_notice_sent = True
@@ -478,7 +478,7 @@ class Pipeline:
         try:
             card = self._initial_card(session)
             channel, message_id = await self._attach_with_fallback(
-                session, client, card, generation=str(generation), reply_to=session.anchor_id or session.message_id,
+                session, client, card, generation=str(generation), reply_to=session.reply_target,
             )
             if not message_id:
                 raise RuntimeError("replacement card attach unconfirmed")

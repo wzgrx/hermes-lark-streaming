@@ -25,7 +25,7 @@ def test_verify_install_verify_uninstall_roundtrip_is_byte_identical(hermes_sour
     eng = Engine(hermes_source)
     original = read_all(hermes_source)
     plan = eng.verify()
-    assert plan.ok and not plan.skipped and len(plan.included) == 17
+    assert plan.ok and not plan.skipped and len(plan.included) == 18
     assert read_all(hermes_source) == original  # verify never writes
 
     eng.install()
@@ -127,7 +127,7 @@ def test_delta_preserves_tts_without_duplicate_text(installed: Path) -> None:
     callback = _load(installed, "gateway/run_turn_runner.py", "stream_delta_cb", namespace)
     with patch("hermes_lark_streaming.hooks.bridge.on_answer_delta", return_value=True) as hook:
         callback("hello")
-    hook.assert_called_once_with(message_id="message-1", text="hello")
+    hook.assert_called_once_with(message_id="message-1", text="hello", session_key=None)
     stts.on_delta.assert_called_once_with("hello")
     native.on_delta.assert_not_called()
     assert native.stream_deltas_enabled is False
@@ -172,7 +172,7 @@ def test_commentary_keeps_tts_segment_boundaries(installed: Path, already_stream
         stts.on_delta.assert_called_once_with(None)
         native.on_segment_break.assert_called_once_with()
     else:
-        hook.assert_called_once_with(message_id="m", text="commentary")
+        hook.assert_called_once_with(message_id="m", text="commentary", session_key=None)
         assert stts.on_delta.call_args_list == [call(None), call("commentary"), call(None)]
         native.on_commentary.assert_not_called()
 

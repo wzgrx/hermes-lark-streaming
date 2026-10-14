@@ -13,6 +13,7 @@ import functools
 import logging
 import threading
 import time
+import uuid
 from collections.abc import Callable, Coroutine
 from concurrent.futures import CancelledError
 from concurrent.futures import Future as ConcurrentFuture
@@ -38,6 +39,7 @@ from ..transport.routing import BotRegistry
 from .pipeline import Pipeline, Runtime, guard_for
 from .state import Session, State
 from .static import CronDeliveryOutcomeUnknown, StaticDelivery
+from .synthetic import synthetic_note
 from .text import split_reasoning_text, strip_reasoning_tags
 
 _logger = logging.getLogger("hermes_lark_streaming")
@@ -58,6 +60,7 @@ class Controller:
         self._client_lock = threading.Lock()
         self._sessions: dict[str, Session] = {}
         self._by_key: dict[str, Session] = {}
+        self._synthetic: dict[str, str] = {}  # session key -> id of the running Hermes-generated turn
         self._interrupts: dict[str, str] = {}
         self._fallback: dict[str, set[str]] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -164,7 +167,9 @@ class Controller:
             session.flusher.mark_completed()
 
     def _drop(self, session: Session) -> None:
-        for key in {session.message_id, session.anchor_id}:
+        if session.session_key and self._synthetic.get(session.session_key) == session.message_id:
+            del self._synthetic[session.session_key]
+        for key in {session.message_id, session.anchor_id, *session.aliases}:
             if key and self._sessions.get(key) is session:
                 del self._sessions[key]
         if session.session_key and self._by_key.get(session.session_key) is session:
@@ -220,13 +225,20 @@ class Controller:
 
     def on_message_started(
         self, *, message_id: str | None, chat_id: str, anchor_id: str | None = None, session_key: str | None = None,
+        text: str = "",
     ) -> None:
         if not self.enabled:
             return
+        synthetic = None
         if not message_id:
-            # Synthetic turns have no safe reply anchor; native delivery owns them.
-            metrics.increment("session.keyless_native_fallback")
-            return
+            # A Hermes-generated turn (subagent batch results, a background process notice) has no message.
+            # The known kinds get a card of their own, posted into the chat; anything else stays native.
+            synthetic = synthetic_note(text)
+            if synthetic is None or not session_key or not chat_id:
+                metrics.increment("session.keyless_native_fallback")
+                return
+            message_id = f"synthetic-{uuid.uuid4().hex[:16]}"
+            anchor_id = None
         if message_id in self._sessions:
             return
         self._prune()
@@ -240,8 +252,44 @@ class Controller:
             self._fire(self._sweep_open_cards(), loop)
         reply = anchor_id if anchor_id and anchor_id != message_id else None
         session = self._new_session(message_id, chat_id, loop, anchor_id=reply, session_key=session_key)
+        if synthetic is not None and session_key:
+            session.synthetic = True
+            session.add_note(synthetic[1], label=synthetic[0])
+            self._synthetic[session_key] = message_id
         session.create_task = self._fire(self.pipeline.create(session), loop)
         _logger.info("session created: msg=%s chat=%s", message_id[:12], chat_id[:12])
+
+    def synthetic_id_for(self, session_key: str | None) -> str | None:
+        """Hooks of a Hermes-generated turn carry no message id; its session key names the card instead."""
+        return self._synthetic.get(session_key) if session_key else None
+
+    def on_turn_folded(
+        self, *, message_id: str | None, new_message_id: str | None, anchor_id: str | None = None, text: str = "",
+        session_key: str | None = None,
+    ) -> bool:
+        """Hermes folded a message sent mid-turn into the running turn (steer, or interrupt-mode redirect).
+
+        A redirect re-anchors the turn: from here on its deltas, follow-up boundary and completion carry
+        the *new* message id. Without this alias every later update was refused as an unknown session, the
+        card froze and Hermes delivered the rest as plain text.
+        """
+        if not self.enabled:
+            return False
+        session = self._sessions.get(message_id) if message_id else None
+        if session is None and session_key:
+            session = self._by_key.get(session_key)
+        if session is None or session.state.terminal:
+            return False
+        for alias in (new_message_id, anchor_id):
+            if alias and self._sessions.get(alias) is not session:
+                self._sessions[alias] = session
+                session.aliases.append(alias)
+        if text.strip():
+            with session.lock:
+                session.add_note(text.strip())
+            self._wake(session)
+        _logger.info("turn folded: msg=%s new=%s", session.message_id[:12], (new_message_id or "")[:12])
+        return True
 
     # ------------------------------------------------------------------ content events
 

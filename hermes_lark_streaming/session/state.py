@@ -48,6 +48,7 @@ class Entry:
     tool_ids: list[int] = field(default_factory=list)
     started: float = field(default_factory=time.monotonic)
     ended: float | None = None
+    label: str = ""  # NOTE blocks only
 
 
 @dataclass(eq=False)
@@ -61,6 +62,8 @@ class Session:
     created_at: float = field(default_factory=time.time)
     started: float = field(default_factory=time.monotonic)
     touched: float = field(default_factory=time.monotonic)  # last hook activity, for pruning
+    aliases: list[str] = field(default_factory=list)  # message ids folded into this turn (steer / redirect)
+    synthetic: bool = False  # a Hermes-generated turn (subagent results, process notice): no message to reply to
 
     # content of the whole turn, across cards
     tracker: ToolTracker = field(default_factory=ToolTracker)
@@ -154,6 +157,20 @@ class Session:
         self.last_was_answer = True
         self._entry(BlockKind.ANSWER).text += text
 
+    @property
+    def reply_target(self) -> str | None:
+        """The message the card replies to; a synthetic turn has none and posts into the chat."""
+        return None if self.synthetic else (self.anchor_id or self.message_id)
+
+    def add_note(self, text: str, label: str = "") -> None:
+        """A note in the timeline: a user message folded into the running turn, or (with ``label``) why a
+        Hermes-generated turn exists. Its own closed block; the next answer starts fresh."""
+        self.close_entry()
+        entry = Entry(BlockKind.NOTE, f"b{len(self.timeline)}")
+        entry.text, entry.label, entry.ended = text, label, time.monotonic()
+        self.timeline.append(entry)
+        self.last_was_answer = False
+
     def add_thought(self, text: str) -> None:
         self.thoughts += text
         self.last_was_answer = False
@@ -185,6 +202,7 @@ class Session:
                 steps=self.tracker.steps_for(entry.tool_ids) if entry.kind is BlockKind.TOOLS else (),
                 elapsed_s=elapsed,
                 open=is_open,
+                label=entry.label,
             ))
         return tuple(out)
 

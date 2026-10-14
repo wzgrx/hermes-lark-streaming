@@ -14,14 +14,14 @@ from hermes_lark_streaming.hooks.table import INJECTION_NAMES, INJECTIONS
 
 EXPECTED = {
     "NORMALIZE", "START", "COMPLETE", "FOLLOWUP_COMPLETE", "FOLLOWUP_RESULT", "TOOL", "ANSWER", "THINKING",
-    "REASONING", "BACKGROUND_REVIEW", "ABORT", "STOP", "INTERRUPT", "BG_DELIVER", "CLARIFY", "APPROVAL",
+    "REASONING", "BACKGROUND_REVIEW", "ABORT", "STOP", "FOLD", "INTERRUPT", "BG_DELIVER", "CLARIFY", "APPROVAL",
     "CRON_DELIVER",
 }  # fmt: skip
 
 
-def test_table_covers_all_seventeen_hooks_once() -> None:
+def test_table_covers_all_eighteen_hooks_once() -> None:
     assert set(INJECTION_NAMES) == EXPECTED
-    assert len(INJECTION_NAMES) == len(EXPECTED) == 17
+    assert len(INJECTION_NAMES) == len(EXPECTED) == 18
 
 
 def test_only_cron_is_optional() -> None:

@@ -6,24 +6,18 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from ...card.numbers import short_count
 from ..config import valid_timezone
 
 UNKNOWN = "未知"
 
 
 def compact(value: int | None, *, lower_bound: bool = False) -> str:
-    """12.3k / 1.2M. A lower bound is truncated, not rounded up."""
+    """At most three significant digits: 164 / 17.3k / 404k / 3.63M / 304M / 4.83B, so a cell stays narrow
+    however large the count grows. A lower bound is truncated, never rounded up, and marked with ``+``."""
     if value is None:
         return UNKNOWN
-    if value >= 1_000_000:
-        digits = 1 if value >= 100_000_000 else 2  # 226.9M, 2.14M
-        step = 10 ** (6 - digits)
-        text = f"{value // step * step / 1_000_000:.{digits}f}" if lower_bound else f"{value / 1_000_000:.{digits}f}"
-        return text.rstrip("0").rstrip(".") + "M"
-    if value >= 1_000:
-        text = f"{value // 100 / 10:.1f}" if lower_bound else f"{value / 1_000:.1f}"
-        return text.rstrip("0").rstrip(".") + "k"
-    return str(value)
+    return short_count(value, lower_bound=lower_bound) + ("+" if lower_bound else "")
 
 
 def percent(ratio: float | None, *, floor: bool = False) -> str:

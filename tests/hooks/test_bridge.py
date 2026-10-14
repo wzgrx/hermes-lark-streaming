@@ -14,7 +14,9 @@ from hermes_lark_streaming.hooks import bridge
 
 def test_sync_calls_forward_keyword_arguments(controller: MagicMock) -> None:
     bridge.on_message_started(message_id="m", chat_id="c", anchor_id="a", session_key="s")
-    controller.on_message_started.assert_called_once_with(message_id="m", chat_id="c", anchor_id="a", session_key="s")
+    controller.on_message_started.assert_called_once_with(
+        message_id="m", chat_id="c", anchor_id="a", session_key="s", text=""
+    )
     controller.on_thinking.return_value = True
     controller.on_reasoning.return_value = False
     controller.on_answer.return_value = True
@@ -200,3 +202,12 @@ class TestNormalize:
     def test_not_quoted_or_other_platform_untouched(self, controller: MagicMock) -> None:
         assert self.run(controller, thread="t1", reply_to=None, raw={})[0].thread_id == "t1"
         assert self.run(controller, thread="t1", reply_to="p", raw={}, platform="telegram")[0].thread_id == "t1"
+
+
+def test_hooks_of_a_generated_turn_find_its_card_by_session_key(controller: MagicMock) -> None:
+    controller.synthetic_id_for.side_effect = lambda key: "synthetic-1" if key == "sk" else None
+    controller.on_answer.return_value = True
+    assert bridge.on_answer_delta(message_id=None, text="t", session_key="sk") is True
+    controller.on_answer.assert_called_once_with(message_id="synthetic-1", text="t")
+    assert bridge.on_answer_delta(message_id=None, text="t", session_key="other") is False  # nobody owns it
+    assert controller.on_answer.call_count == 1

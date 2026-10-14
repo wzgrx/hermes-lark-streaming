@@ -41,6 +41,7 @@ def tool_callback(use_ctx: bool) -> Any:
 def ctx_with(**values: Any) -> MagicMock:
     ctx = MagicMock()
     ctx.event_message_id = "modern-message"
+    ctx.session_key = "sk-modern"
     ctx._run_still_current.return_value = True
     ctx.log_queue = None
     for key, value in values.items():
@@ -56,12 +57,12 @@ class TestAnswer:
     def test_ctx_scope_consumes_delta(self) -> None:
         with patch(f"{BRIDGE}.on_answer_delta", return_value=True) as hook:
             assert self.run(True)("delta", ctx_with()) is None
-        hook.assert_called_once_with(message_id="modern-message", text="delta")
+        hook.assert_called_once_with(message_id="modern-message", text="delta", session_key="sk-modern")
 
     def test_flat_scope_consumes_delta(self) -> None:
         with patch(f"{BRIDGE}.on_answer_delta", return_value=True) as hook:
             assert self.run(False)("delta", "flat-message", MagicMock(return_value=True)) is None
-        hook.assert_called_once_with(message_id="flat-message", text="delta")
+        hook.assert_called_once_with(message_id="flat-message", text="delta", session_key=None)
 
     def test_unconsumed_delta_falls_through(self) -> None:
         with patch(f"{BRIDGE}.on_answer_delta", return_value=False):
@@ -123,6 +124,7 @@ class TestTool:
             assert tool_callback(True)(ctx)("tool.started", tool_name="search", preview="query") is None
         hook.assert_called_once_with(
             message_id="modern-message",
+            session_key="sk-modern",
             tool_name="search",
             status="started",
             detail="query",
@@ -348,3 +350,39 @@ class TestCron:
         with patch(f"{BRIDGE}.on_cron_deliver", return_value={"message_id": "m"}) as hook:
             self.runner(media_in_scope=False)(self.JOB, [self.target()], "x", None)
         assert hook.call_args.kwargs["media_files"] == []
+
+
+class TestFold:
+    """Hermes folds a message sent mid-turn into the running turn (steer / interrupt-mode redirect)."""
+
+    def run(self, *, platform: str = "feishu", same_agent: bool = True) -> MagicMock:
+        from types import SimpleNamespace
+
+        source = (
+            "class Busy:\n"
+            "    def __init__(self, state):\n        self._state = state\n"
+            "    def _session_state(self, key):\n        return self._state\n"
+            "    def _reply_anchor_for_event(self, event):\n        return 'om_anchor'\n"
+            "    def _fold_into_running_turn(self, running_agent, session_key, event):\n"
+            f"{indented(snippets.fold, '        ')}"
+            "        return 'native'\n"
+        )
+        agent = object()
+        turn = SimpleNamespace(agent=agent if same_agent else object(), ctx=SimpleNamespace(event_message_id="om_1"))
+        busy = build(source)["Busy"](SimpleNamespace(turn=turn))
+        event = SimpleNamespace(source=SimpleNamespace(platform=SimpleNamespace(value=platform)),
+                                message_id="om_2", text="再加一个条件")
+        with patch(f"{BRIDGE}.on_turn_folded", return_value=True) as hook:
+            assert busy._fold_into_running_turn(agent, "sk", event) == "native"  # Hermes' own logic still runs
+        return hook
+
+    def test_folded_message_is_reported_with_both_ids(self) -> None:
+        hook = self.run()
+        assert hook.call_args.kwargs == {
+            "message_id": "om_1", "new_message_id": "om_2", "anchor_id": "om_anchor", "text": "再加一个条件",
+            "session_key": "sk",
+        }
+
+    def test_other_platforms_and_stale_turns_are_ignored(self) -> None:
+        assert not self.run(platform="telegram").called
+        assert not self.run(same_agent=False).called

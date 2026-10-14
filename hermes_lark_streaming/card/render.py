@@ -21,6 +21,7 @@ from typing import Any
 
 from .markdown import downgrade_tables, optimize_markdown_style, split_long_text
 from .model import Block, BlockKind, Metric, Phase, RenderOptions, Section, Step, StepStatus, TurnView
+from .numbers import short_count
 from .redact import redact
 
 STATUS_ID = "live"  # the trailing live line while streaming
@@ -38,6 +39,7 @@ _THOUGHT_CHARS = 4000
 _SUMMARY_CHARS = 120
 _ERROR_CHARS = 600
 _DETAIL_CHARS = 160
+_NOTE_CHARS = 300
 _UNKNOWN = "未知"
 
 
@@ -115,12 +117,8 @@ def step_time(ms: float | None) -> str:
 
 
 def compact(value: int) -> str:
-    """12.3k / 403.5k / 1.2M / 1M, the same style as the details panel."""
-    if value >= 1_000_000:
-        return f"{value / 1_000_000:.2f}".rstrip("0").rstrip(".") + "M"
-    if value >= 1_000:
-        return f"{value / 1_000:.1f}".rstrip("0").rstrip(".") + "k"
-    return str(value)
+    """404k / 1M / 4.83B, the same style as the details panel."""
+    return short_count(value)
 
 
 def _id(base: str, view: TurnView) -> str:
@@ -255,12 +253,26 @@ def _answer(block: Block, view: TurnView, opts: RenderOptions, *, streaming: boo
             for chunk in split_long_text(content) if chunk.strip()]
 
 
+def _note_element(block: Block, view: TurnView) -> dict[str, Any]:
+    """The user's mid-turn message, shown where it arrived so the answer after it reads in context; or, with a
+    label, the reason a Hermes-generated turn (subagent results, a background process) exists."""
+    text = esc(clip(redact(block.text), _NOTE_CHARS))
+    if block.label:
+        line = f"**{esc(block.label)}** {grey('· ' + text)}" if text else f"**{esc(block.label)}**"
+        return _markdown(Bi.same(line), "notation", element_id=_id(block.key, view))
+    return _markdown(Bi(f"{grey('💬 你补充 · ')}{text}", f"{grey('💬 You added: ')}{text}"), "notation",
+                     element_id=_id(block.key, view))
+
+
 def block_elements(view: TurnView, opts: RenderOptions, *, streaming: bool) -> list[dict[str, Any]]:
     elements: list[dict[str, Any]] = []
     for block in view.blocks:
         if block.kind is BlockKind.ANSWER:
             if block.text.strip() or streaming:
                 elements.extend(_answer(block, view, opts, streaming=streaming))
+        elif block.kind is BlockKind.NOTE:
+            if block.text.strip() or block.label:
+                elements.append(_note_element(block, view))
         elif not opts.show_process:
             continue
         elif block.kind is BlockKind.THOUGHT and block.text.strip():

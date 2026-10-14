@@ -70,6 +70,13 @@ INJECTIONS: tuple[Injection, ...] = (
         ("on_message_aborted",),
     ),
     Injection("STOP", GATEWAY_BUSY, (AfterStopCommand(),), snippets.stop, ("on_session_aborted",)),
+    Injection(
+        "FOLD",
+        GATEWAY_BUSY,
+        (FuncBody("_fold_into_running_turn"),),
+        snippets.fold,
+        ("on_turn_folded",),
+    ),
     Injection("TOOL", GATEWAY_RUNNER, (FuncBody("progress_callback"),), snippets.tool, ("on_tool_updated",)),
     Injection("ANSWER", GATEWAY_RUNNER, (FuncBody("stream_delta_cb"),), snippets.answer, ("on_answer_delta",)),
     Injection(
