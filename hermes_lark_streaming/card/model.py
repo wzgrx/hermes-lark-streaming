@@ -43,6 +43,26 @@ class BlockKind(StrEnum):
     TOOLS = "tools"
     ANSWER = "answer"
     NOTE = "note"  # a message folded into the running turn, or why a Hermes-generated turn exists
+    AGENTS = "agents"  # one batch of subagents started by delegate_task
+
+
+class AgentStatus(StrEnum):
+    RUNNING = "running"
+    OK = "ok"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class Subagent:
+    """One delegated child agent, as its parent turn sees it."""
+
+    index: int  # 1-based position in its batch
+    goal: str
+    status: AgentStatus = AgentStatus.RUNNING
+    tools: int = 0  # tool calls so far
+    recent: tuple[str, ...] = ()  # latest tool names, newest last
+    elapsed_s: float | None = None
+    summary: str = ""  # result summary once finished, or the failure reason
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +76,7 @@ class Block:
     elapsed_s: float | None = None  # thought duration / tool batch wall time, once closed
     open: bool = False  # still receiving content
     label: str = ""  # NOTE only: a Hermes-generated turn's reason ("🔀 后台子代理已完成"); empty = the user's message
+    agents: tuple[Subagent, ...] = ()  # AGENTS only
 
 
 @dataclass(frozen=True, slots=True)

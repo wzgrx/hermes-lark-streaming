@@ -16,6 +16,7 @@ from ..transport.flush import Flusher
 from ..transport.guard import UnavailableGuard
 from ..transport.images import ImageResolver
 from ..transport.ledger import DeliveryStatus
+from .agents import AgentBook
 from .tools import ToolTracker
 
 if TYPE_CHECKING:
@@ -49,6 +50,7 @@ class Entry:
     started: float = field(default_factory=time.monotonic)
     ended: float | None = None
     label: str = ""  # NOTE blocks only
+    batch: str = ""  # AGENTS blocks only: the delegate_task batch shown in this panel
 
 
 @dataclass(eq=False)
@@ -64,6 +66,10 @@ class Session:
     touched: float = field(default_factory=time.monotonic)  # last hook activity, for pruning
     aliases: list[str] = field(default_factory=list)  # message ids folded into this turn (steer / redirect)
     synthetic: bool = False  # a Hermes-generated turn (subagent results, process notice): no message to reply to
+    agents: AgentBook = field(default_factory=AgentBook)  # delegated subagents, one timeline panel per batch
+    background_refresh: Any = None  # TimerHandle of a pending refresh while background subagents still run
+    final_phase: Phase | None = None  # set once the terminal card landed
+    parked_at: float = 0.0  # monotonic; when a finished card started tracking background subagents
 
     # content of the whole turn, across cards
     tracker: ToolTracker = field(default_factory=ToolTracker)
@@ -171,6 +177,30 @@ class Session:
         self.timeline.append(entry)
         self.last_was_answer = False
 
+    def record_subagent(self, event_type: str, tool_name: str, preview: str, details: dict[str, Any]) -> bool:
+        """A subagent event: update its record; the first event of a batch opens that batch's panel here."""
+        batch = self.agents.apply(event_type, tool_name, preview, details)
+        if batch is None:
+            return False
+        if not any(e.kind is BlockKind.AGENTS and e.batch == batch for e in self.timeline):
+            self.close_entry()
+            entry = Entry(BlockKind.AGENTS, f"b{len(self.timeline)}")
+            entry.batch, entry.ended = batch, time.monotonic()
+            self.timeline.append(entry)
+            self.last_was_answer = False
+        return True
+
+    def add_agents_snapshot(self, book: AgentBook, batch: str) -> None:
+        """Show another turn's finished batch here (the summary turn after background subagents complete)."""
+        for key, record in book.records.items():
+            if record.batch == batch:
+                self.agents.records[key] = record
+        self.close_entry()
+        entry = Entry(BlockKind.AGENTS, f"b{len(self.timeline)}")
+        entry.batch, entry.ended = batch, time.monotonic()
+        self.timeline.append(entry)
+        self.last_was_answer = False
+
     def add_thought(self, text: str) -> None:
         self.thoughts += text
         self.last_was_answer = False
@@ -203,6 +233,7 @@ class Session:
                 elapsed_s=elapsed,
                 open=is_open,
                 label=entry.label,
+                agents=self.agents.views(entry.batch) if entry.kind is BlockKind.AGENTS else (),
             ))
         return tuple(out)
 

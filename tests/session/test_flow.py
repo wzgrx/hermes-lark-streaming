@@ -315,3 +315,46 @@ async def test_unknown_generated_turns_stay_native(make_controller, client):
     ctl = make_controller()
     ctl.on_message_started(message_id=None, chat_id="oc_1", session_key="sk", text="[SYSTEM: something else]")
     assert ctl._sessions == {} and ctl.synthetic_id_for("sk") is None and client.calls == []
+
+
+def sub(i: int, **extra):
+    return {"subagent_id": f"sa-{i}", "task_index": i, "task_count": 2, "goal": f"任务 {i}",
+            "delegation_id": "deleg_live", **extra}
+
+
+async def test_subagents_show_as_a_panel_on_the_live_card(make_controller, client):
+    ctl = make_controller()
+    await start(ctl)
+    assert ctl.on_subagent_event(message_id="om_1", event_type="subagent.start", details=sub(0)) is True
+    assert ctl.on_subagent_event(message_id="om_1", event_type="subagent.complete", details=sub(0, status="completed",
+                                 summary="完成了")) is True
+    await settle(ctl)
+    assert any("🔀 子代理" in str(a) for b in client.of("batch_update") for a in b[2])  # inserted while streaming
+    assert await ctl.on_completed_wait(message_id="om_1", answer="汇总") is True
+    assert "完成了" in str(client.of("update_card")[-1][2]) and ctl._background == {}
+
+
+async def test_background_subagents_keep_updating_the_finished_card(make_controller, client, monkeypatch):
+    from hermes_lark_streaming.session import controller as controller_module
+
+    monkeypatch.setattr(controller_module, "_BACKGROUND_REFRESH_SEC", 0.05)
+    ctl = make_controller()
+    await start(ctl, session_key="sk")
+    ctl.on_subagent_event(message_id="om_1", event_type="subagent.start", details=sub(0))
+    assert await ctl.on_completed_wait(message_id="om_1", answer="已派出后台子代理") is True
+    assert "1 运行中" in str(client.of("update_card")[-1][2])
+    assert "om_1" in ctl._background  # the card keeps tracking its subagents after the turn ended
+    finals = len(client.of("update_card"))
+    ctl.on_subagent_event(message_id="om_1", event_type="subagent.tool", tool_name="terminal",
+                          details=sub(0, tool_count=4))
+    ctl.on_subagent_event(message_id="om_1", event_type="subagent.complete",
+                          details=sub(0, status="completed", summary="三个入口", duration_seconds=125.0))
+    await settle(ctl, 0.8)
+    last = str(client.of("update_card")[-1][2])
+    assert len(client.of("update_card")) > finals and "三个入口" in last and "全部完成" in last
+    assert ctl._background == {}  # all done: tracking released
+    # the summary turn Hermes starts afterwards carries the same batch, finished
+    text = "[ASYNC DELEGATION BATCH COMPLETE — deleg_other] A background fan-out unit you started finished."
+    ctl.on_message_started(message_id=None, chat_id="oc_1", session_key="sk", text=text)
+    summary = ctl._sessions[ctl.synthetic_id_for("sk")]
+    assert [e.kind.value for e in summary.timeline] == ["note", "agents"]

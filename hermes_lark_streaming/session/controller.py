@@ -36,10 +36,11 @@ from ..transport import (
 from ..transport.media import deliver_media_files, media_paths_to_deliver
 from ..transport.open_cards import OPEN_CARDS_FILE, OpenCards
 from ..transport.routing import BotRegistry
+from .agents import SUBAGENT_EVENTS, AgentBook
 from .pipeline import Pipeline, Runtime, guard_for
 from .state import Session, State
 from .static import CronDeliveryOutcomeUnknown, StaticDelivery
-from .synthetic import synthetic_note
+from .synthetic import delegation_batch, synthetic_note
 from .text import split_reasoning_text, strip_reasoning_tags
 
 _logger = logging.getLogger("hermes_lark_streaming")
@@ -48,6 +49,7 @@ _PROMPT_SPLIT_WAIT_SEC = _CARD_CREATION_WAIT_SEC * 2 + 30
 _ABANDONED_SEC = 6 * 3600.0  # a turn silent this long has lost its completion
 _SWEEP_INTERVAL_SEC = 300.0  # look for cards left live by a dead gateway at most this often
 _ORPHAN_MIN_AGE_SEC = 120.0
+_BACKGROUND_REFRESH_SEC = 5.0  # a finished card re-renders at most this often while its subagents run
 _STARTED = frozenset({"running", "started", "tool.started"})
 
 
@@ -61,6 +63,9 @@ class Controller:
         self._sessions: dict[str, Session] = {}
         self._by_key: dict[str, Session] = {}
         self._synthetic: dict[str, str] = {}  # session key -> id of the running Hermes-generated turn
+        self._background: dict[str, Session] = {}  # finished cards whose background subagents still report
+        self._batches: dict[str, AgentBook] = {}  # recent background batches, for their summary turn's card
+        self._last_batch: dict[str, tuple[str, AgentBook, float]] = {}  # chat -> newest background batch
         self._interrupts: dict[str, str] = {}
         self._fallback: dict[str, set[str]] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -189,6 +194,9 @@ class Controller:
         its card is closed as stopped instead of being left spinning."""
         ttl = self.source.settings().card_ttl_sec
         now = time.monotonic()
+        for parked in {id(s): s for s in self._background.values()}.values():
+            if now - max(parked.touched, parked.parked_at) > _ABANDONED_SEC:
+                self._unpark(parked)  # its subagents went silent; the card keeps its last state
         for session in {id(s): s for s in self._sessions.values()}.values():
             idle = now - session.touched
             if session.state.terminal and idle > ttl:
@@ -256,8 +264,90 @@ class Controller:
             session.synthetic = True
             session.add_note(synthetic[1], label=synthetic[0])
             self._synthetic[session_key] = message_id
+            found = self._summary_batch(chat_id, delegation_batch(text))
+            if found is not None:
+                session.add_agents_snapshot(found[1], found[0])  # what the subagents did, above the summary
         session.create_task = self._fire(self.pipeline.create(session), loop)
         _logger.info("session created: msg=%s chat=%s", message_id[:12], chat_id[:12])
+
+    # ------------------------------------------------------------------ subagents
+
+    def on_subagent_event(
+        self, *, message_id: str | None, event_type: str, tool_name: str = "", preview: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> bool:
+        """A delegated child's progress, relayed through the parent turn's tool callback (worker threads)."""
+        if not self.enabled or not message_id or event_type not in SUBAGENT_EVENTS:
+            return False
+        session = self._sessions.get(message_id)
+        parked = False
+        if session is None or session.state.terminal:
+            session, parked = self._background.get(message_id), True
+        if session is None:
+            return False
+        session.touched = time.monotonic()
+        with session.lock:
+            changed = session.record_subagent(event_type, tool_name, preview, details or {})
+        if changed and parked:
+            urgent = event_type == "subagent.complete"
+            with contextlib.suppress(RuntimeError):  # loop closed during shutdown
+                session.loop.call_soon_threadsafe(self._schedule_refresh, session, urgent)
+        elif changed:
+            self._wake(session)
+        return True  # ours: Hermes' own subagent progress bubbles would duplicate the panel
+
+    def _park(self, session: Session) -> None:
+        """The turn ended but its background subagents still run: keep the card to update their panel."""
+        for batch in session.agents.batches():
+            self._batches[batch] = session.agents
+            self._last_batch[session.chat_id] = (batch, session.agents, time.monotonic())
+        while len(self._batches) > 16:
+            del self._batches[next(iter(self._batches))]
+        if session.channel is None or session.final_phase is None:
+            return
+        session.parked_at = time.monotonic()
+        for key in {session.message_id, session.anchor_id, *session.aliases}:
+            if key:
+                self._background[key] = session
+        _logger.info("tracking background subagents: msg=%s", session.message_id[:12])
+
+    def _unpark(self, session: Session) -> None:
+        for key, value in list(self._background.items()):
+            if value is session:
+                del self._background[key]
+
+    def _schedule_refresh(self, session: Session, urgent: bool) -> None:
+        """Loop thread: coalesce refreshes; a finished subagent refreshes almost at once."""
+        delay = 0.5 if urgent else _BACKGROUND_REFRESH_SEC
+        if session.background_refresh is not None:
+            if not urgent:
+                return
+            session.background_refresh.cancel()
+        session.background_refresh = session.loop.call_later(delay, self._start_refresh, session)
+
+    def _start_refresh(self, session: Session) -> None:
+        session.background_refresh = None
+        session.loop.create_task(self._refresh(session))
+
+    async def _refresh(self, session: Session) -> None:
+        try:
+            await asyncio.wait_for(self.pipeline.refresh_finished(session), timeout=30)
+        except Exception:
+            _logger.warning("background subagent refresh failed: msg=%s", session.message_id[:12], exc_info=True)
+        if not session.agents.running:
+            self._unpark(session)
+            _logger.info("background subagents done: msg=%s", session.message_id[:12])
+
+    def _summary_batch(self, chat_id: str, batch: str | None) -> tuple[str, AgentBook] | None:
+        """The background batch a summary turn reports on. Hermes names the async batch and the live-progress
+        batch with separate ids, so when the id does not match, the chat's newest batch (once) stands in: the
+        summary turn arrives right after its batch finishes."""
+        if batch and (book := self._batches.get(batch)) is not None:
+            return batch, book
+        last = self._last_batch.pop(chat_id, None)
+        if last is not None and time.monotonic() - last[2] < 1800:
+            return last[0], last[1]
+        return None
 
     def synthetic_id_for(self, session_key: str | None) -> str | None:
         """Hooks of a Hermes-generated turn carry no message id; its session key names the card instead."""
@@ -569,6 +659,8 @@ class Controller:
         finally:
             self._flush_reviews(session, delivered)
             self._drop(session)
+            if delivered and session.agents.running:
+                self._park(session)
 
     def _finish_later(self, session: Session, phase: Phase) -> None:
         if session.flusher is not None:

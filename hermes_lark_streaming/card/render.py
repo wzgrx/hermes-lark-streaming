@@ -20,7 +20,19 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from .markdown import downgrade_tables, optimize_markdown_style, split_long_text
-from .model import Block, BlockKind, Metric, Phase, RenderOptions, Section, Step, StepStatus, TurnView
+from .model import (
+    AgentStatus,
+    Block,
+    BlockKind,
+    Metric,
+    Phase,
+    RenderOptions,
+    Section,
+    Step,
+    StepStatus,
+    Subagent,
+    TurnView,
+)
 from .numbers import short_count
 from .redact import redact
 
@@ -244,6 +256,66 @@ def _tools_panel(block: Block, view: TurnView, opts: RenderOptions) -> dict[str,
                  expanded=_expanded(view, opts, failed=bool(failed)), element_id=_id(block.key, view))
 
 
+_AGENT_STATUS = {
+    AgentStatus.RUNNING: ("⏳", "turquoise", "运行中", "Running"),
+    AgentStatus.OK: ("✅", "green", "完成", "Done"),
+    AgentStatus.FAILED: ("❌", "red", "失败", "Failed"),
+}
+
+
+def _agent_elements(agent: Subagent) -> list[dict[str, Any]]:
+    mark, color, zh, en = _AGENT_STATUS[agent.status]
+    goal = esc(clip(agent.goal, 50)) or f"子代理 {agent.index}"
+    head = f"{mark} **#{agent.index} {goal}**"
+    elements: list[dict[str, Any]] = [_markdown(
+        Bi(f"{head} · <font color='{color}'>{zh}</font>", f"{head} · <font color='{color}'>{en}</font>"), "notation",
+    )]
+    detail = [f"{agent.tools} 步"] if agent.tools else []
+    if agent.elapsed_s:
+        detail.append(duration(agent.elapsed_s, whole=agent.status is AgentStatus.RUNNING))
+    if agent.status is AgentStatus.RUNNING and agent.recent:
+        detail.append("最近 " + ", ".join(agent.recent))
+    elif agent.summary:
+        detail.append(agent.summary)
+    if detail:
+        elements.append({
+            "tag": "div",
+            "margin": "0px 0px 0px 22px",
+            "text": {"tag": "plain_text", "content": clip(" · ".join(detail), _DETAIL_CHARS), "text_color": "grey",
+                     "text_size": "notation"},
+        })
+    return elements
+
+
+def _agents_panel(block: Block, view: TurnView, opts: RenderOptions) -> dict[str, Any]:
+    """One delegate_task batch: a row per subagent. It stays open while any of them still runs, even on a
+    finished card (background subagents keep reporting after the parent turn ended)."""
+    agents = block.agents
+    running = sum(a.status is AgentStatus.RUNNING for a in agents)
+    failed = sum(a.status is AgentStatus.FAILED for a in agents)
+    done = len(agents) - running - failed
+    zh, en = f"🔀 子代理 · {len(agents)} 个", f"🔀 Subagents · {len(agents)}"
+    if running:
+        zh += f" · {running} 运行中" + (f" · {done} 完成" if done else "")
+        en += f" · {running} running" + (f" · {done} done" if done else "")
+    else:
+        longest = max((a.elapsed_s or 0.0 for a in agents), default=0.0)
+        zh += " · 全部完成" if not failed else ""
+        en += " · all done" if not failed else ""
+        if longest:
+            zh += f" · ({duration(longest)})"
+            en += f" · ({duration(longest)})"
+    tail_zh = f" <font color='red'>· {failed} 失败</font>" if failed else ""
+    tail_en = f" <font color='red'>· {failed} failed</font>" if failed else ""
+    children: list[dict[str, Any]] = []
+    for agent in agents:
+        children.extend(_agent_elements(agent))
+    return panel(title=Bi(grey(zh) + tail_zh, grey(en) + tail_en),
+                 elements=children or [_markdown(Bi.same(" "), "notation")],
+                 expanded=bool(running) or _expanded(view, opts, failed=bool(failed)),
+                 element_id=_id(block.key, view))
+
+
 def _answer(block: Block, view: TurnView, opts: RenderOptions, *, streaming: bool) -> list[dict[str, Any]]:
     content = downgrade_tables(optimize_markdown_style(block.text))
     if streaming:
@@ -279,6 +351,8 @@ def block_elements(view: TurnView, opts: RenderOptions, *, streaming: bool) -> l
             elements.append(_thought_panel(block, view, opts))
         elif block.kind is BlockKind.TOOLS and block.steps:
             elements.append(_tools_panel(block, view, opts))
+        elif block.kind is BlockKind.AGENTS and block.agents:
+            elements.append(_agents_panel(block, view, opts))
     return elements
 
 

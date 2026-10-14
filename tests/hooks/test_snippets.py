@@ -386,3 +386,14 @@ class TestFold:
     def test_other_platforms_and_stale_turns_are_ignored(self) -> None:
         assert not self.run(platform="telegram").called
         assert not self.run(same_agent=False).called
+
+
+def test_tool_callback_forwards_subagent_events_after_the_turn_ended() -> None:
+    ctx = ctx_with()
+    ctx._run_still_current.return_value = False  # background subagents report after the parent turn ended
+    with patch(f"{BRIDGE}.on_subagent_event", return_value=True) as hook:
+        assert tool_callback(True)(ctx)("subagent.complete", preview="done", status="completed",
+                                        subagent_id="sa-1") is None
+    kwargs = hook.call_args.kwargs
+    assert kwargs["event_type"] == "subagent.complete" and kwargs["message_id"] == "modern-message"
+    assert kwargs["details"]["subagent_id"] == "sa-1" and kwargs["session_key"] == "sk-modern"

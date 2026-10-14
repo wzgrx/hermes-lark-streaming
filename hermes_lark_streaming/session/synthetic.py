@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+_BATCH = re.compile(r"\[ASYNC DELEGATION BATCH COMPLETE\W+(deleg_[A-Za-z0-9_]{1,40})")
 _PROCESS = re.compile(r"\[IMPORTANT: Background process (proc_[A-Za-z0-9_]{1,40})")
 
 
@@ -20,3 +21,9 @@ def synthetic_note(text: str) -> tuple[str, str] | None:
     if match:
         return "🔔 后台进程通知", match.group(1)
     return None
+
+
+def delegation_batch(text: str) -> str | None:
+    """The delegate_task batch id a subagent summary turn reports on (``deleg_…``)."""
+    match = _BATCH.match((text or "").lstrip()[:200])
+    return match.group(1) if match else None

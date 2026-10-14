@@ -518,6 +518,14 @@ class Pipeline:
         except Exception:
             _logger.warning("sealing the old card failed; continuing", exc_info=True)
 
+    async def refresh_finished(self, session: Session) -> None:
+        """Re-render a finished card (background subagents kept reporting after its turn ended)."""
+        channel, client = session.channel, session.client
+        if channel is None or client is None or session.final_phase is None:
+            return
+        view = session.view(session.final_phase, finished=True)
+        await client.update_card(channel, render.render_final(view, self.opts()))
+
     async def mark_interrupted(self, client: CardKitClient, card_id: str) -> None:
         """Close a card left live by a turn that died with its gateway, keeping what it already shows.
 
@@ -574,6 +582,7 @@ class Pipeline:
                     closed = True
                 await client.update_card(channel, card)
                 session.state = {Phase.FAILED: State.FAILED, Phase.STOPPED: State.ABORTED}.get(phase, State.COMPLETED)
+                session.final_phase = phase
                 if self.rt.open_cards is not None:
                     self.rt.open_cards.remove(channel.card_id)
                 metrics.increment("card.completed")

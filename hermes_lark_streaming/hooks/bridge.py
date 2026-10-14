@@ -232,6 +232,32 @@ def on_tool_updated(
     return bool(mid) and bool(ctrl.on_tool_update(message_id=mid, tool_name=tool_name, status=status, detail=detail))
 
 
+_SUBAGENT_DETAIL_KEYS = (
+    "subagent_id", "task_index", "task_count", "goal", "delegation_id", "tool_count", "status", "duration_seconds",
+    "summary", "failure_reason",
+)
+
+
+@_safe(False, logging.DEBUG)
+def on_subagent_event(
+    ctrl: Any,
+    *,
+    message_id: str | None,
+    event_type: str,
+    tool_name: str = "",
+    preview: str = "",
+    details: Any = None,
+    session_key: str | None = None,
+) -> bool:
+    """A delegated child's progress relayed to the parent turn's tool callback; True = shown on the card."""
+    mid = _mid(ctrl, message_id, session_key)
+    raw = details if isinstance(details, dict) else {}
+    picked = {k: raw[k] for k in _SUBAGENT_DETAIL_KEYS if k in raw}  # scalars only; no file lists or tails
+    return bool(mid) and bool(ctrl.on_subagent_event(
+        message_id=mid, event_type=event_type, tool_name=tool_name, preview=preview, details=picked,
+    ))
+
+
 @_safe(False, logging.DEBUG)
 def on_answer_delta(ctrl: Any, *, message_id: str, text: str, session_key: str | None = None) -> bool:
     mid = _mid(ctrl, message_id, session_key)

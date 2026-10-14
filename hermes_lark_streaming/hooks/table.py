@@ -77,7 +77,13 @@ INJECTIONS: tuple[Injection, ...] = (
         snippets.fold,
         ("on_turn_folded",),
     ),
-    Injection("TOOL", GATEWAY_RUNNER, (FuncBody("progress_callback"),), snippets.tool, ("on_tool_updated",)),
+    Injection(
+        "TOOL",
+        GATEWAY_RUNNER,
+        (FuncBody("progress_callback"),),
+        snippets.tool,
+        ("on_tool_updated", "on_subagent_event"),
+    ),
     Injection("ANSWER", GATEWAY_RUNNER, (FuncBody("stream_delta_cb"),), snippets.answer, ("on_answer_delta",)),
     Injection(
         "THINKING",
