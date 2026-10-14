@@ -21,4 +21,5 @@ python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 - 面向用户的字符串用中文,双语文案用 `Bi(zh, en)`。
 - 提交信息正文用无序列表。
 - 真实验收:`scripts/live_acceptance.py <chat_id>` 走一轮模拟对话(`--ok` 为全部成功,不写真实用量台账),`scripts/preview_card.py <chat_id> --width compact|default` 发示例卡片看排版,再用 `scripts/windows/feishu_shot.ps1` 从 WSL 截取飞书桌面端(PowerShell 用 `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe`,`-Out` 只给文件名,图存在 Windows 的 `%TEMP%`)。
+- 飞书实测:窗口最小化时先 `scripts/windows/feishu_restore.ps1`;`feishu_send.ps1` / `feishu_click.ps1` 在窗口最小化时拒绝操作。卡片按钮的点击由 Hermes 适配器转成 `/card button {value}`,插件的入站钩子识别自己的值(`lark_card`)。
 - 飞书排版:自由文本会把中文词拆到两行,需要对齐或不变形的内容用自适应列(`trisect` 格子、`flow` 信息块);`collapsible_panel` 里不能放 `table`;列权重 1..5。
