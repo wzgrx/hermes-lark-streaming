@@ -20,7 +20,7 @@ from concurrent.futures import Future as ConcurrentFuture
 from pathlib import Path
 from typing import Any
 
-from ..card.model import Footer, Phase
+from ..card.model import Footer, Phase, TodoItem
 from ..config import ConfigSource, hermes_home
 from ..details import DetailsCollector, DetailsConfig, TurnTelemetry, observe_history
 from ..details.providers import with_canonical_provider
@@ -33,7 +33,7 @@ from ..transport import (
     FeishuAPIError,
     classify_delivery_failure,
 )
-from ..transport.media import deliver_media_files, media_paths_to_deliver
+from ..transport.media import deliver_media_files, extract_media_paths, media_paths_to_deliver
 from ..transport.open_cards import OPEN_CARDS_FILE, OpenCards
 from ..transport.routing import BotRegistry
 from .agents import SUBAGENT_EVENTS, AgentBook
@@ -269,6 +269,15 @@ class Controller:
                 session.add_agents_snapshot(found[1], found[0])  # what the subagents did, above the summary
         session.create_task = self._fire(self.pipeline.create(session), loop)
         _logger.info("session created: msg=%s chat=%s", message_id[:12], chat_id[:12])
+
+    def on_todos(self, *, message_id: str, todos: list[TodoItem]) -> bool:
+        """The agent rewrote its task list (Hermes' todo tool): show the newest revision."""
+        if not self.enabled or (session := self._active(message_id)) is None:
+            return False
+        with session.lock:
+            session.todos = tuple(todos)
+        self._wake(session)
+        return True
 
     # ------------------------------------------------------------------ subagents
 
@@ -639,6 +648,9 @@ class Controller:
                 session.add_answer(final)
         session.elapsed_s = duration if duration > 0 else None
         session.final_footer = self._footer_for(session, model, context)
+        with contextlib.suppress(Exception):  # the file list is a courtesy; never block the card on it
+            paths = dict.fromkeys([*extract_media_paths(session.raw_text()), *extract_media_paths(answer or "")])
+            session.outputs = tuple(Path(p).name for p in paths)
         phase = Phase.FAILED if is_error else Phase.DONE
         sent = await self._finish(session, phase)
         if sent:

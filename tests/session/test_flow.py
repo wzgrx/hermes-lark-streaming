@@ -117,7 +117,7 @@ async def test_stop_by_session_key(make_controller, client):
 
 
 async def test_time_limit_handoff_seals_old_and_continues(make_controller, client):
-    ctl = make_controller({"rollover_sec": 60})
+    ctl = make_controller({"rollover_sec": 60, "rollover": True})  # the old behaviour, now opt-in
     session = await start(ctl)
     ctl.on_answer(message_id="om_1", text="第一段")
     await settle(ctl)
@@ -358,3 +358,65 @@ async def test_background_subagents_keep_updating_the_finished_card(make_control
     ctl.on_message_started(message_id=None, chat_id="oc_1", session_key="sk", text=text)
     summary = ctl._sessions[ctl.synthetic_id_for("sk")]
     assert [e.kind.value for e in summary.timeline] == ["note", "agents"]
+
+
+async def test_a_long_turn_stays_on_one_card_after_the_streaming_window(make_controller, client):
+    from hermes_lark_streaming.transport.errors import StreamingClosedError
+
+    ctl = make_controller()
+    session = await start(ctl)
+    ctl.on_answer(message_id="om_1", text="第一段")
+    await settle(ctl)
+    session.card_started -= 900  # fifteen minutes in: no time-based handoff any more
+    client.fail["update_element_content"] = StreamingClosedError("streaming closed", 300309)
+    ctl.on_answer(message_id="om_1", text="第二段")
+    await settle(ctl, 1.6)
+    assert client.cards == 1 and session.streaming_closed
+    patched = [a for b in client.of("batch_update") for a in b[2] if a["action"] == "partial_update_element"]
+    assert any("第一段第二段" in str(a) for a in patched)  # the answer keeps growing on the same card
+    del client.fail["update_element_content"]
+    assert await ctl.on_completed_wait(message_id="om_1", answer="") is True
+    assert client.of("update_card")[-1][0] == "card_1"
+
+
+async def test_task_list_stays_above_the_live_line(make_controller, client):
+    import json as _json
+
+    from hermes_lark_streaming import session as session_pkg
+    from hermes_lark_streaming.hooks import bridge
+
+    ctl = make_controller()
+    await start(ctl)
+    todos = {"todos": [{"id": "1", "content": "反编译 APK", "status": "completed"},
+                       {"id": "2", "content": "定位支付接口", "status": "in_progress"},
+                       {"id": "3", "content": "写报告", "status": "pending"}], "summary": {}}
+    with patch.object(session_pkg, "get_controller", lambda: ctl):
+        bridge.on_tool_updated(message_id="om_1", tool_name="todo", status="started", detail="")
+        bridge.on_tool_updated(message_id="om_1", tool_name="todo", status="completed", detail="",
+                               result=_json.dumps(todos, ensure_ascii=False))
+    await settle(ctl)
+    ctl.on_answer(message_id="om_1", text="继续分析。")
+    await settle(ctl)
+    adds = [a["params"] for b in client.of("batch_update") for a in b[2] if a["action"] == "add_elements"]
+    todo_add = next(p for p in adds if "任务清单" in str(p))
+    assert todo_add["target_element_id"] == STATUS_ID and "1/3 完成" in str(todo_add)
+    later = [p for p in adds[adds.index(todo_add) + 1:]]
+    assert later and all(p["target_element_id"].startswith("todo_") for p in later)  # inserted above the list
+    assert await ctl.on_completed_wait(message_id="om_1", answer="") is True
+    final = client.of("update_card")[-1][2]
+    panel = next(e for e in final["body"]["elements"] if "任务清单" in str(e))
+    assert panel["expanded"] is False and "~~反编译 APK~~" in str(panel) and "**定位支付接口**" in str(panel)
+
+
+async def test_finished_card_lists_the_files_the_answer_delivers(make_controller, client, tmp_path):
+    report = tmp_path / "report.md"
+    report.write_text("# r", encoding="utf-8")
+    chart = tmp_path / "chart.png"
+    chart.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 64)
+    ctl = make_controller()
+    await start(ctl)
+    answer = f"报告已生成。\nMEDIA:{report}\nMEDIA:{chart}"
+    ctl.on_answer(message_id="om_1", text=answer)
+    assert await ctl.on_completed_wait(message_id="om_1", answer=answer, deliver_all_media=True) is True
+    final = str(client.of("update_card")[-1][2])
+    assert "📎 产出 · report.md · chart.png" in final

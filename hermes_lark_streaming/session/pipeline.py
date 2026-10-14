@@ -44,6 +44,7 @@ _logger = logging.getLogger("hermes_lark_streaming")
 TICK_SEC = 3.0  # live clock refresh while a turn is running
 _FINALIZE_ATTEMPTS = 3
 _ROLLOVER_RETRY_SEC = 20.0
+_CLOSED_INTERVAL_SEC = 1.0  # flush interval once the streaming window closed (no typewriter)
 _UNCERTAIN_NOTICE = (
     "⚠️ 卡片投递确认在网络响应阶段中断; 卡片可能已经送达。请先刷新当前会话, 再决定是否重试。\n"
     "Delivery confirmation was interrupted; refresh this chat before retrying."
@@ -315,7 +316,7 @@ class Pipeline:
             return
         if await self._maybe_rollover(session):
             return
-        if session.streaming_closed:
+        if session.streaming_closed and self.rt.settings.rollover:
             return
         if time.monotonic() < session.stream_retry_after:  # one backoff gate for every write, not just streams
             metrics.increment("cardkit.flush.backoff_skipped")
@@ -339,16 +340,20 @@ class Pipeline:
         committed: dict[str, str] = {}
         streams: list[tuple[str, str, str]] = []
         present = set(session.inserted)
+        todo = render.todo_id(view)  # once shown, the task list stays right above the live line
         for element in elements:
             element_id, sig = element["element_id"], signature(element)
             if element_id not in present:
+                target = todo if todo in present and element_id != todo else render.STATUS_ID
                 actions.append({"action": "add_elements", "params": {
-                    "type": "insert_before", "target_element_id": render.STATUS_ID, "elements": [element],
+                    "type": "insert_before", "target_element_id": target, "elements": [element],
                 }})
                 present.add(element_id)
                 committed[element_id] = sig
             elif session.pushed.get(element_id) != sig:
-                if element["tag"] == "markdown" and element_id != render.STATUS_ID:
+                # Typewriter while Feishu's streaming window is open; after it closes (about ten minutes) the
+                # same card keeps going with plain partial updates instead of handing over to a new card.
+                if element["tag"] == "markdown" and element_id != render.STATUS_ID and not session.streaming_closed:
                     streams.append((element_id, element["content"], sig))  # typewriter, not a replace
                 else:
                     actions.append({"action": "partial_update_element", "params": {
@@ -402,6 +407,8 @@ class Pipeline:
         session.streaming_closed = True
         metrics.increment("cardkit.stream.closed_before_completion")
         if session.flusher is not None:
+            # without the typewriter each update resends whole elements: once a second is plenty
+            session.flusher.interval_sec = max(session.flusher.interval_sec, _CLOSED_INTERVAL_SEC)
             session.flusher.request_reflush()
 
     @staticmethod
@@ -441,6 +448,8 @@ class Pipeline:
     # ---------------------------------------------------------------- rollover
 
     async def _maybe_rollover(self, session: Session) -> bool:
+        if not self.rt.settings.rollover:
+            return False  # one card per turn; see flush for life after the streaming window
         if session.card_msg_id is None or not session.card_started or session.handoff_in_progress:
             return False
         now = time.monotonic()
@@ -475,6 +484,8 @@ class Pipeline:
         old_blocks = session.blocks_offset
         session.blocks_offset = len(session.timeline)
         session.last_was_answer = False
+        if reason != "prompt":  # a prompt split is a pause, not a continuation
+            session.add_note("接上一张卡片", label=f"↪ 第 {session.card_index + 1} 张卡片")
         try:
             card = self._initial_card(session)
             channel, message_id = await self._attach_with_fallback(
@@ -487,12 +498,15 @@ class Pipeline:
             (session.steps_offset, session.steps_offset_failed, session.answers_offset,
              session.thoughts_offset) = old_offsets
             session.blocks_offset = old_blocks
+            del session.timeline[len(session.timeline) - (1 if reason != "prompt" else 0):]  # take the label back
             if not isinstance(exc, Exception):
                 raise
             _logger.warning("card handoff failed; keeping the current card: msg=%s", session.message_id[:12],
                             exc_info=True)
             return False
         session.delivery_generation = generation
+        if reason != "prompt":
+            session.card_index += 1
         try:
             await self._seal(client, old_channel, sealed_view)
         finally:

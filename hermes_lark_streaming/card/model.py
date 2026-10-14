@@ -46,6 +46,15 @@ class BlockKind(StrEnum):
     AGENTS = "agents"  # one batch of subagents started by delegate_task
 
 
+@dataclass(frozen=True, slots=True)
+class TodoItem:
+    """One entry of the agent's own task list (Hermes' ``todo`` tool)."""
+
+    content: str
+    status: str = "pending"  # pending / in_progress / completed / cancelled
+    child: bool = False  # a subtask of the entry above
+
+
 class AgentStatus(StrEnum):
     RUNNING = "running"
     OK = "ok"
@@ -132,6 +141,9 @@ class TurnView:
     continued: bool = False  # card rolled over; more cards follow, so no terminal chrome
     card_key: str = ""  # short per-card token; keeps panel ids unique so clients don't carry state across cards
     blocks: tuple[Block, ...] = ()  # the timeline this card shows, in arrival order
+    running_s: float | None = None  # how long the newest running tool has been running
+    todos: tuple[TodoItem, ...] = ()  # the agent's task list, newest revision
+    outputs: tuple[str, ...] = ()  # file names the answer delivers (MEDIA: attachments)
 
     @property
     def failed_steps(self) -> int:

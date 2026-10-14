@@ -21,6 +21,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args[0] in COMMANDS:
         return hooks_main(args)
+    if args[0] == "report":
+        from .report import main as report_main
+
+        return report_main(args[1:])
     try:
         from . import cli  # type: ignore[attr-defined,unused-ignore]
     except ImportError:

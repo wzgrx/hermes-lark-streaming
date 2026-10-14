@@ -16,6 +16,7 @@ While streaming, a grey live line at the bottom says what is happening; new bloc
 from __future__ import annotations
 
 import html
+import re
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -38,6 +39,8 @@ from .redact import redact
 
 STATUS_ID = "live"  # the trailing live line while streaming
 DETAILS_ID = "details"
+TODO_ID = "todo"  # the task list sits just above the live line; new blocks are inserted above it
+STOP_ID = "stop"  # the stop button under the live line, only while the turn runs
 
 ELEMENT_LIMIT = 200  # CardKit hard cap on elements per card, counted over every nested tag
 ELEMENT_BUDGET = 160  # hand over to a fresh card before the live card gets this big
@@ -238,6 +241,29 @@ def _step_elements(step: Step) -> list[dict[str, Any]]:
     return elements
 
 
+_VISIBLE_STEPS = 8  # per tools panel; long runs otherwise exhaust the card's element budget
+
+
+def _fold_steps(steps: tuple[Step, ...]) -> tuple[list[Step], list[Step]]:
+    """``(shown, folded)``: the latest steps in full; earlier successes fold into one line, failures never do."""
+    if len(steps) <= _VISIBLE_STEPS:
+        return list(steps), []
+    early, late = steps[:-_VISIBLE_STEPS], steps[-_VISIBLE_STEPS:]
+    kept = [s for s in early if s.status is not StepStatus.OK]
+    return [*kept, *late], [s for s in early if s.status is StepStatus.OK]
+
+
+def _folded_steps_line(folded: list[Step]) -> dict[str, Any]:
+    counts: dict[str, int] = {}
+    for step in folded:
+        counts[step.name] = counts.get(step.name, 0) + 1
+    top = sorted(counts.items(), key=lambda kv: -kv[1])[:3]
+    zh = " · ".join(f"{esc(clip(name, 24))} {n} 次" for name, n in top)
+    en = " · ".join(f"{esc(clip(name, 24))} x{n}" for name, n in top)
+    return _markdown(Bi(grey(f"… 前 {len(folded)} 步已完成 · {zh}"), grey(f"… {len(folded)} earlier steps · {en}")),
+                     "notation")
+
+
 def _tools_panel(block: Block, view: TurnView, opts: RenderOptions) -> dict[str, Any]:
     count = len(block.steps)
     failed = sum(s.status is StepStatus.FAILED for s in block.steps)
@@ -249,7 +275,10 @@ def _tools_panel(block: Block, view: TurnView, opts: RenderOptions) -> dict[str,
     tail_zh = f" <font color='red'>· {failed} 失败</font>" if failed else ""
     tail_en = f" <font color='red'>· {failed} failed</font>" if failed else ""
     children: list[dict[str, Any]] = []
-    for step in block.steps:
+    shown, folded = _fold_steps(block.steps)
+    if folded:
+        children.append(_folded_steps_line(folded))
+    for step in shown:
         children.extend(_step_elements(step))
     return panel(title=Bi(grey(zh) + tail_zh, grey(en) + tail_en),
                  elements=children or [_markdown(Bi.same(" "), "notation")],
@@ -363,6 +392,9 @@ def live_text(view: TurnView) -> Bi:
     running = next((s for s in reversed(view.steps) if s.status is StepStatus.RUNNING), None)
     if running is not None:
         zh, en = f"正在执行 {esc(clip(running.name, 40))}", f"Running {esc(clip(running.name, 40))}"
+        if view.running_s is not None and view.running_s >= 5:  # a slow command: show how long it has run
+            took = duration(view.running_s, whole=True)
+            zh, en = f"{zh} · 已 {took}", f"{en} · {took}"
     else:
         zh, en = "处理中", "Working"
     counter = f"{view.finished_steps}/{view.total_steps}" if view.total_steps else ""
@@ -420,7 +452,45 @@ def footer_chips(view: TurnView) -> list[Bi]:
         permille = int(footer.cache_hit * 1000 + 1e-9)  # truncated like the details value, so both agree
         hit = f"{'≥' if footer.cache_hit_is_floor else ''}{permille // 10}.{permille % 10}%".replace(".0%", "%")
         chips.append(Bi(f"⚡ 缓存 {hit}", f"⚡ cache {hit}"))
+    warning = quota_warning(view)
+    if warning is not None:
+        chips.append(warning)
     return chips
+
+
+_DAYS = re.compile(r"剩 (\d+) 天")
+
+
+def quota_warning(view: TurnView) -> Bi | None:
+    """A coloured chip when the subscription that served this turn is nearly used up.
+
+    Several accounts of one provider rotate (Hermes' credential pool moves on when one is exhausted), so only
+    the account with the most headroom counts: one account at 97% beside a fresh one is no reason to worry.
+    A fixed-period subscription without a quota API warns in its last three days instead.
+    """
+    section = next((s for s in view.sections if s.key == "accounts"), None)
+    if section is None:
+        return None
+    worst_window: dict[str, float] = {}
+    days_left: int | None = None
+    for metric in section.metrics:
+        account, _, window = metric.label.rpartition(" · ")
+        if window == "订阅期":
+            match = _DAYS.match(metric.value)
+            days_left = int(match.group(1)) if match else 0 if metric.value == "已到期" else days_left
+        elif metric.ratio is not None:
+            worst_window[account] = max(worst_window.get(account, 0.0), metric.ratio)
+    if worst_window:
+        headroom = min(worst_window.values())
+        if headroom >= 0.9:
+            color = "red" if headroom >= 0.97 else "orange"
+            pct = f"{int(headroom * 100)}%"
+            return Bi(f"<font color='{color}'>⚠️ 额度 {pct}</font>", f"<font color='{color}'>⚠️ quota {pct}</font>")
+    if days_left is not None and days_left <= 3:
+        color = "red" if days_left <= 1 else "orange"
+        text = "订阅已到期" if days_left == 0 else f"订阅剩 {days_left} 天"
+        return Bi(f"<font color='{color}'>⏳ {text}</font>", f"<font color='{color}'>⏳ {days_left}d left</font>")
+    return None
 
 
 def _footer_elements(view: TurnView) -> list[dict[str, Any]]:
@@ -432,7 +502,8 @@ def _footer_elements(view: TurnView) -> list[dict[str, Any]]:
     chips = footer_chips(view)
     if chips:
         columns = [{"tag": "column", "width": "auto", "vertical_align": "center",
-                    "elements": [_markdown(Bi(grey(c.zh), grey(c.en)), "notation")]} for c in chips]
+                    "elements": [_markdown(c if c.zh.startswith("<font") else Bi(grey(c.zh), grey(c.en)), "notation")]}
+                   for c in chips]  # a warning chip keeps its own colour
         out.append({"tag": "column_set", "flex_mode": "flow", "horizontal_spacing": "12px", "margin": _PANEL_INSET,
                     "columns": columns})
     return out
@@ -605,7 +676,52 @@ def _summary(view: TurnView) -> str:
 
 def streaming_elements(view: TurnView, opts: RenderOptions) -> list[dict[str, Any]]:
     """Every element of the live card, in order; all carry ids so the pipeline can diff them."""
-    return [*block_elements(view, opts, streaming=True), status_element(view, opts)]
+    todo = todo_element(view, streaming=True)
+    return [*block_elements(view, opts, streaming=True), *([todo] if todo else []), status_element(view, opts),
+            stop_button()]
+
+
+def stop_button() -> dict[str, Any]:
+    """Hermes' Feishu adapter turns the click into ``/card button {"lark_card": "stop"}``; the plugin's inbound
+    hook rewrites that to ``/stop``, which Hermes honours even while the turn is busy."""
+    return {
+        "tag": "button",
+        "element_id": STOP_ID,
+        "text": {"tag": "plain_text", "content": "⏹ 停止", "i18n_content": {"en_us": "⏹ Stop"}},
+        "type": "default",
+        "size": "small",
+        "behaviors": [{"type": "callback", "value": {"lark_card": "stop"}}],
+    }
+
+
+_TODO_MARK = {"completed": "✅", "in_progress": "⏳", "cancelled": "🚫", "pending": "⬜"}
+_TODO_LIMIT = 20
+
+
+def todo_id(view: TurnView) -> str:
+    return _id(TODO_ID, view)
+
+
+def todo_element(view: TurnView, *, streaming: bool) -> dict[str, Any] | None:
+    """``📋 任务清单 · 3/7``: the agent's own plan, so a long task shows where it stands."""
+    items = [t for t in view.todos if t.content.strip()]
+    if not items:
+        return None
+    done = sum(t.status == "completed" for t in items)
+    active = sum(t.status != "cancelled" for t in items)
+    lines = []
+    for item in items[:_TODO_LIMIT]:
+        text = esc(clip(item.content, 80))
+        if item.status == "completed" or item.status == "cancelled":
+            text = grey(f"~~{text}~~")
+        elif item.status == "in_progress":
+            text = f"**{text}**"
+        lines.append(("　" if item.child else "") + f"{_TODO_MARK.get(item.status, '⬜')} {text}")
+    if len(items) > _TODO_LIMIT:
+        lines.append(grey(f"… 另有 {len(items) - _TODO_LIMIT} 项"))
+    body = _markdown(Bi.same("\n".join(lines)), "notation")
+    title = Bi(grey(f"📋 任务清单 · {done}/{active} 完成"), grey(f"📋 Tasks · {done}/{active} done"))
+    return panel(title=title, elements=[body], expanded=streaming, element_id=todo_id(view))
 
 
 def render_streaming(view: TurnView, opts: RenderOptions | None = None) -> dict[str, Any]:
@@ -622,6 +738,13 @@ def render_final(view: TurnView, opts: RenderOptions | None = None) -> dict[str,
     """Terminal card for a full-card update (also used for a sealed, rolled-over card)."""
     opts = opts or RenderOptions()
     elements = block_elements(view, opts, streaming=False)
+    todo = todo_element(view, streaming=False)
+    if todo is not None and not view.continued:
+        elements.append(todo)
+    if view.outputs and not view.continued:
+        names = " · ".join(esc(clip(name, 40)) for name in view.outputs[:8])
+        more = f" · 等 {len(view.outputs)} 个" if len(view.outputs) > 8 else ""
+        elements.append(_markdown(Bi(grey(f"📎 产出 · {names}{more}"), grey(f"📎 Files · {names}")), "notation"))
     if view.continued:
         elements.append(_markdown(Bi(grey("↪ 内容见下一张卡片"), grey("↪ Continued on the next card")), "notation"))
     else:

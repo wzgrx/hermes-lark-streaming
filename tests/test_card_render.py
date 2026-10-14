@@ -174,10 +174,10 @@ def test_streaming_card_is_blocks_then_live_line():
     card = render_streaming(view)
     assert card["config"]["streaming_mode"] is True and "header" not in card
     elements = card["body"]["elements"]
-    assert [e["element_id"] for e in elements] == ["b0_k1", "b1_k1", STATUS_ID]
+    assert [e["element_id"] for e in elements] == ["b0_k1", "b1_k1", STATUS_ID, "stop"]
     assert all(e["expanded"] for e in elements[:2])  # the reader follows along while running
     assert "运行中" in dumps(elements[1]) and "(" not in title(elements[1])  # open batch: no duration yet
-    live = zh(elements[-1])
+    live = zh(elements[-2])
     assert "正在执行 Terminal" in live and "步骤 0/1" in live and "42s" in live and "42.7" not in live
 
 
@@ -275,3 +275,51 @@ def test_grids_share_a_column_count_without_an_empty_narrow_row():
     assert [len(g["columns"]) for g in details["elements"] if g["tag"] == "column_set"] == [5, 5]  # 4 → padded
     details = render_final(done_view(sections=(three, five)))["body"]["elements"][-1]
     assert [len(g["columns"]) for g in details["elements"] if g["tag"] == "column_set"] == [3, 5]  # would add a row
+
+
+def test_long_tool_batches_fold_early_successes_but_never_failures():
+    steps = tuple(Step("Terminal" if i % 2 else "Read", f"cmd {i}", FAIL if i == 3 else OK, 10) for i in range(20))
+    tools = panels(render_final(done_view(blocks=(Block(BlockKind.TOOLS, "b0", steps=steps),))))[0]
+    text = dumps(tools)
+    assert "… 前 11 步已完成" in text and "Read 6 次" in text and "Terminal 5 次" in text  # 12 early, one failed
+    assert "cmd 3" in text and "cmd 19" in text and "cmd 5" not in text  # the failure stays visible
+    assert "工具执行 · 20 步" in title(tools)  # the title still counts every step
+
+
+def test_live_line_shows_how_long_the_running_tool_has_run():
+    running = (Step("Terminal", "make", RUN, icon="setting_outlined"),)
+    view = TurnView(elapsed_s=200.0, card_key="k", steps=running, running_s=192.4,
+                    blocks=(Block(BlockKind.TOOLS, "b0", steps=running, open=True),))
+    live = zh(render_streaming(view)["body"]["elements"][-2])
+    assert "正在执行 Terminal · 已 3m 12s" in live and "步骤 0/1" in live
+    quick = TurnView(steps=running, running_s=2.0, blocks=(Block(BlockKind.TOOLS, "b0", steps=running, open=True),))
+    assert "已" not in zh(render_streaming(quick)["body"]["elements"][-2])  # not for quick ones
+
+
+def test_quota_warning_counts_the_account_with_the_most_headroom():
+    def accounts(*rows):
+        return Section("accounts", "OpenCode Go · 订阅与额度", tuple(
+            Metric(f"{name} · {window}", f"{int(r * 100)}%", r) for name, window, r in rows), layout="bars")
+
+    def chips(section):
+        elements = render_final(done_view(sections=(section,)))["body"]["elements"]
+        hr = next(i for i, e in enumerate(elements) if e["tag"] == "hr")
+        return dumps(elements[hr + 2])
+
+    fresh = accounts(("Go a22", "每月", 0.97), ("Go a22", "5小时", 0.1), ("Go 221", "每月", 0.02))
+    assert "额度" not in chips(fresh)  # the pool moves on to Go 221: nothing to worry about
+    both = accounts(("Go a22", "每月", 0.97), ("Go 221", "每周", 0.93))
+    assert "<font color='orange'>⚠️ 额度 93%</font>" in chips(both)
+    opendesign = Section("accounts", "OpenDesign · 订阅与额度", (Metric("订阅期", "剩 2 天", 0.93, "11-12 到期"),),
+                         layout="bars")
+    assert "⏳ 订阅剩 2 天" in chips(opendesign)
+    calm = Section("accounts", "OpenDesign", (Metric("订阅期", "剩 20 天", 0.3),), layout="bars")
+    assert "订阅剩" not in chips(calm)
+
+
+def test_stop_button_only_while_the_turn_runs():
+    live = render_streaming(TurnView())["body"]["elements"]
+    button = live[-1]
+    assert button["tag"] == "button" and button["behaviors"][0]["value"] == {"lark_card": "stop"}
+    assert "stop" not in dumps(render_final(done_view())).split('"element_id": ')[-1][:10]
+    assert not any(e.get("tag") == "button" for e in render_final(done_view())["body"]["elements"])

@@ -6,11 +6,14 @@ lazily so importing this module never pulls in the session or transport layers.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
+from ..card.model import TodoItem
+from ..card.redact import redact
 from .tool_result import normalize_tool_completion
 
 _logger = logging.getLogger("hermes_lark_streaming")
@@ -60,6 +63,39 @@ def _safe_async(
     return decorator
 
 
+STOP_ACTION = "stop"
+_CARD_CLICK = "/card button "
+
+
+def card_button(text: Any) -> str | None:
+    """Our action in a card click that Hermes' Feishu adapter turned into ``/card button {value}``."""
+    if not isinstance(text, str) or not text.startswith(_CARD_CLICK):
+        return None
+    try:
+        value = json.loads(text[len(_CARD_CLICK):])
+    except ValueError:
+        return None
+    action = value.get("lark_card") if isinstance(value, dict) else None
+    return action if isinstance(action, str) else None
+
+
+def parse_todos(result: Any) -> list[TodoItem] | None:
+    """The task list in a todo tool result (``{"todos": [{id, content, status, parent?}], ...}``)."""
+    try:
+        data = json.loads(result) if isinstance(result, str) else result
+    except ValueError:
+        return None
+    rows = data.get("todos") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return None
+    items = []
+    for row in rows[:50]:
+        if isinstance(row, dict) and isinstance(row.get("content"), str):
+            status = str(row.get("status") or "pending").lower()
+            items.append(TodoItem(redact(row["content"])[:200], status, bool(row.get("parent"))))
+    return items
+
+
 def _mid(ctrl: Any, message_id: str | None, session_key: str | None) -> str | None:
     """The card a hook belongs to: its message id, or for a Hermes-generated turn (no message) its session's."""
     return message_id or ctrl.synthetic_id_for(session_key)
@@ -82,8 +118,13 @@ def _raw_message(event: Any) -> Any:
 def on_feishu_normalize(
     ctrl: Any, *, message_id: str, source: Any, event: Any, reply_anchor_id: str | None = None
 ) -> None:
-    """Clear the false ``thread_id`` Hermes' Feishu adapter sets on quoted messages (absent in the raw event)."""
+    """Clear the false ``thread_id`` Hermes' Feishu adapter sets on quoted messages (absent in the raw event), and
+    turn the card's stop button into ``/stop`` before Hermes routes the click."""
     if getattr(getattr(source, "platform", None), "value", "") != "feishu":
+        return
+    if card_button(getattr(event, "text", None)) == STOP_ACTION:
+        event.text = "/stop"  # Hermes delivers card clicks as "/card button {value}"; /stop reaches a busy session
+        _logger.info("card stop button: chat=%s", str(getattr(source, "chat_id", ""))[:12])
         return
     message = _raw_message(event)
     real_thread = message.get("thread_id") if isinstance(message, dict) else getattr(message, "thread_id", None)
@@ -227,8 +268,10 @@ def on_tool_updated(
     is_error: Any = None,
     session_key: str | None = None,
 ) -> bool:
-    status, detail = normalize_tool_completion(tool_name, status, detail, result=result, is_error=is_error)
     mid = _mid(ctrl, message_id, session_key)
+    if mid and tool_name == "todo" and status == "completed" and (todos := parse_todos(result)) is not None:
+        ctrl.on_todos(message_id=mid, todos=todos)
+    status, detail = normalize_tool_completion(tool_name, status, detail, result=result, is_error=is_error)
     return bool(mid) and bool(ctrl.on_tool_update(message_id=mid, tool_name=tool_name, status=status, detail=detail))
 
 

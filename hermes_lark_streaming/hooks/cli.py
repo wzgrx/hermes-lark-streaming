@@ -17,7 +17,8 @@ USAGE = """\
   uninstall  Remove injected hooks (also removes 0.x markers)
   restore    Remove hooks; fall back to the clean backup if markers are malformed
   status     Show injection status
-  verify     Check compatibility without writing"""
+  verify     Check compatibility without writing
+  report     Send a usage card to a chat: report --chat oc_xxx [--period day|week] [--dry-run]"""
 
 
 def load_hermes_environment() -> None:

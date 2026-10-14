@@ -204,6 +204,11 @@ class ToolTracker:
         by_id = {r.id: r for r in self._records}
         return tuple(by_id[i].view() for i in ids if i in by_id)
 
+    def running_elapsed(self) -> float | None:
+        """Seconds the newest still-running tool has been running, or None."""
+        running = [r for r in self._records if r.status is StepStatus.RUNNING]
+        return time.monotonic() - running[-1].started if running else None
+
     def span(self, ids: list[int]) -> float | None:
         """Seconds from the first start to the last finish of these tools, or None while any has no end.
         The model's own time after the tools is not part of it."""

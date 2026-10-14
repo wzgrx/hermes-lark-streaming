@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from ..card.model import Block, BlockKind, Footer, Phase, Section, TurnView
+from ..card.model import Block, BlockKind, Footer, Phase, Section, TodoItem, TurnView
 from ..transport.channel import CardChannel
 from ..transport.flush import Flusher
 from ..transport.guard import UnavailableGuard
@@ -70,6 +70,9 @@ class Session:
     background_refresh: Any = None  # TimerHandle of a pending refresh while background subagents still run
     final_phase: Phase | None = None  # set once the terminal card landed
     parked_at: float = 0.0  # monotonic; when a finished card started tracking background subagents
+    card_index: int = 1  # which card of the turn is live (handoffs when the element budget runs out)
+    todos: tuple[TodoItem, ...] = ()  # the agent's task list (Hermes' todo tool), latest revision
+    outputs: tuple[str, ...] = ()  # names of the files the answer delivers, listed on the finished card
 
     # content of the whole turn, across cards
     tracker: ToolTracker = field(default_factory=ToolTracker)
@@ -257,6 +260,9 @@ class Session:
             continued=continued,
             card_key=hashlib.sha1(f"{self.message_id}:{self.delivery_generation}".encode()).hexdigest()[:6],
             blocks=self.blocks(finished=finished or continued),
+            running_s=None if finished else self.tracker.running_elapsed(),
+            todos=self.todos,
+            outputs=self.outputs if finished else (),
         )
 
 

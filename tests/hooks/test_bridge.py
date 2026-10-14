@@ -211,3 +211,16 @@ def test_hooks_of_a_generated_turn_find_its_card_by_session_key(controller: Magi
     controller.on_answer.assert_called_once_with(message_id="synthetic-1", text="t")
     assert bridge.on_answer_delta(message_id=None, text="t", session_key="other") is False  # nobody owns it
     assert controller.on_answer.call_count == 1
+
+
+def test_card_stop_button_becomes_slash_stop(controller: MagicMock) -> None:
+    from types import SimpleNamespace
+
+    source = SimpleNamespace(platform=SimpleNamespace(value="feishu"), thread_id=None, chat_id="oc_1")
+    event = SimpleNamespace(text='/card button {"lark_card": "stop"}', reply_to_message_id=None, raw_message=None)
+    bridge.on_feishu_normalize(message_id="tok", source=source, event=event)
+    assert event.text == "/stop"
+    other = SimpleNamespace(text='/card button {"hermes_action": "approve"}', reply_to_message_id=None,
+                            raw_message=None)
+    bridge.on_feishu_normalize(message_id="tok", source=source, event=other)
+    assert other.text.startswith("/card button")  # someone else's button is left alone

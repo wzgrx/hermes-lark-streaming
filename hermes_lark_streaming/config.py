@@ -81,6 +81,7 @@ class Settings:
     process: str = "auto"
     card_ttl_sec: int = 600
     rollover_sec: float = 480.0
+    rollover: bool = False  # False: a long turn stays on one card after Feishu ends its streaming window
     backpressure: Backpressure = field(default_factory=Backpressure)
     details: dict[str, Any] = field(default_factory=dict)  # parsed by details.DetailsConfig
     bots: dict[str, Any] = field(default_factory=dict)  # parsed by routing.BotRegistry
@@ -99,6 +100,7 @@ class Settings:
             process=_choice(raw.get("process"), _PROCESS_MODES, "auto"),
             card_ttl_sec=int(_number(raw.get("card_ttl_sec"), 600, 60, 86400)),
             rollover_sec=_number(raw.get("rollover_sec"), 480.0, 60.0, 570.0),
+            rollover=raw.get("rollover") is True,
             backpressure=Backpressure(
                 enabled=bool(pressure.get("enabled", True)) if isinstance(pressure, dict) else bool(pressure),
                 min_ms=low,
