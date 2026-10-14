@@ -175,8 +175,12 @@ class TurnTelemetry:
         """The one-line summary values. ``tag`` is the session layer's to set."""
         data = self.snapshot()
         ratio, floor = cache_ratio(data)
+        # The model the user configured: a gateway can answer under an internal alias (OpenDesign returns
+        # "deepseek-flash" for deepseek-v4.1-flash). Routing ids like "auto" still show the answering model.
+        requested = data.get("requested_model")
+        shown = requested if isinstance(requested, str) and requested and requested != "auto" else data.get("model")
         return Footer(
-            model=model_display(data.get("model")),
+            model=model_display(shown),
             context_used=count(data.get("context_used")),
             context_max=count(data.get("context_max")),
             cache_hit=ratio,

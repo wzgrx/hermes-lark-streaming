@@ -391,8 +391,8 @@ async def test_task_list_stays_above_the_live_line(make_controller, client):
                        {"id": "2", "content": "定位支付接口", "status": "in_progress"},
                        {"id": "3", "content": "写报告", "status": "pending"}], "summary": {}}
     with patch.object(session_pkg, "get_controller", lambda: ctl):
-        bridge.on_tool_updated(message_id="om_1", tool_name="todo", status="started", detail="")
-        bridge.on_tool_updated(message_id="om_1", tool_name="todo", status="completed", detail="",
+        bridge.on_tool_updated(message_id="om_1", tool_name="todo_list", status="started", detail="")
+        bridge.on_tool_updated(message_id="om_1", tool_name="todo_list", status="completed", detail="",
                                result=_json.dumps(todos, ensure_ascii=False))
     await settle(ctl)
     ctl.on_answer(message_id="om_1", text="继续分析。")

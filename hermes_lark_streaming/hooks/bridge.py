@@ -64,6 +64,7 @@ def _safe_async(
 
 
 STOP_ACTION = "stop"
+TODO_TOOLS = frozenset({"todo_list", "todo"})  # Hermes registers todo_list; older builds used todo
 _CARD_CLICK = "/card button "
 
 
@@ -269,7 +270,7 @@ def on_tool_updated(
     session_key: str | None = None,
 ) -> bool:
     mid = _mid(ctrl, message_id, session_key)
-    if mid and tool_name == "todo" and status == "completed" and (todos := parse_todos(result)) is not None:
+    if mid and tool_name in TODO_TOOLS and status == "completed" and (todos := parse_todos(result)) is not None:
         ctrl.on_todos(message_id=mid, todos=todos)
     status, detail = normalize_tool_completion(tool_name, status, detail, result=result, is_error=is_error)
     return bool(mid) and bool(ctrl.on_tool_update(message_id=mid, tool_name=tool_name, status=status, detail=detail))

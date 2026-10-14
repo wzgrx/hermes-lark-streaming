@@ -392,3 +392,11 @@ def test_footer_route_names_the_subscriptions_in_order():
     state.observe("pre_api_request", fallback)
     complete(state, fallback)
     assert state.footer().route == "OpenDesign → Go"
+
+
+def test_footer_shows_the_configured_model_not_a_gateway_alias():
+    state = TurnTelemetry()
+    call = event(provider="opendesign")
+    state.observe("pre_api_request", call)
+    complete(state, call, response_model="deepseek-flash")  # OpenDesign answers under its internal alias
+    assert state.footer().model == "DeepSeek V4.1 Flash"

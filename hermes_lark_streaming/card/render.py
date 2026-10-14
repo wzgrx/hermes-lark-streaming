@@ -300,7 +300,7 @@ def _agent_elements(agent: Subagent) -> list[dict[str, Any]]:
         Bi(f"{head} · <font color='{color}'>{zh}</font>", f"{head} · <font color='{color}'>{en}</font>"), "notation",
     )]
     detail = [f"{agent.tools} 步"] if agent.tools else []
-    if agent.elapsed_s:
+    if agent.elapsed_s and agent.elapsed_s >= 1:
         detail.append(duration(agent.elapsed_s, whole=agent.status is AgentStatus.RUNNING))
     if agent.status is AgentStatus.RUNNING and agent.recent:
         detail.append("最近 " + ", ".join(agent.recent))
