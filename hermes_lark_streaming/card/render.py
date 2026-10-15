@@ -435,11 +435,16 @@ def footer_text(view: TurnView) -> Bi:
     if view.failed_steps:
         zh.append(f"❗ <font color='red'>{view.failed_steps} 步失败</font>")
         en.append(f"❗ <font color='red'>{view.failed_steps} failed</font>")
+    memories = view.footer.memories  # in the status line: one more footer chip squeezes every chip in two
+    if memories is not None:
+        zh.append(f"📚 {memories} 条记忆" if memories else "📚 用了记忆")
+        en.append(f"📚 {memories} memor{'y' if memories == 1 else 'ies'}" if memories else "📚 memory used")
     return Bi(" · ".join(zh), " · ".join(en))
 
 
 def footer_chips(view: TurnView) -> list[Bi]:
-    """``🤖 model``, ``🧠 effort``, ``📑 context``, ``⚡ cache``: the effort sits right after its model."""
+    """``🤖 model``, ``⏳ 5-hour window``, ``🧠 effort``, ``📑 context``, ``⚡ cache``; five chips fit one row,
+    more and Feishu squeezes every chip instead of wrapping one."""
     footer = view.footer
     chips: list[Bi] = []
     if footer.model:
@@ -457,10 +462,6 @@ def footer_chips(view: TurnView) -> list[Bi]:
         permille = int(footer.cache_hit * 1000 + 1e-9)  # truncated like the details value, so both agree
         hit = f"{'≥' if footer.cache_hit_is_floor else ''}{permille // 10}.{permille % 10}%".replace(".0%", "%")
         chips.append(Bi(f"⚡ 缓存 {hit}", f"⚡ cache {hit}"))
-    if footer.memories is not None:
-        chips.append(Bi(f"📚 {footer.memories} 条记忆" if footer.memories else "📚 用了记忆",
-                        f"📚 {footer.memories} memor{'y' if footer.memories == 1 else 'ies'}"
-                        if footer.memories else "📚 memory used"))
     warning = quota_warning(view)
     if warning is not None:
         chips.append(warning)

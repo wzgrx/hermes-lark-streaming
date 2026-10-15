@@ -327,7 +327,7 @@ def test_stop_button_only_while_the_turn_runs():
 
 def test_the_serving_keys_five_hour_window_sits_beside_the_model() -> None:
     from hermes_lark_streaming.card.model import Footer, Metric, Section, TurnView
-    from hermes_lark_streaming.card.render import footer_chips
+    from hermes_lark_streaming.card.render import footer_chips, footer_text
 
     accounts = Section("accounts", "额度", (
         Metric("Go a22 · 5小时", "100%", ratio=1.0), Metric("Go 221 · 5小时", "85%", ratio=0.85),
@@ -337,7 +337,7 @@ def test_the_serving_keys_five_hour_window_sits_beside_the_model() -> None:
     chips = [c.zh for c in footer_chips(view)]
     assert chips[0] == "🤖 DeepSeek V4.1 Flash · Go a22 → Go 221"
     assert chips[1] == "<font color='orange'>⏳ 5小时 85%</font>"  # the key now serving, not the exhausted one
-    assert "📚 2 条记忆" in chips
+    assert all("记忆" not in c for c in chips) and "📚 2 条记忆" in footer_text(view).zh
     calm = TurnView(footer=Footer(model="m", route="Go 221"), sections=(Section("accounts", "额度", (
         Metric("Go 221 · 5小时", "12%", ratio=0.12),)),))
     assert "⏳ 5小时 12%" in [c.zh for c in footer_chips(calm)]
