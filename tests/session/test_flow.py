@@ -420,3 +420,49 @@ async def test_finished_card_lists_the_files_the_answer_delivers(make_controller
     assert await ctl.on_completed_wait(message_id="om_1", answer=answer, deliver_all_media=True) is True
     final = str(client.of("update_card")[-1][2])
     assert "📎 产出 · report.md · chart.png" in final
+
+
+async def test_a_new_turn_under_a_finished_turns_id_gets_its_own_card(make_controller, client):
+    ctl = make_controller()
+    await start(ctl, session_key="sk")
+    assert await ctl.on_completed_wait(message_id="om_1", answer="第一轮。") is True
+    # Hermes runs a queued notice under the old anchor: it used to get no card and went out as plain text
+    text = "[IMPORTANT: Background process proc_1 completed normally (exit code 0)."
+    ctl.on_message_started(message_id="om_1", chat_id="oc_1", session_key="sk", text=text)
+    session = ctl._sessions["om_1"]
+    await ctl._wait_creation(session)
+    assert client.cards == 2 and session.reply_target is None  # posted into the chat, not quoting om_1
+    assert ctl.on_answer(message_id="om_1", text="进程已经跑完。") is True
+    assert await ctl.on_completed_wait(message_id="om_1", answer="") is True
+    final = str(client.of("update_card")[-1][2])
+    assert "后台进程通知" in final and "进程已经跑完" in final
+
+
+async def test_a_reply_streaming_under_a_finished_id_is_revived_into_a_card(make_controller, client):
+    ctl = make_controller()
+    await start(ctl, session_key="sk")
+    ctl.on_turn_folded(message_id="om_1", new_message_id="om_2", text="再补充一句", session_key="sk")
+    assert await ctl.on_completed_wait(message_id="om_1", answer="第一轮。") is True
+    # the folded message came back as its own turn without a start event
+    assert ctl.on_tool_update(message_id="om_2", tool_name="terminal", status="started", detail="ls") is True
+    session = ctl._sessions["om_2"]
+    await ctl._wait_creation(session)
+    assert ctl.on_answer(message_id="om_2", text="补充的也处理了。") is True
+    assert await ctl.on_completed_wait(message_id="om_2", answer="") is True
+    assert client.cards == 2 and client.of("reply_card")[-1][0] == "om_2"
+    assert "补充的也处理了" in str(client.of("update_card")[-1][2])
+
+
+async def test_ids_never_seen_stay_native(make_controller, client):
+    ctl = make_controller()
+    assert ctl.on_answer(message_id="om_9", text="别处的回复") is False
+    assert ctl.on_tool_update(message_id="om_9", tool_name="t", status="started") is False
+    assert ctl._sessions == {} and client.calls == []
+
+
+async def test_late_completion_events_of_a_finished_turn_do_not_open_a_card(make_controller, client):
+    ctl = make_controller()
+    await start(ctl)
+    assert await ctl.on_completed_wait(message_id="om_1", answer="完成。") is True
+    assert ctl.on_tool_update(message_id="om_1", tool_name="t", status="completed") is False
+    assert client.cards == 1

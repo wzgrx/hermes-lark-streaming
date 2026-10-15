@@ -23,7 +23,8 @@ from typing import Any
 from ..card.model import Footer, Phase, TodoItem
 from ..config import ConfigSource, hermes_home
 from ..details import DetailsCollector, DetailsConfig, TurnTelemetry, observe_history
-from ..details.providers import with_canonical_provider
+from ..details.pool import pool_route
+from ..details.providers import short_name, with_canonical_provider
 from ..metrics import metrics
 from ..transport import (
     CardKitClient,
@@ -49,6 +50,9 @@ _PROMPT_SPLIT_WAIT_SEC = _CARD_CREATION_WAIT_SEC * 2 + 30
 _ABANDONED_SEC = 6 * 3600.0  # a turn silent this long has lost its completion
 _SWEEP_INTERVAL_SEC = 300.0  # look for cards left live by a dead gateway at most this often
 _ORPHAN_MIN_AGE_SEC = 120.0
+_POOLED = {"opencode-go": short_name("opencode-go")}  # providers whose keys rotate in a Hermes pool
+_RECENT_SEC = 1800.0  # how long a finished turn's ids still identify their chat (see ``_revive``)
+_RECENT_MAX = 256
 _BACKGROUND_REFRESH_SEC = 5.0  # a finished card re-renders at most this often while its subagents run
 _STARTED = frozenset({"running", "started", "tool.started"})
 
@@ -67,6 +71,10 @@ class Controller:
         self._batches: dict[str, AgentBook] = {}  # recent background batches, for their summary turn's card
         self._last_batch: dict[str, tuple[str, AgentBook, float]] = {}  # chat -> newest background batch
         self._interrupts: dict[str, str] = {}
+        # ids of turns that already finished -> (chat, session key, when): Hermes may start another turn
+        # under one of them (a queued follow-up, a notice anchored to the last message)
+        self._recent: dict[str, tuple[str, str | None, float]] = {}
+        self._revive_lock = threading.Lock()
         self._fallback: dict[str, set[str]] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self.details_config = DetailsConfig.from_mapping(self.source.settings().details)
@@ -148,6 +156,36 @@ class Controller:
         session.touched = time.monotonic()
         return session
 
+    def _live(self, message_id: str) -> Session | None:
+        """The running session for a content event, opening a card for a turn whose start was missed."""
+        return self._active(message_id) or self._revive(message_id)
+
+    def _revive(self, message_id: str) -> Session | None:
+        """A turn streams under the id of one that already finished in this chat, without a start event
+        (Hermes ran a queued follow-up or a notice under the old anchor). Give it a card instead of letting
+        the reply fall back to plain text. Ids never seen here stay native."""
+        if not message_id or not self.enabled:
+            return None
+        with self._revive_lock:
+            if (session := self._active(message_id)) is not None:
+                return session
+            seen = self._recent.get(message_id)
+            if seen is None or time.monotonic() - seen[2] > _RECENT_SEC:
+                return None
+            existing = self._sessions.get(message_id)
+            if existing is not None and not existing.state.terminal:
+                return None  # alive but skipping hooks (guard): not ours to replace
+            loop = self._get_loop()
+            if loop is None:
+                return None
+            del self._recent[message_id]
+            self._sessions.pop(message_id, None)
+            session = self._new_session(message_id, seen[0], loop, anchor_id=None, session_key=seen[1])
+            session.create_task = self._fire(self.pipeline.create(session), loop)
+            metrics.increment("session.revived")
+            _logger.info("session revived: msg=%s chat=%s", message_id[:12], seen[0][:12])
+            return session
+
     def _register(self, session: Session) -> None:
         self._sessions[session.message_id] = session
         if session.anchor_id:
@@ -172,6 +210,12 @@ class Controller:
             session.flusher.mark_completed()
 
     def _drop(self, session: Session) -> None:
+        now = time.monotonic()
+        for key in {session.message_id, session.anchor_id, *session.aliases}:
+            if key and not key.startswith("synthetic-"):
+                self._recent[key] = (session.chat_id, session.session_key, now)
+        while len(self._recent) > _RECENT_MAX:
+            del self._recent[next(iter(self._recent))]
         if session.session_key and self._synthetic.get(session.session_key) == session.message_id:
             del self._synthetic[session.session_key]
         for key in {session.message_id, session.anchor_id, *session.aliases}:
@@ -247,8 +291,14 @@ class Controller:
                 return
             message_id = f"synthetic-{uuid.uuid4().hex[:16]}"
             anchor_id = None
-        if message_id in self._sessions:
-            return
+        existing = self._sessions.get(message_id)
+        if existing is not None:
+            if not existing.state.terminal:
+                return
+            # Hermes reuses the id of a turn that just finished (a queued follow-up, a notice anchored to the
+            # last message): this is a new turn and gets its own card, not the finished one's leftovers.
+            self._sessions.pop(message_id, None)
+        notice = synthetic_note(text) if synthetic is None else None
         self._prune()
         loop = self._get_loop()
         if loop is None:
@@ -260,6 +310,10 @@ class Controller:
             self._fire(self._sweep_open_cards(), loop)
         reply = anchor_id if anchor_id and anchor_id != message_id else None
         session = self._new_session(message_id, chat_id, loop, anchor_id=reply, session_key=session_key)
+        if notice is not None:
+            # A Hermes notice anchored to an old message: say what it is and post it, don't quote that message
+            session.synthetic = True
+            session.add_note(notice[1], label=notice[0])
         if synthetic is not None and session_key:
             session.synthetic = True
             session.add_note(synthetic[1], label=synthetic[0])
@@ -393,7 +447,7 @@ class Controller:
     # ------------------------------------------------------------------ content events
 
     def on_thinking(self, *, message_id: str, text: str) -> bool:
-        if not self.enabled or (session := self._active(message_id)) is None:
+        if not self.enabled or not text or (session := self._live(message_id)) is None:
             return False
         parts = split_reasoning_text(text)
         reasoning, answer = parts.get("reasoning_text"), parts.get("answer_text")
@@ -417,7 +471,7 @@ class Controller:
         return True
 
     def on_answer(self, *, message_id: str, text: str) -> bool:
-        if not self.enabled or (session := self._active(message_id)) is None:
+        if not self.enabled or not text or (session := self._live(message_id)) is None:
             return False
         with session.lock:
             session.raw_answer.append(text)  # MEDIA: directives are scanned from the raw deltas
@@ -432,7 +486,10 @@ class Controller:
         self, *, message_id: str, tool_name: str, status: str, detail: str = "",
         result: Any = None, is_error: Any = None,
     ) -> bool:
-        if not self.enabled or (session := self._active(message_id)) is None:
+        if not self.enabled:
+            return False
+        session = self._live(message_id) if status in _STARTED else self._active(message_id)
+        if session is None:
             return False
         split = ""
         with session.lock:
@@ -609,9 +666,24 @@ class Controller:
             cap = cap or _int(context.get("max_tokens"))
         return Footer(
             model=footer.model or model, context_used=used, context_max=cap, cache_hit=footer.cache_hit,
-            cache_hit_is_floor=footer.cache_hit_is_floor, partial=footer.partial, route=footer.route,
-            reasoning=footer.reasoning,
+            cache_hit_is_floor=footer.cache_hit_is_floor, partial=footer.partial,
+            route=self._route_with_keys(footer.route, session), reasoning=footer.reasoning,
         )
+
+    def _route_with_keys(self, route: str, session: Session) -> str:
+        """Name the subscription key behind a pooled provider ("Go" → "Go a22 → Go 221")."""
+        if not route:
+            return route
+        since = session.telemetry.created_at if session.telemetry is not None else time.time()
+        rows = [r for r in self.details_config.account_settings().get("accounts") or [] if isinstance(r, dict)]
+        parts = route.split(" → ")
+        for provider, short in _POOLED.items():
+            if short in parts:
+                keys = pool_route(self.home, provider, since, rows)
+                if keys:
+                    i = len(parts) - 1 - parts[::-1].index(short)  # the newest use of the provider
+                    parts[i:i + 1] = keys
+        return " → ".join(parts)[:60]
 
     async def on_completed_wait(
         self, *, message_id: str | None, answer: str = "", is_error: bool = False,

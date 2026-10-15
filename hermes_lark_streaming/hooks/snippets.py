@@ -344,6 +344,7 @@ def interrupt() -> list[str]:
         "                chat_id=getattr(next_source, 'chat_id', source.chat_id),",
         "                anchor_id=_lark_next_anchor_id,",
         "                session_key=locals().get('next_session_key') or locals().get('session_key'),",
+        "                text=(getattr(pending_event, 'text', '') or '')[:200],",
         "            )",
         *_guard("interrupt"),
     ]
