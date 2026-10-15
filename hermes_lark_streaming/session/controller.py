@@ -61,6 +61,9 @@ _NOTICE_MAX_LINES = 5  # newlines; six lines or more is content, not a notice
 _NOTICE_IDS_MAX = 512
 _FOLD_ACK_SEC = 15.0  # Hermes' busy ack after a folded message repeats the "💬 你补充" line
 _FOLD_ACK_HEADS = ("↪", "⏩", "⚡")  # redirect / steer / interrupt acks, in every Hermes language
+# the /stop reply ("⚡ 已停止。你可以继续此会话。"): the stopped card says it already. Hermes' chat-scope stop
+# replies before any hook of ours runs, so it is recognised by its text (zh / en locales)
+_STOP_ACK = re.compile(r"⚡\ufe0f?\s*(?:已停止|Stopped)")
 _RECALL = re.compile(r"recalled (?:(\d+) memor(?:y|ies)|relevant memory)")  # Hermes writes this line in English
 _RETRY = re.compile(  # Hermes writes its retry countdown in English whatever the display language
     r"(?:⏱️ (?P<why>Rate limited|Provider overloaded|The free model is busy)\.(?: Resets in (?P<reset>[^.]+)\.)?"
@@ -596,7 +599,8 @@ class Controller:
     def _redundant_ack(session: Session, text: str, reply_to: str | None) -> bool:
         if not text.startswith(_FOLD_ACK_HEADS):
             return False
-        if session.stopping:
+        if session.stopping or _STOP_ACK.match(text):
+            session.stopping = True
             return True
         folded = {*session.aliases} - {session.message_id}
         return bool(reply_to and reply_to in folded) or time.monotonic() - session.folded_at < _FOLD_ACK_SEC

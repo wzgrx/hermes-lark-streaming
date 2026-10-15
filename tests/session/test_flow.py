@@ -644,3 +644,11 @@ async def test_the_retry_button_names_its_turn(make_controller, client):
     assert await ctl.on_completed_wait(message_id="om_1", answer="boom", is_error=True) is True
     button = next(e for e in client.of("update_card")[-1][2]["body"]["elements"] if e.get("element_id") == "retry")
     assert button["behaviors"][0]["value"] == {"lark_card": "retry", "turn": "om_1"}
+
+
+async def test_the_chat_scope_stop_reply_is_recognised_by_its_text(make_controller, client):
+    ctl = make_controller()
+    session = await start(ctl, session_key="sk")
+    for text in ("⚡ 已停止。你可以继续此会话。", "⚡ Stopped. You can continue this session."):
+        assert ctl.on_outbound_text(chat_id="oc_1", content=text)
+    assert not [e for e in session.timeline if e.notice] and session.stopping
