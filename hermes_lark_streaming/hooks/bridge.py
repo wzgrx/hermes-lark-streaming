@@ -6,6 +6,7 @@ lazily so importing this module never pulls in the session or transport layers.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -69,16 +70,20 @@ TODO_TOOLS = frozenset({"todo_list", "todo"})  # Hermes registers todo_list; old
 _CARD_CLICK = "/card button "
 
 
-def card_button(text: Any) -> str | None:
-    """Our action in a card click that Hermes' Feishu adapter turned into ``/card button {value}``."""
+def card_value(text: Any) -> dict[str, Any] | None:
+    """The value of our button in a card click that Hermes' Feishu adapter turned into ``/card button {value}``."""
     if not isinstance(text, str) or not text.startswith(_CARD_CLICK):
         return None
     try:
         value = json.loads(text[len(_CARD_CLICK):])
     except ValueError:
         return None
-    action = value.get("lark_card") if isinstance(value, dict) else None
-    return action if isinstance(action, str) else None
+    return value if isinstance(value, dict) and isinstance(value.get("lark_card"), str) else None
+
+
+def card_button(text: Any) -> str | None:
+    value = card_value(text)
+    return str(value["lark_card"]) if value is not None else None
 
 
 def parse_todos(result: Any) -> list[TodoItem] | None:
@@ -116,6 +121,22 @@ def _raw_message(event: Any) -> Any:
     return raw if message is None else message
 
 
+def _retry_click(ctrl: Any, event: Any, chat: str, turn: str) -> None:
+    """Send the turn's own message again as a new message (a fresh card replying to it); a repeat click
+    within the guard window is ignored. Unknown turns (a restart lost them) fall back to Hermes' /retry."""
+    outcome = ctrl.retry_prompt(turn=turn, chat_id=chat, click_id=str(getattr(event, "message_id", "") or ""))
+    if outcome is None:
+        event.text = "/retry"
+    elif outcome == "":
+        event.text = "/card button repeat"  # nothing of ours: Hermes ignores an unknown card action
+    else:
+        event.text = outcome
+        kind: Any = type(getattr(event, "message_type", None))
+        with contextlib.suppress(AttributeError, KeyError, TypeError):
+            event.message_type = kind["TEXT"]  # a plain message again, not a slash command (Hermes' enum)
+    _logger.info("card retry button: chat=%s turn=%s known=%s", chat[:12], turn[:12], outcome is not None)
+
+
 @_safe(None)
 def on_feishu_normalize(
     ctrl: Any, *, message_id: str, source: Any, event: Any, reply_anchor_id: str | None = None
@@ -124,11 +145,15 @@ def on_feishu_normalize(
     turn the card's stop button into ``/stop`` before Hermes routes the click."""
     if getattr(getattr(source, "platform", None), "value", "") != "feishu":
         return
-    action = card_button(getattr(event, "text", None))
-    if action in (STOP_ACTION, RETRY_ACTION):
-        # Hermes delivers card clicks as "/card button {value}"; /stop reaches a busy session, /retry resends
-        event.text = f"/{action}"
-        _logger.info("card %s button: chat=%s", action, str(getattr(source, "chat_id", ""))[:12])
+    value = card_value(getattr(event, "text", None))
+    action = value.get("lark_card") if value is not None else None
+    chat = str(getattr(source, "chat_id", ""))
+    if action == STOP_ACTION:
+        event.text = "/stop"  # Hermes delivers card clicks as "/card button {value}"; /stop reaches a busy session
+        _logger.info("card stop button: chat=%s", chat[:12])
+        return
+    if action == RETRY_ACTION and value is not None:
+        _retry_click(ctrl, event, chat, str(value.get("turn") or ""))
         return
     message = _raw_message(event)
     real_thread = message.get("thread_id") if isinstance(message, dict) else getattr(message, "thread_id", None)

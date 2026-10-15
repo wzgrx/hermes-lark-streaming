@@ -73,6 +73,8 @@ _RECOVERED_REASONS = (
     ("reconnected", "平台重连后补发 · 可能与上面重复"),
     ("rate limit", "原消息被限流拒收 · 部分内容可能已在上面"),
 )
+_PROMPTS_MAX = 128  # the text of recent turns, for their retry buttons (memory only)
+_RETRY_GUARD_SEC = 120.0  # a second click on one card's retry within this window is ignored
 _RECENT_SEC = 1800.0  # how long a finished turn's ids still identify their chat (see ``_revive``)
 _RECENT_MAX = 256
 _BACKGROUND_REFRESH_SEC = 5.0  # a finished card re-renders at most this often while its subagents run
@@ -97,6 +99,9 @@ class Controller:
         # under one of them (a queued follow-up, a notice anchored to the last message)
         self._recent: dict[str, tuple[str, str | None, float]] = {}
         self._revive_lock = threading.Lock()
+        self._prompts: dict[str, tuple[str, str]] = {}  # user message id -> (chat, text) of its turn
+        self._retried: dict[str, float] = {}  # turn -> when its retry button last resent it
+        self._retry_anchor: dict[str, str] = {}  # a retry click's event id -> the message it resends
         # ids handed back to Hermes for notices folded into a card -> (session, timeline entry or None)
         self._notice_ids: dict[str, tuple[Session, Entry | None]] = {}
         self._fallback: dict[str, set[str]] = {}
@@ -315,6 +320,13 @@ class Controller:
                 return
             message_id = f"synthetic-{uuid.uuid4().hex[:16]}"
             anchor_id = None
+        retried = self._retry_anchor.pop(message_id, None)
+        if retried is not None:
+            anchor_id = retried  # a retry click has no real message: the new card replies to the original
+        elif synthetic is None and text.strip() and chat_id:
+            self._prompts[message_id] = (chat_id, text)
+            while len(self._prompts) > _PROMPTS_MAX:
+                del self._prompts[next(iter(self._prompts))]
         existing = self._sessions.get(message_id)
         if existing is not None:
             if not existing.state.terminal:
@@ -485,6 +497,25 @@ class Controller:
             return None
         return session
 
+    def retry_prompt(self, *, turn: str, chat_id: str, click_id: str) -> str | None:
+        """The text to send again for a retry click on ``turn``'s card: ``None`` when the turn is unknown here
+        (Hermes' own /retry then), ``""`` for a repeat click inside the guard window (ignore it)."""
+        found = self._prompts.get(turn)
+        if found is None or found[0] != chat_id:
+            return None
+        now = time.monotonic()
+        if now - self._retried.get(turn, -_RETRY_GUARD_SEC) < _RETRY_GUARD_SEC:
+            return ""
+        self._retried[turn] = now
+        while len(self._retried) > _PROMPTS_MAX:
+            del self._retried[next(iter(self._retried))]
+        if click_id:
+            self._retry_anchor[click_id] = turn
+            while len(self._retry_anchor) > _PROMPTS_MAX:
+                del self._retry_anchor[next(iter(self._retry_anchor))]
+        metrics.increment("card.retry")
+        return found[1]
+
     async def on_outbound(self, *, chat_id: str, content: str, reply_to: str | None = None) -> str | None:
         """Every plain message Hermes sends to a Feishu chat: a recovered reply becomes a card, a short notice
         a line in the running card; ``None`` lets the adapter send it itself."""
@@ -565,6 +596,8 @@ class Controller:
     def _redundant_ack(session: Session, text: str, reply_to: str | None) -> bool:
         if not text.startswith(_FOLD_ACK_HEADS):
             return False
+        if session.stopping:
+            return True
         folded = {*session.aliases} - {session.message_id}
         return bool(reply_to and reply_to in folded) or time.monotonic() - session.folded_at < _FOLD_ACK_SEC
 
@@ -705,6 +738,7 @@ class Controller:
         session = self._by_key.pop(session_key, None)
         if session is None or session.state.terminal:
             return False
+        session.stopping = True  # Hermes' "⚡ stopped" ack would only repeat the card's own 已停止
         return await self._finish_after_creation(session, Phase.STOPPED)
 
     def on_interrupted(

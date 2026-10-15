@@ -729,16 +729,17 @@ def _error_elements(block: Block, view: TurnView) -> list[dict[str, Any]]:
     return out
 
 
-def retry_button() -> dict[str, Any]:
-    """Under a failed or stopped card: the click reaches Hermes as ``/card button {"lark_card": "retry"}``,
-    which the plugin's inbound hook turns into ``/retry`` (send the last message again)."""
+def retry_button(turn: str) -> dict[str, Any]:
+    """Under a failed or stopped card. The click reaches Hermes as ``/card button {"lark_card": "retry", ...}``;
+    the plugin's inbound hook turns it into the turn's own message again (Hermes' ``/retry`` finds nothing
+    after a stop: the stopped turn is discarded from the transcript)."""
     return {
         "tag": "button",
         "element_id": RETRY_ID,
         "text": {"tag": "plain_text", "content": "🔁 重试", "i18n_content": {"en_us": "🔁 Retry"}},
         "type": "default",
         "size": "small",
-        "behaviors": [{"type": "callback", "value": {"lark_card": "retry"}}],
+        "behaviors": [{"type": "callback", "value": {"lark_card": "retry", "turn": turn}}],
     }
 
 
@@ -815,8 +816,8 @@ def render_final(view: TurnView, opts: RenderOptions | None = None) -> dict[str,
             elements.append(_markdown(_EMPTY_ANSWER[phase], opts.text_size))
         elements.append({"tag": "hr"})
         elements.extend(_footer_elements(view))
-        if view.phase in (Phase.FAILED, Phase.STOPPED):
-            elements.append(retry_button())
+        if view.phase in (Phase.FAILED, Phase.STOPPED) and view.retry_of:
+            elements.append(retry_button(view.retry_of))
         details = details_element(view, opts)
         if details:
             elements.append(details)

@@ -143,6 +143,7 @@ class TurnView:
     sections: tuple[Section, ...] = ()
     continued: bool = False  # card rolled over; more cards follow, so no terminal chrome
     card_key: str = ""  # short per-card token; keeps panel ids unique so clients don't carry state across cards
+    retry_of: str = ""  # the user's message this turn answers; its retry button resends it (empty: no button)
     blocks: tuple[Block, ...] = ()  # the timeline this card shows, in arrival order
     running_s: float | None = None  # how long the newest running tool has been running
     todos: tuple[TodoItem, ...] = ()  # the agent's task list, newest revision

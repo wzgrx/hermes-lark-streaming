@@ -87,6 +87,7 @@ class Session:
     folded_at: float = 0.0  # monotonic time a mid-turn message was last folded in (its busy ack is redundant)
     memories: int | None = None  # memories Hermes recalled for the turn; 0 = recalled without a count
     route_tail: str = ""  # the subscription the newest request went to, to notice a switch
+    stopping: bool = False  # the stop button / command is ending the turn
     retry_entry: Entry | None = None  # the line Hermes' retry countdown rewrites while it stays the newest
     provider: str = ""  # provider the turn is actually using, once telemetry has seen a request
     telemetry: Any = None  # details.TurnTelemetry
@@ -287,6 +288,7 @@ class Session:
             running_s=None if finished else self.tracker.running_elapsed(),
             todos=self.todos,
             outputs=self.outputs if finished else (),
+            retry_of="" if self.synthetic else (self.reply_target or ""),
         )
 
 

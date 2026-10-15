@@ -220,9 +220,23 @@ def test_card_stop_button_becomes_slash_stop(controller: MagicMock) -> None:
     event = SimpleNamespace(text='/card button {"lark_card": "stop"}', reply_to_message_id=None, raw_message=None)
     bridge.on_feishu_normalize(message_id="tok", source=source, event=event)
     assert event.text == "/stop"
-    retry = SimpleNamespace(text='/card button {"lark_card": "retry"}', reply_to_message_id=None, raw_message=None)
-    bridge.on_feishu_normalize(message_id="tok", source=source, event=retry)
-    assert retry.text == "/retry"
+    from enum import Enum
+
+    class Kind(Enum):
+        TEXT = "text"
+        COMMAND = "command"
+
+    controller.retry_prompt.return_value = "原来的问题"
+    retry = SimpleNamespace(text='/card button {"lark_card": "retry", "turn": "om_1"}', reply_to_message_id=None,
+                            raw_message=None, message_id="tok2", message_type=Kind.COMMAND)
+    bridge.on_feishu_normalize(message_id="tok2", source=source, event=retry)
+    assert (retry.text, retry.message_type) == ("原来的问题", Kind.TEXT)  # sent again as a plain message
+    controller.retry_prompt.assert_called_once_with(turn="om_1", chat_id="oc_1", click_id="tok2")
+    controller.retry_prompt.return_value = None  # unknown turn (a restart lost it): Hermes' own /retry
+    lost = SimpleNamespace(text='/card button {"lark_card": "retry", "turn": "om_x"}', reply_to_message_id=None,
+                           raw_message=None, message_id="tok3", message_type=Kind.COMMAND)
+    bridge.on_feishu_normalize(message_id="tok3", source=source, event=lost)
+    assert lost.text == "/retry"
     other = SimpleNamespace(text='/card button {"hermes_action": "approve"}', reply_to_message_id=None,
                             raw_message=None)
     bridge.on_feishu_normalize(message_id="tok", source=source, event=other)

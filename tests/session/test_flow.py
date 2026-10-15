@@ -615,3 +615,32 @@ async def test_a_finished_card_has_no_retry_button(make_controller, client):
     await start(ctl)
     assert await ctl.on_completed_wait(message_id="om_1", answer="好。") is True
     assert all(e.get("element_id") != "retry" for e in client.of("update_card")[-1][2]["body"]["elements"])
+
+
+async def test_retry_resends_the_turns_own_message_once(make_controller, client):
+    ctl = make_controller()
+    await start(ctl, session_key="sk", text="测试 sleep 40 后回复完成")
+    assert ctl.retry_prompt(turn="om_1", chat_id="oc_2", click_id="tok") is None  # another chat
+    assert ctl.retry_prompt(turn="om_9", chat_id="oc_1", click_id="tok") is None  # unknown: Hermes' /retry
+    assert ctl.retry_prompt(turn="om_1", chat_id="oc_1", click_id="tok1") == "测试 sleep 40 后回复完成"
+    assert ctl.retry_prompt(turn="om_1", chat_id="oc_1", click_id="tok2") == ""  # a repeat click is ignored
+    ctl.on_message_started(message_id="tok1", chat_id="oc_1", session_key="sk", text="测试 sleep 40 后回复完成")
+    session = ctl._sessions["tok1"]
+    await ctl._wait_creation(session)
+    assert session.reply_target == "om_1"  # the click has no real message: reply to the original
+
+
+async def test_the_stop_ack_does_not_repeat_the_stopped_card(make_controller, client):
+    ctl = make_controller()
+    session = await start(ctl, session_key="sk")
+    session.stopping = True
+    assert ctl.on_outbound_text(chat_id="oc_1", content="⚡ 已停止。你可以继续此会话。")
+    assert not [e for e in session.timeline if e.notice]
+
+
+async def test_the_retry_button_names_its_turn(make_controller, client):
+    ctl = make_controller()
+    await start(ctl)
+    assert await ctl.on_completed_wait(message_id="om_1", answer="boom", is_error=True) is True
+    button = next(e for e in client.of("update_card")[-1][2]["body"]["elements"] if e.get("element_id") == "retry")
+    assert button["behaviors"][0]["value"] == {"lark_card": "retry", "turn": "om_1"}

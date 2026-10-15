@@ -44,7 +44,7 @@ def start() -> list[str]:
         "            chat_id=source.chat_id,",
         "            anchor_id=_lark_anchor_id,",
         "            session_key=locals().get('session_key') or locals().get('_quick_key'),",
-        "            text=(getattr(event, 'text', '') or '')[:200],",
+        "            text=(getattr(event, 'text', '') or '')[:8000],",
         "        )",
         *_guard("start"),
     ]
