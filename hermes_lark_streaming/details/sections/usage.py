@@ -52,13 +52,27 @@ def _turn_metrics(data: Mapping[str, Any]) -> tuple[Metric, ...]:
                group=group),
         Metric("输出", compact(out), hint=f"含推理 {compact(reasoning)}" if reasoning else "", label_en="Output",
                group=group),
-        Metric("首响应", _seconds(data.get("first_response")), label_en="First response", group=group),
+        # wall time from the first attempt: with retries it includes their waits, and says so
+        Metric("首响应", _seconds(data.get("first_response")), hint="含重试" if errors else "",
+               label_en="First response", group=group),
     ]
     if calls is not None and (calls > 1 or errors):
         metrics.append(Metric("请求", f"{calls}" + (f" · 错误 {errors}" if errors else ""), label_en="Requests",
                               group=group))
     # The reasoning effort sits in the footer (🧠), so it is not repeated here.
     return tuple(metrics)
+
+
+_ERROR_TYPES = {  # the SDK's exception names, as a reader would say them
+    "RateLimitError": "限流",
+    "APIConnectionError": "连接失败",
+    "APITimeoutError": "超时",
+    "InternalServerError": "服务端错误",
+    "APIStatusError": "服务端拒绝",
+    "AuthenticationError": "鉴权失败",
+    "PermissionDeniedError": "无权限",
+    "BadRequestError": "请求被拒",
+}
 
 
 def _history_tokens(bucket: Mapping[str, Any]) -> str:
@@ -154,8 +168,9 @@ def usage_section(
     routes = data.get("routes")
     if isinstance(routes, list) and len(routes) > 1:
         notes.append("服务商路径 " + " → ".join(label(r) for r in routes[:12]))
-    if label(data.get("last_error_type")):
-        notes.append(f"最近 API 错误类型 {label(data.get('last_error_type'))}")
+    if error_type := label(data.get("last_error_type")):
+        name = _ERROR_TYPES.get(error_type)
+        notes.append(f"最近错误 {name}（{error_type}）" if name else f"最近错误 {error_type}")
     if history is not None:
         rows, history_notes = _history(history, terminal=terminal, show_models=show_models)
         metrics.extend(rows)

@@ -569,3 +569,13 @@ def test_output_names_its_reasoning_share_and_history_shows_new_tokens():
     today = by_label(section)["今日"]
     assert (today.value, today.hint) == ("11.8M+", "")  # a hint inside a fifth-width cell broke the value
     assert "累计 = 新输入 + 输出" in section.notes and "缓存另计 今日 280M" in section.notes
+
+
+def test_retries_are_named_on_first_response_and_errors_read_in_chinese():
+    data = {"input_tokens": 194_000, "cache_read_tokens": 193_900, "output_tokens": 112, "api_calls": 1,
+            "retries": 4, "first_response": 52.2, "last_error_type": "RateLimitError"}
+    section = usage_section(data, None)
+    m = by_label(section)
+    assert (m["首响应"].value, m["首响应"].hint) == ("52.2s", "含重试") and m["请求"].value == "1 · 错误 4"
+    assert "最近错误 限流（RateLimitError）" in section.notes
+    assert by_label(usage_section({**data, "retries": 0}, None))["首响应"].hint == ""
