@@ -48,3 +48,22 @@ def test_unknown_labels_single_keys_and_missing_files_say_nothing(tmp_path: Path
     assert pool_route(tmp_path, "opencode-go", time.time(), ROWS) == []
     write(tmp_path, [entry("Go 221", 1), entry("OTHER_KEY", 0, source="env:OTHER_KEY")])
     assert pool_route(tmp_path, "opencode-go", time.time(), ROWS) == []
+
+
+def test_opendesign_plan_wall_fills_the_five_hour_window(tmp_path: Path) -> None:
+    from hermes_lark_streaming.details.collector import with_pool_windows
+
+    back = time.time() + 5400
+    entry = {"label": "OpenDesign", "priority": 0, "source": "manual", "last_status": "exhausted",
+             "last_status_at": time.time(), "last_error_code": 402, "last_error_reason": "billing",
+             "last_error_reset_at": back}
+    (tmp_path / "auth.json").write_text(json.dumps({"credential_pool": {"opendesign": [entry]}}))
+    row = {"provider": "opendesign", "status": "unsupported", "reason": "runtime_key_no_quota", "label": "OD"}
+    out = with_pool_windows({"accounts": [row]}, tmp_path)["accounts"][0]
+    assert out["status"] == "ok" and out["reason"] == "plan_exhausted"
+    assert out["windows"][0]["name"] == "rolling" and out["windows"][0]["used_percent"] == 100.0
+    entry.update(last_error_code=429, last_error_reason="rate_limit")  # a throttle is not a used-up plan
+    (tmp_path / "auth.json").write_text(json.dumps({"credential_pool": {"opendesign": [entry]}}))
+    import os
+    os.utime(tmp_path / "auth.json", (time.time() + 5, time.time() + 5))
+    assert with_pool_windows({"accounts": [row]}, tmp_path)["accounts"][0] is row

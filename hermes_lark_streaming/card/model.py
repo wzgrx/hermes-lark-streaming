@@ -44,6 +44,7 @@ class BlockKind(StrEnum):
     ANSWER = "answer"
     NOTE = "note"  # a message folded into the running turn, or why a Hermes-generated turn exists
     AGENTS = "agents"  # one batch of subagents started by delegate_task
+    ERROR = "error"  # why the turn failed (label, in Chinese) over Hermes' own error text (folded)
 
 
 @dataclass(frozen=True, slots=True)

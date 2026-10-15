@@ -41,6 +41,7 @@ STATUS_ID = "live"  # the trailing live line while streaming
 DETAILS_ID = "details"
 TODO_ID = "todo"  # the task list sits just above the live line; new blocks are inserted above it
 STOP_ID = "stop"  # the stop button under the live line, only while the turn runs
+RETRY_ID = "retry"  # the retry button under a failed or stopped card
 
 ELEMENT_LIMIT = 200  # CardKit hard cap on elements per card, counted over every nested tag
 ELEMENT_BUDGET = 160  # hand over to a fresh card before the live card gets this big
@@ -376,6 +377,8 @@ def block_elements(view: TurnView, opts: RenderOptions, *, streaming: bool) -> l
         elif block.kind is BlockKind.NOTE:
             if block.text.strip() or block.label:
                 elements.append(_note_element(block, view))
+        elif block.kind is BlockKind.ERROR:
+            elements.extend(_error_elements(block, view))
         elif not opts.show_process:
             continue
         elif block.kind is BlockKind.THOUGHT and block.text.strip():
@@ -713,6 +716,32 @@ def streaming_elements(view: TurnView, opts: RenderOptions) -> list[dict[str, An
             stop_button()]
 
 
+def _error_elements(block: Block, view: TurnView) -> list[dict[str, Any]]:
+    """``❌ 暂时没有可用线路 · …`` in red, then Hermes' own error text folded: it is long, English and
+    mostly for diagnosis."""
+    out = [_markdown(Bi.same(f"<font color='red'>❌ {esc(clip(block.label, 300))}</font>"), "normal_v2",
+                     element_id=_id(block.key, view))]
+    raw = block.text.strip()
+    if raw:
+        out.append(panel(title=Bi(grey("📄 原始报错"), grey("📄 Raw error")),
+                         elements=[_markdown(Bi.same(grey(esc(clip(redact(raw), 3000)))), "notation")],
+                         expanded=False, element_id=_id(f"{block.key}x", view)))
+    return out
+
+
+def retry_button() -> dict[str, Any]:
+    """Under a failed or stopped card: the click reaches Hermes as ``/card button {"lark_card": "retry"}``,
+    which the plugin's inbound hook turns into ``/retry`` (send the last message again)."""
+    return {
+        "tag": "button",
+        "element_id": RETRY_ID,
+        "text": {"tag": "plain_text", "content": "🔁 重试", "i18n_content": {"en_us": "🔁 Retry"}},
+        "type": "default",
+        "size": "small",
+        "behaviors": [{"type": "callback", "value": {"lark_card": "retry"}}],
+    }
+
+
 def stop_button() -> dict[str, Any]:
     """Hermes' Feishu adapter turns the click into ``/card button {"lark_card": "stop"}``; the plugin's inbound
     hook rewrites that to ``/stop``, which Hermes honours even while the turn is busy."""
@@ -780,11 +809,14 @@ def render_final(view: TurnView, opts: RenderOptions | None = None) -> dict[str,
     if view.continued:
         elements.append(_markdown(Bi(grey("↪ 内容见下一张卡片"), grey("↪ Continued on the next card")), "notation"))
     else:
-        if not any(b.kind is BlockKind.ANSWER and b.text.strip() for b in view.blocks):
+        if not any(b.kind in (BlockKind.ANSWER, BlockKind.ERROR) and (b.text.strip() or b.label)
+                   for b in view.blocks):
             phase = view.phase if view.phase.terminal else Phase.DONE
             elements.append(_markdown(_EMPTY_ANSWER[phase], opts.text_size))
         elements.append({"tag": "hr"})
         elements.extend(_footer_elements(view))
+        if view.phase in (Phase.FAILED, Phase.STOPPED):
+            elements.append(retry_button())
         details = details_element(view, opts)
         if details:
             elements.append(details)

@@ -27,8 +27,9 @@ from ..card.model import Footer, Phase, TodoItem
 from ..card.static import render_recovered
 from ..config import ConfigSource, hermes_home
 from ..details import DetailsCollector, DetailsConfig, TurnTelemetry, observe_history
-from ..details.pool import bench_info, pool_route
+from ..details.pool import Bench, bench_info, pool_route, pool_status
 from ..details.providers import short_name, with_canonical_provider
+from ..details.sections.usage import error_kind
 from ..metrics import metrics
 from ..transport import (
     CardKitClient,
@@ -818,6 +819,30 @@ class Controller:
             memories=session.memories,
         )
 
+    def _line_states(self) -> list[tuple[str, Bench | None]]:
+        """Every subscription key in serving order (the Go pool, then the fallback's), with its cooldown."""
+        rows = [r for r in self.details_config.account_settings().get("accounts") or [] if isinstance(r, dict)]
+        return [*pool_status(self.home, "opencode-go", rows), *pool_status(self.home, "opendesign", rows)]
+
+    def _when(self, until: float) -> str:
+        moment = datetime.fromtimestamp(until, ZoneInfo(self.details_config.zone))
+        return moment.strftime("%H:%M" if until - time.time() < 86400 else "%m-%d %H:%M")
+
+    def _failure_summary(self, session: Session) -> str:
+        """``暂时没有可用线路 · Go 221 被限流 · Go a22 额度用完 10-20 14:26 恢复`` when every key is cooling
+        down; otherwise what kind of error ended the turn."""
+        lines = self._line_states()
+        benched = [(label, info) for label, info in lines if info is not None]
+        parts = []
+        for label, (until, quota) in benched:
+            state = "额度用完" if quota else "被限流"
+            parts.append(f"{label} {state}" + (f" {self._when(until)} 恢复" if until is not None else ""))
+        if lines and len(benched) == len(lines):
+            return " · ".join(["暂时没有可用线路", *parts])
+        data = session.telemetry.snapshot() if session.telemetry is not None else {}
+        kind = error_kind(str((data or {}).get("last_error_type") or ""))
+        return " · ".join(["本轮出错", *([kind] if kind else []), *parts])
+
     def _note_route_switch(self, session: Session) -> None:
         """A request went to another subscription than the one before: say so in the timeline, with when the
         exhausted key comes back (worker thread; reads the pool state Hermes persisted for the rotation)."""
@@ -885,7 +910,11 @@ class Controller:
         # A FAILED session (writes kept failing mid-turn) still owns a visible card: one terminal update
         # usually lands and carries the whole answer; only if it does not does Hermes send text.
 
-        if answer and not session.answers:
+        if is_error:
+            # a one-line Chinese reason on top, Hermes' long (English) error text folded underneath
+            with session.lock:
+                session.add_error(self._failure_summary(session), strip_reasoning_tags(answer or ""))
+        elif answer and not session.answers:
             final = strip_reasoning_tags(answer)
             if final:
                 session.add_answer(final)

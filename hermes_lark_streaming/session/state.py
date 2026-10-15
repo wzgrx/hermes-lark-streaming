@@ -185,6 +185,14 @@ class Session:
         self.timeline.append(entry)
         self.last_was_answer = False
 
+    def add_error(self, summary: str, detail: str) -> None:
+        """Why the turn failed, in a line, with Hermes' raw error text folded underneath."""
+        self.close_entry()
+        entry = Entry(BlockKind.ERROR, f"b{len(self.timeline)}", label=summary)
+        entry.text, entry.ended = detail, time.monotonic()
+        self.timeline.append(entry)
+        self.last_was_answer = False
+
     def add_notice(self, text: str) -> Entry:
         """A notice Hermes sent to the chat while this card runs (busy ack, memory recall, process receipt),
         kept in the timeline instead of a separate message. Returned so a later edit can rewrite it."""

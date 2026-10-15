@@ -440,7 +440,7 @@ async def test_collector_reads_history_resources_and_scopes_accounts(tmp_path, m
     await collector.finish("chat", "opencode-go")
     sections = collector.sections(chat_id="chat", provider="opencode-go", terminal=True)
     assert [s.key for s in sections] == ["usage", "resources", "accounts"]
-    assert by_label(sections[0])["今日"].value == "11" and by_label(sections[0])["总计"].value == "11"
+    assert by_label(sections[0])["今日"].value == "11" and by_label(sections[0])["日均"].value == "11"  # one day
     assert seen == [(("opencode-go",), ("KEY",))]  # the other provider's account is never queried
     # No active provider, or a chat that is not allowed: the accounts section disappears.
     assert "accounts" not in [s.key for s in collector.sections(chat_id="chat", provider="")]
@@ -579,3 +579,13 @@ def test_retries_are_named_on_first_response_and_errors_read_in_chinese():
     assert (m["首响应"].value, m["首响应"].hint) == ("52.2s", "含重试") and m["请求"].value == "1 · 错误 4"
     assert "最近错误 限流（RateLimitError）" in section.notes
     assert by_label(usage_section({**data, "retries": 0}, None))["首响应"].hint == ""
+
+
+def test_the_total_cell_shows_a_daily_average_while_recording_began_this_month():
+    month = {"tokens": 5_000_000_000, "fresh": 143_000_000, "cached": 0, "requests": 19_000, "partial": False}
+    history = {"status": "ok", "since": "2026-10-03", "today_date": "2026-10-15", "today": month, "month": month,
+               "total": dict(month)}
+    m = by_label(usage_section(None, history))
+    assert "总计" not in m and (m["日均"].value, m["日均"].hint) == ("11M", "13 天")
+    older = {**history, "total": {**month, "requests": 40_000, "fresh": 300_000_000}}
+    assert "总计" in by_label(usage_section(None, older))

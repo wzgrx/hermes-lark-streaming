@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import date
 from typing import Any
 
 from ...card.model import Metric, Section
@@ -75,6 +76,11 @@ _ERROR_TYPES = {  # the SDK's exception names, as a reader would say them
 }
 
 
+def error_kind(error_type: str) -> str:
+    """``RateLimitError`` → ``限流``; empty for a type without a Chinese name."""
+    return _ERROR_TYPES.get(error_type, "")
+
+
 def _history_tokens(bucket: Mapping[str, Any]) -> str:
     """New input + output: "12.3M", not the "304M" that counted the same cached context once per request."""
     tokens = count(bucket.get("fresh"))
@@ -83,6 +89,23 @@ def _history_tokens(bucket: Mapping[str, Any]) -> str:
     if tokens is None:
         return UNKNOWN
     return compact(tokens, lower_bound=bool(bucket.get("partial")))  # "4.83B+" when some requests had no usage
+
+
+def _daily_average(history: Mapping[str, Any]) -> Metric | None:
+    """``日均`` over the days recorded this month, while the total still equals the month."""
+    month, total = mapping(history.get("month")), mapping(history.get("total"))
+    if month.get("requests") != total.get("requests") or count(month.get("requests")) in (None, 0):
+        return None
+    since, today = label(history.get("since")), label(history.get("today_date"))
+    try:
+        days = (date.fromisoformat(today) - date.fromisoformat(since)).days + 1
+    except ValueError:
+        return None
+    fresh = count(month.get("fresh"))
+    if fresh is None or days < 1:
+        return None
+    return Metric("日均", compact(fresh // days, lower_bound=bool(month.get("partial"))), hint=f"{days} 天",
+                  label_en="Daily", group="累计")
 
 
 def _cache_note(history: Mapping[str, Any]) -> str:
@@ -108,6 +131,9 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
         Metric(title, _history_tokens(mapping(history.get(key))), label_en=en, group=group)
         for key, title, en in (("today", "今日", "Today"), ("month", "本月", "Month"), ("total", "总计", "Total"))
     ]
+    daily = _daily_average(history)
+    if daily is not None:  # recording began this month: 总计 would only repeat 本月
+        metrics[2] = daily
     # request counts: what a request-metered subscription actually spends; also fills the row to five cells
     for key, title, en in (("today", "今日请求", "Requests today"), ("month", "本月请求", "Requests this month")):
         requests = count(mapping(history.get(key)).get("requests"))

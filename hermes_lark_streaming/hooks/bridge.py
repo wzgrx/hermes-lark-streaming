@@ -64,6 +64,7 @@ def _safe_async(
 
 
 STOP_ACTION = "stop"
+RETRY_ACTION = "retry"
 TODO_TOOLS = frozenset({"todo_list", "todo"})  # Hermes registers todo_list; older builds used todo
 _CARD_CLICK = "/card button "
 
@@ -123,9 +124,11 @@ def on_feishu_normalize(
     turn the card's stop button into ``/stop`` before Hermes routes the click."""
     if getattr(getattr(source, "platform", None), "value", "") != "feishu":
         return
-    if card_button(getattr(event, "text", None)) == STOP_ACTION:
-        event.text = "/stop"  # Hermes delivers card clicks as "/card button {value}"; /stop reaches a busy session
-        _logger.info("card stop button: chat=%s", str(getattr(source, "chat_id", ""))[:12])
+    action = card_button(getattr(event, "text", None))
+    if action in (STOP_ACTION, RETRY_ACTION):
+        # Hermes delivers card clicks as "/card button {value}"; /stop reaches a busy session, /retry resends
+        event.text = f"/{action}"
+        _logger.info("card %s button: chat=%s", action, str(getattr(source, "chat_id", ""))[:12])
         return
     message = _raw_message(event)
     real_thread = message.get("thread_id") if isinstance(message, dict) else getattr(message, "thread_id", None)

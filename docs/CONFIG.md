@@ -66,3 +66,8 @@ streaming:
 ## 校验
 
 `python -m hermes_lark_streaming status` 查看钩子安装状态,`verify` 检查当前 Hermes 是否可注入。
+
+
+## 备用线路要进账号池
+
+备用链里的服务商(如 OpenDesign)最好也加进 Hermes 账号池:`hermes auth add opendesign --type api-key --label OpenDesign`,并在 `fallback_providers` 里写 `provider: opendesign`(不是 `custom:opendesign`)。这样它额度用完时 Hermes 会记下服务商给的重置时间,在那之前直接跳过这条线路;卡片的失败原因、换线路说明和详情里的额度也都读这份状态。

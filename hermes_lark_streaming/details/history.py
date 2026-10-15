@@ -59,7 +59,8 @@ def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict
         first = row[0]
         if first is None:
             return result
-        result.update(status="ok", since=datetime.fromtimestamp(first, tz).strftime("%Y-%m-%d"))
+        result.update(status="ok", since=datetime.fromtimestamp(first, tz).strftime("%Y-%m-%d"),
+                      today_date=current.strftime("%Y-%m-%d"))
         for index, (key, _start, _end) in enumerate(periods):
             requests, known, tokens, new, cached = row[1 + index * 5 : 6 + index * 5]
             # A truly empty period is zero once recording exists. Requests with

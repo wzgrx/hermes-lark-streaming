@@ -195,6 +195,8 @@ def _row(
         elif status == "unavailable" and type(row.get("http_status")) is int:
             reason = f"查询失败 · {_failure(row.get('http_status'))}"
         notes.append(reason)
+    if row.get("reason") == "plan_exhausted":  # no quota API: the 5-hour window comes from the provider's 402
+        notes.append("5小时额度已用完 · 来自服务商报错 · 平时用量查不到")
     metrics = _quota_metrics(row, tz, now, prefix) if status == "ok" else []
     period = _period_metric(row, tz, now, prefix)
     if period is not None:

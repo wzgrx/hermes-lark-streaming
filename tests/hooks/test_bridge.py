@@ -220,6 +220,9 @@ def test_card_stop_button_becomes_slash_stop(controller: MagicMock) -> None:
     event = SimpleNamespace(text='/card button {"lark_card": "stop"}', reply_to_message_id=None, raw_message=None)
     bridge.on_feishu_normalize(message_id="tok", source=source, event=event)
     assert event.text == "/stop"
+    retry = SimpleNamespace(text='/card button {"lark_card": "retry"}', reply_to_message_id=None, raw_message=None)
+    bridge.on_feishu_normalize(message_id="tok", source=source, event=retry)
+    assert retry.text == "/retry"
     other = SimpleNamespace(text='/card button {"hermes_action": "approve"}', reply_to_message_id=None,
                             raw_message=None)
     bridge.on_feishu_normalize(message_id="tok", source=source, event=other)

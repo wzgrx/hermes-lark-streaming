@@ -583,3 +583,35 @@ async def test_a_retry_countdown_is_one_chinese_line(make_controller, client):
     ctl.on_outbound_text(chat_id="oc_1", content="⏳ Retrying in 2.0s (attempt 1/5)...")
     assert [e.text for e in session.timeline if e.notice][-1] == "⏱️ 重试中 · 第 1/5 次重试 · 等 2.0s"
     assert len([e for e in session.timeline if e.notice]) == 2  # after other content: a new line
+
+
+async def test_a_failed_turn_says_why_in_chinese_and_offers_a_retry(make_controller, client, monkeypatch):
+    ctl = make_controller()
+    await start(ctl)
+    monkeypatch.setattr(ctl, "_line_states", lambda: [("Go 221", (None, False)), ("Go a22", (2_000_000_000.0, True)),
+                                                      ("OpenDesign", (2_000_000_000.0, True))])
+    monkeypatch.setattr(ctl, "_when", lambda until: "19:19")
+    raw = "custom:opendesign rate-limited every one of 5 attempts — Provider said: HTTP 402 ..."
+    assert await ctl.on_completed_wait(message_id="om_1", answer=raw, is_error=True) is True
+    card = client.of("update_card")[-1][2]
+    body = str(card)
+    assert "❌ 暂时没有可用线路 · Go 221 被限流 · Go a22 额度用完 19:19 恢复 · OpenDesign 额度用完 19:19 恢复" in body
+    panel = next(e for e in card["body"]["elements"] if e.get("tag") == "collapsible_panel" and "原始报错" in str(e))
+    assert "rate-limited every one" in str(panel) and panel["expanded"] is False
+    assert any(e.get("element_id") == "retry" for e in card["body"]["elements"])
+    assert "本轮失败,没有可显示的回答" not in body
+
+
+async def test_a_failure_with_lines_available_names_the_error(make_controller, client, monkeypatch):
+    ctl = make_controller()
+    await start(ctl)
+    monkeypatch.setattr(ctl, "_line_states", lambda: [("Go 221", None), ("OpenDesign", None)])
+    assert await ctl.on_completed_wait(message_id="om_1", answer="boom", is_error=True) is True
+    assert "❌ 本轮出错" in str(client.of("update_card")[-1][2])
+
+
+async def test_a_finished_card_has_no_retry_button(make_controller, client):
+    ctl = make_controller()
+    await start(ctl)
+    assert await ctl.on_completed_wait(message_id="om_1", answer="好。") is True
+    assert all(e.get("element_id") != "retry" for e in client.of("update_card")[-1][2]["body"]["elements"])
