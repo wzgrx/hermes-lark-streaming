@@ -93,3 +93,22 @@ def test_normal_websocket_close_is_not_logged():
     assert f.filter(record("receive message loop exit, err: ConnectionClosedOK")) is False
     assert f.filter(record("receive message loop exit, err: 1006 abnormal closure")) is True
     assert f.filter(record("something else")) is True
+
+
+def test_opendesign_nested_reset_reaches_the_error_context(monkeypatch) -> None:
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    from hermes_lark_streaming.compat import nested_reset
+
+    helpers = ModuleType("agent.agent_runtime_helpers")
+    helpers.extract_api_error_context = lambda error: {"reason": "insufficient_balance"}  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "agent", ModuleType("agent"))
+    monkeypatch.setitem(sys.modules, "agent.agent_runtime_helpers", helpers)
+    assert nested_reset.install() and nested_reset.install()  # idempotent
+    body = {"error": {"code": "insufficient_balance", "details": {"coding_plan_exhausted": True,
+                                                                  "reset_at": "2026-10-15T11:19:43Z"}}}
+    context = helpers.extract_api_error_context(SimpleNamespace(body=body))  # type: ignore[attr-defined]
+    assert context == {"reason": "insufficient_balance", "reset_at": "2026-10-15T11:19:43Z"}
+    assert "reset_at" not in helpers.extract_api_error_context(SimpleNamespace(body={"error": {}}))  # type: ignore[attr-defined]
+    assert nested_reset.nested_reset(SimpleNamespace(body={"error": {"details": {"reset_at": True}}})) is None

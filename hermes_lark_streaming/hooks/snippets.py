@@ -354,7 +354,7 @@ def outbound_send() -> list[str]:
     return [
         "try:",
         f"    from {BRIDGE} import on_outbound_text",
-        "    _lark_notice_id = on_outbound_text(chat_id=chat_id, content=content)",
+        "    _lark_notice_id = await on_outbound_text(chat_id=chat_id, content=content, reply_to=reply_to)",
         "    if _lark_notice_id:",
         "        return SendResult(success=True, message_id=_lark_notice_id)",
         *_guard("outbound_send"),

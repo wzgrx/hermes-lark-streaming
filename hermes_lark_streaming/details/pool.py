@@ -62,6 +62,29 @@ def _benched(entry: dict[str, Any], now: float) -> bool:
     return until is None or until > now
 
 
+def bench_until(home: Path, provider: str, label: str, rows: list[dict[str, Any]]) -> float | None:
+    """When the key shown as ``label`` comes back, if it is cooling down now."""
+    now = time.time()
+    for entry in _pool(home).get(provider) or []:
+        if isinstance(entry, dict) and _label(entry, rows) == label and _benched(entry, now):
+            until = _number(entry.get("last_error_reset_at"))
+            at = _number(entry.get("last_status_at"))
+            return until if until is not None else (at + _EXHAUSTED_TTL_SEC if at is not None else None)
+    return None
+
+
+def pool_status(home: Path, provider: str, rows: list[dict[str, Any]]) -> list[tuple[str, float | None]]:
+    """Every key of a provider's pool in serving order, with when a cooling-down key comes back."""
+    entries = sorted((e for e in _pool(home).get(provider) or [] if isinstance(e, dict)),
+                     key=lambda e: _number(e.get("priority")) or 0.0)
+    out = []
+    for entry in entries:
+        label = _label(entry, rows)
+        if label:
+            out.append((label, bench_until(home, provider, label, rows)))
+    return out
+
+
 def pool_route(home: Path, provider: str, since: float, rows: list[dict[str, Any]]) -> list[str]:
     """Labels of the keys this turn went through, oldest first: those benched since ``since``, then the
     one serving now. Empty when the provider has no multi-key pool or the labels are unknown."""

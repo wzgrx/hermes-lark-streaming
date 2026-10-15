@@ -445,6 +445,9 @@ def footer_chips(view: TurnView) -> list[Bi]:
     if footer.model:
         route = f" · {esc(clip(footer.route, 60))}" if footer.route else ""  # which subscription paid for it
         chips.append(Bi.same(f"🤖 {esc(clip(footer.model, 60))}{route}"))
+    window = key_window(view)
+    if window is not None:
+        chips.append(window)
     if footer.reasoning:
         chips.append(Bi.same(f"🧠 {esc(footer.reasoning)}"))
     if footer.context_used is not None and footer.context_max:
@@ -454,10 +457,36 @@ def footer_chips(view: TurnView) -> list[Bi]:
         permille = int(footer.cache_hit * 1000 + 1e-9)  # truncated like the details value, so both agree
         hit = f"{'≥' if footer.cache_hit_is_floor else ''}{permille // 10}.{permille % 10}%".replace(".0%", "%")
         chips.append(Bi(f"⚡ 缓存 {hit}", f"⚡ cache {hit}"))
+    if footer.memories is not None:
+        chips.append(Bi(f"📚 {footer.memories} 条记忆" if footer.memories else "📚 用了记忆",
+                        f"📚 {footer.memories} memor{'y' if footer.memories == 1 else 'ies'}"
+                        if footer.memories else "📚 memory used"))
     warning = quota_warning(view)
     if warning is not None:
         chips.append(warning)
     return chips
+
+
+_ROLLING = "5小时"
+
+
+def key_window(view: TurnView) -> Bi | None:
+    """The 5-hour window of the key that served the turn (the route's last hop), e.g. ``⏳ 5小时 37%``;
+    orange from 80%, red from 95%, so the switch to the next key or the fallback is no surprise."""
+    route = view.footer.route
+    section = next((s for s in view.sections if s.key == "accounts"), None)
+    if not route or section is None:
+        return None
+    label = f"{route.split(' → ')[-1].strip()} · {_ROLLING}"
+    metric = next((m for m in section.metrics if m.label == label and m.ratio is not None), None)
+    if metric is None or metric.ratio is None:
+        return None
+    pct = f"{int(metric.ratio * 100)}%"
+    color = "red" if metric.ratio >= 0.95 else "orange" if metric.ratio >= 0.8 else ""
+    zh, en = f"⏳ {_ROLLING} {pct}", f"⏳ 5h {pct}"
+    if color:
+        zh, en = f"<font color='{color}'>{zh}</font>", f"<font color='{color}'>{en}</font>"
+    return Bi(zh, en)
 
 
 _DAYS = re.compile(r"剩 (\d+) 天")

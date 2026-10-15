@@ -84,6 +84,9 @@ class Session:
     timeline: list[Entry] = field(default_factory=list)
     blocks_offset: int = 0  # timeline entries already shown on earlier (sealed) cards
     notices: list[str] = field(default_factory=list)
+    folded_at: float = 0.0  # monotonic time a mid-turn message was last folded in (its busy ack is redundant)
+    memories: int | None = None  # memories Hermes recalled for the turn; 0 = recalled without a count
+    route_tail: str = ""  # the subscription the newest request went to, to notice a switch
     provider: str = ""  # provider the turn is actually using, once telemetry has seen a request
     telemetry: Any = None  # details.TurnTelemetry
     final_footer: Footer | None = None

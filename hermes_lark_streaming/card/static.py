@@ -52,6 +52,12 @@ def render_cron(
     return _card(title, _run_time(run_time), "wathet", Bi("定时任务", "Scheduled"), content, text_size)
 
 
+def render_recovered(content: str, reason: str, *, text_size: str = "normal_v2") -> dict[str, Any]:
+    """A reply Hermes redelivers after a restart, reconnect or rate limit: a card that says it may repeat."""
+    body = content if content.strip() else "(No response generated)"
+    return _card(Bi("补发的回复", "Recovered reply"), reason, "grey", Bi("补发", "Recovered"), body, text_size)
+
+
 def render_background(preview: str, content: str, *, text_size: str = "normal_v2") -> dict[str, Any]:
     title = Bi(clip(preview, 40), clip(preview, 40)) if preview else Bi("后台任务", "Background task")
     body = content if content.strip() else "(No response generated)"

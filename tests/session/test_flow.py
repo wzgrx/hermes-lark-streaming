@@ -471,7 +471,7 @@ async def test_late_completion_events_of_a_finished_turn_do_not_open_a_card(make
 async def test_hermes_notices_become_lines_in_the_running_card(make_controller, client):
     ctl = make_controller()
     await start(ctl)
-    note = ctl.on_outbound_text(chat_id="oc_1", content="🧠 Holographic — recalled 5 memories")
+    note = ctl.on_outbound_text(chat_id="oc_1", content="💳 Credits: 80% of the monthly budget used")
     assert note and note.startswith("lark-notice-")
     ack = ctl.on_outbound_text(chat_id="oc_1", content="⏳ Queued for after the current run")
     assert ctl.on_outbound_edit(message_id=ack, content="↪ Redirected current run") is True
@@ -479,7 +479,7 @@ async def test_hermes_notices_become_lines_in_the_running_card(make_controller, 
     await settle(ctl)
     assert await ctl.on_completed_wait(message_id="om_1", answer="正文。") is True
     body = str(client.of("update_card")[-1][2])
-    assert "📣 🧠 Holographic — recalled 5 memories" in body and "Redirected current run" in body
+    assert "📣 💳 Credits: 80% of the monthly budget used" in body and "Redirected current run" in body
     assert "Queued for after" not in body  # the edit replaced the line
     # after the turn: Hermes' cleanup of its "message" is swallowed, new text goes out as usual
     assert ctl.on_outbound_delete(message_id=note) is True
@@ -513,3 +513,47 @@ async def test_two_turns_in_one_group_keep_notices_separate(make_controller, cli
     await start(ctl, mid="om_1")
     await start(ctl, mid="om_2")
     assert ctl.on_outbound_text(chat_id="oc_1", content="谁的通知?") is None
+
+
+async def test_a_busy_ack_after_a_folded_message_is_not_repeated(make_controller, client):
+    ctl = make_controller()
+    await start(ctl, session_key="sk")
+    ctl.on_turn_folded(message_id="om_1", new_message_id="om_2", text="再补充一句", session_key="sk")
+    redirected = "↪ 已重定向当前运行。我会根据你的修正进行调整。"
+    ack = ctl.on_outbound_text(chat_id="oc_1", content=redirected, reply_to="om_2")
+    assert ack and ctl.on_outbound_edit(message_id=ack, content="x") is True
+    queued = ctl.on_outbound_text(chat_id="oc_1", content="⏳ 已排队至下一回合。当前任务完成后我会回复。")
+    assert queued  # a queue ack is news: it stays
+    assert await ctl.on_completed_wait(message_id="om_1", answer="好。") is True
+    body = str(client.of("update_card")[-1][2])
+    assert "已重定向" not in body and "已排队至下一回合" in body and "再补充一句" in body
+
+
+async def test_the_memory_recall_line_becomes_a_footer_chip(make_controller, client):
+    ctl = make_controller()
+    await start(ctl)
+    assert ctl.on_outbound_text(chat_id="oc_1", content="🧠 Holographic — recalled 5 memories")
+    assert await ctl.on_completed_wait(message_id="om_1", answer="好。") is True
+    body = str(client.of("update_card")[-1][2])
+    assert "📚 5 条记忆" in body and "recalled" not in body
+
+
+async def test_a_recovered_reply_is_sent_as_a_card(make_controller, client):
+    ctl = make_controller()
+    content = "♻️ Recovered reply — the gateway restarted during delivery, so this may be a duplicate:\n\n正文内容"
+    assert await ctl.on_outbound(chat_id="oc_1", content=content) == "om_static"
+    _, card, _ = client.of("send_card")[-1]
+    assert card["header"]["title"]["i18n_content"]["zh_cn"] == "补发的回复" and "正文内容" in str(card["body"])
+    assert "网关重启" in str(card["header"])
+
+
+async def test_a_switch_of_subscription_is_noted_in_the_timeline(make_controller, client, monkeypatch):
+    ctl = make_controller()
+    session = await start(ctl, session_key="sk")
+    routes = iter(["Go 221", "Go 221", "Go 221 → OpenDesign"])
+    monkeypatch.setattr(ctl, "_route_with_keys", lambda route, s: next(routes))
+    monkeypatch.setattr("hermes_lark_streaming.session.controller.bench_until", lambda *a: 1_000_000_000.0)
+    for _ in range(3):
+        ctl._note_route_switch(session)
+    notes = [e for e in session.timeline if e.label == "🔀 换线路"]
+    assert len(notes) == 1 and notes[0].text.startswith("Go 221 → OpenDesign · Go 221 额度用完")

@@ -23,3 +23,24 @@ def test_daily_report_splits_usage_by_subscription(tmp_path):
     card = build_card([section], period="day", now=when)
     text = str(card)
     assert "📊 用量日报" in text and "'expanded': True" in text and "本月" in text
+
+
+def test_the_route_line_names_the_serving_key_and_when_others_return(tmp_path) -> None:
+    import json
+    import time
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from hermes_lark_streaming.report import route_line
+
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    back = now.timestamp() + 3 * 86400
+    pool = [{"label": "Go 221", "priority": 0, "source": "manual"},
+            {"label": "OPENCODE_GO_API_KEY", "priority": 1, "source": "env:OPENCODE_GO_API_KEY",
+             "last_status": "exhausted", "last_status_at": time.time(), "last_error_reset_at": back}]
+    (tmp_path / "auth.json").write_text(json.dumps({"credential_pool": {"opencode-go": pool}}))
+    rows = [{"label": "Go a22", "provider": "opencode-go", "key_env": "OPENCODE_GO_API_KEY"}]
+    when = datetime.fromtimestamp(back, now.tzinfo).strftime("%m-%d %H:%M")
+    assert route_line(tmp_path, rows, "OpenDesign", now) == (
+        f"🔀 在用 Go 221 · Go a22 额度用完 · {when} 恢复 · 备用 OpenDesign")
+    assert route_line(tmp_path / "missing", rows, "OpenDesign", now) == ""

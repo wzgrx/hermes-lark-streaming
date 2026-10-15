@@ -323,3 +323,22 @@ def test_stop_button_only_while_the_turn_runs():
     assert button["tag"] == "button" and button["behaviors"][0]["value"] == {"lark_card": "stop"}
     assert "stop" not in dumps(render_final(done_view())).split('"element_id": ')[-1][:10]
     assert not any(e.get("tag") == "button" for e in render_final(done_view())["body"]["elements"])
+
+
+def test_the_serving_keys_five_hour_window_sits_beside_the_model() -> None:
+    from hermes_lark_streaming.card.model import Footer, Metric, Section, TurnView
+    from hermes_lark_streaming.card.render import footer_chips
+
+    accounts = Section("accounts", "额度", (
+        Metric("Go a22 · 5小时", "100%", ratio=1.0), Metric("Go 221 · 5小时", "85%", ratio=0.85),
+    ))
+    view = TurnView(footer=Footer(model="DeepSeek V4.1 Flash", route="Go a22 → Go 221", memories=2),
+                    sections=(accounts,))
+    chips = [c.zh for c in footer_chips(view)]
+    assert chips[0] == "🤖 DeepSeek V4.1 Flash · Go a22 → Go 221"
+    assert chips[1] == "<font color='orange'>⏳ 5小时 85%</font>"  # the key now serving, not the exhausted one
+    assert "📚 2 条记忆" in chips
+    calm = TurnView(footer=Footer(model="m", route="Go 221"), sections=(Section("accounts", "额度", (
+        Metric("Go 221 · 5小时", "12%", ratio=0.12),)),))
+    assert "⏳ 5小时 12%" in [c.zh for c in footer_chips(calm)]
+    assert all("5小时" not in c.zh for c in footer_chips(TurnView(footer=Footer(model="m", route="OpenDesign"))))

@@ -11,19 +11,23 @@ import asyncio
 import contextlib
 import functools
 import logging
+import re
 import threading
 import time
 import uuid
 from collections.abc import Callable, Coroutine
 from concurrent.futures import CancelledError
 from concurrent.futures import Future as ConcurrentFuture
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from ..card.model import Footer, Phase, TodoItem
+from ..card.static import render_recovered
 from ..config import ConfigSource, hermes_home
 from ..details import DetailsCollector, DetailsConfig, TurnTelemetry, observe_history
-from ..details.pool import pool_route
+from ..details.pool import bench_until, pool_route
 from ..details.providers import short_name, with_canonical_provider
 from ..metrics import metrics
 from ..transport import (
@@ -54,6 +58,15 @@ _POOLED = {"opencode-go": short_name("opencode-go")}  # providers whose keys rot
 _NOTICE_MAX_CHARS = 400  # longer text (a /status reply, an answer) is never a notice
 _NOTICE_MAX_LINES = 5  # newlines; six lines or more is content, not a notice
 _NOTICE_IDS_MAX = 512
+_FOLD_ACK_SEC = 15.0  # Hermes' busy ack after a folded message repeats the "💬 你补充" line
+_FOLD_ACK_HEADS = ("↪", "⏩", "⚡")  # redirect / steer / interrupt acks, in every Hermes language
+_RECALL = re.compile(r"recalled (?:(\d+) memor(?:y|ies)|relevant memory)")  # Hermes writes this line in English
+_RECOVERED = "♻️ Recovered reply"
+_RECOVERED_REASONS = (
+    ("gateway restarted", "网关重启时没确认送达 · 可能与上面重复"),
+    ("reconnected", "平台重连后补发 · 可能与上面重复"),
+    ("rate limit", "原消息被限流拒收 · 部分内容可能已在上面"),
+)
 _RECENT_SEC = 1800.0  # how long a finished turn's ids still identify their chat (see ``_revive``)
 _RECENT_MAX = 256
 _BACKGROUND_REFRESH_SEC = 5.0  # a finished card re-renders at most this often while its subagents run
@@ -78,8 +91,8 @@ class Controller:
         # under one of them (a queued follow-up, a notice anchored to the last message)
         self._recent: dict[str, tuple[str, str | None, float]] = {}
         self._revive_lock = threading.Lock()
-        # ids handed back to Hermes for notices folded into a card -> (session, timeline entry)
-        self._notice_ids: dict[str, tuple[Session, Entry]] = {}
+        # ids handed back to Hermes for notices folded into a card -> (session, timeline entry or None)
+        self._notice_ids: dict[str, tuple[Session, Entry | None]] = {}
         self._fallback: dict[str, set[str]] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self.details_config = DetailsConfig.from_mapping(self.source.settings().details)
@@ -442,6 +455,7 @@ class Controller:
             if alias and self._sessions.get(alias) is not session:
                 self._sessions[alias] = session
                 session.aliases.append(alias)
+        session.folded_at = time.monotonic()
         if text.strip():
             with session.lock:
                 session.add_note(text.strip())
@@ -465,7 +479,26 @@ class Controller:
             return None
         return session
 
-    def on_outbound_text(self, *, chat_id: str, content: str) -> str | None:
+    async def on_outbound(self, *, chat_id: str, content: str, reply_to: str | None = None) -> str | None:
+        """Every plain message Hermes sends to a Feishu chat: a recovered reply becomes a card, a short notice
+        a line in the running card; ``None`` lets the adapter send it itself."""
+        if self.enabled and isinstance(content, str) and content.startswith(_RECOVERED):
+            return await self._recovered_card(chat_id, content)
+        return self.on_outbound_text(chat_id=chat_id, content=content, reply_to=reply_to)
+
+    async def _recovered_card(self, chat_id: str, content: str) -> str | None:
+        head, _, body = content.partition("\n\n")
+        reason = next((zh for key, zh in _RECOVERED_REASONS if key in head), "补发 · 可能与上面重复")
+        try:
+            client = await self._client_for(chat_id)
+            message_id = await client.send_card(chat_id, render_recovered(body or content, reason))
+        except Exception:
+            _logger.warning("recovered reply card failed, Hermes sends text: chat=%s", chat_id[:12], exc_info=True)
+            return None
+        metrics.increment("notice.recovered_card")
+        return str(message_id) if message_id else None
+
+    def on_outbound_text(self, *, chat_id: str, content: str, reply_to: str | None = None) -> str | None:
         """Hermes is about to post a plain message into a chat whose card is running (a busy ack, the
         memory-recall line, a process receipt, a credits notice). Keep it in the card as a grey line and
         hand back an id for later edits; ``None`` lets the message go out as usual."""
@@ -477,16 +510,36 @@ class Controller:
         session = self._running_in(chat_id)
         if session is None:
             return None
+        note_id = f"lark-notice-{uuid.uuid4().hex[:16]}"
+        if self._redundant_ack(session, text, reply_to):
+            metrics.increment("notice.ack_dropped")
+            self._remember_notice(note_id, session, None)
+            return note_id  # the "💬 你补充" line already says it
+        recall = _RECALL.search(text)
+        if recall is not None:
+            session.memories = (session.memories or 0) + int(recall.group(1) or 0)  # a footer chip, not a line
+            self._remember_notice(note_id, session, None)
+            self._wake(session)
+            return note_id
         with session.lock:
             entry = session.add_notice(text)
-        note_id = f"lark-notice-{uuid.uuid4().hex[:16]}"
-        self._notice_ids[note_id] = (session, entry)
-        while len(self._notice_ids) > _NOTICE_IDS_MAX:
-            del self._notice_ids[next(iter(self._notice_ids))]
+        self._remember_notice(note_id, session, entry)
         session.touched = time.monotonic()
         self._wake(session)
         metrics.increment("notice.folded")
         return note_id
+
+    def _remember_notice(self, note_id: str, session: Session, entry: Entry | None) -> None:
+        self._notice_ids[note_id] = (session, entry)
+        while len(self._notice_ids) > _NOTICE_IDS_MAX:
+            del self._notice_ids[next(iter(self._notice_ids))]
+
+    @staticmethod
+    def _redundant_ack(session: Session, text: str, reply_to: str | None) -> bool:
+        if not text.startswith(_FOLD_ACK_HEADS):
+            return False
+        folded = {*session.aliases} - {session.message_id}
+        return bool(reply_to and reply_to in folded) or time.monotonic() - session.folded_at < _FOLD_ACK_SEC
 
     def on_outbound_edit(self, *, message_id: str, content: str) -> bool:
         """Hermes edits a notice it believes it sent: rewrite the line (a finished card keeps its text)."""
@@ -494,7 +547,7 @@ class Controller:
         if found is None:
             return False
         session, entry = found
-        if not session.state.terminal and isinstance(content, str) and content.strip():
+        if entry is not None and not session.state.terminal and isinstance(content, str) and content.strip():
             with session.lock:
                 entry.text = content.strip()[:_NOTICE_MAX_CHARS]
             self._wake(session)
@@ -506,7 +559,7 @@ class Controller:
         if found is None:
             return False
         session, entry = found
-        if not session.state.terminal:
+        if entry is not None and not session.state.terminal:
             with session.lock:
                 entry.text = ""
             self._wake(session)
@@ -736,7 +789,29 @@ class Controller:
             model=footer.model or model, context_used=used, context_max=cap, cache_hit=footer.cache_hit,
             cache_hit_is_floor=footer.cache_hit_is_floor, partial=footer.partial,
             route=self._route_with_keys(footer.route, session), reasoning=footer.reasoning,
+            memories=session.memories,
         )
+
+    def _note_route_switch(self, session: Session) -> None:
+        """A request went to another subscription than the one before: say so in the timeline, with when the
+        exhausted key comes back (worker thread; reads the pool state Hermes persisted for the rotation)."""
+        route = self._route_with_keys(session.telemetry.footer().route, session)
+        tail = route.split(" → ")[-1] if route else ""
+        if not tail or tail == session.route_tail:
+            return
+        old, session.route_tail = session.route_tail, tail
+        if not old:
+            return
+        rows = [r for r in self.details_config.account_settings().get("accounts") or [] if isinstance(r, dict)]
+        until = next((u for p in _POOLED if (u := bench_until(self.home, p, old, rows)) is not None), None)
+        why = ""
+        if until is not None:
+            moment = datetime.fromtimestamp(until, ZoneInfo(self.details_config.zone))
+            when = moment.strftime("%H:%M" if until - time.time() < 86400 else "%m-%d %H:%M")
+            why = f" · {old} 额度用完 · {when} 恢复"
+        with session.lock:
+            session.add_note(f"{old} → {tail}{why}", label="🔀 换线路")
+        _logger.info("route switched: msg=%s %s -> %s", session.message_id[:12], old, tail)
 
     def _route_with_keys(self, route: str, session: Session) -> str:
         """Name the subscription key behind a pooled provider ("Go" → "Go a22 → Go 221")."""
@@ -890,6 +965,8 @@ class Controller:
                     else session.telemetry.observe(event, payload))
         if not observed:
             return False
+        if event == "pre_api_request":
+            self._note_route_switch(session)
         provider = _provider(session)
         if provider and provider != session.provider:
             # Account readers are per provider, so they can only start once the turn's provider is known.

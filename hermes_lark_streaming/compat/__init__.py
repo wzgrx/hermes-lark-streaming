@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from . import error_classification, log_safety, skills_index
+from . import error_classification, log_safety, nested_reset, skills_index
 
 _logger = logging.getLogger("hermes_lark_streaming")
 
@@ -19,6 +19,7 @@ def register(ctx: object) -> None:
         ("log_safety", log_safety.install),
         ("error_classification", lambda: error_classification.register(ctx)),
         ("skills_index", skills_index.install),
+        ("nested_reset", nested_reset.install),
     ):
         try:
             install()

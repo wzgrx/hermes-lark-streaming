@@ -212,11 +212,14 @@ def test_feishu_send_hands_notices_to_the_running_card(installed: Path) -> None:
 
     send = _load(installed, adapter, "send", {"SendResult": Result, "Optional": Optional, "Any": Any})
     me = SimpleNamespace(_client=None)
-    with patch("hermes_lark_streaming.hooks.bridge.on_outbound_text", return_value="lark-notice-1") as hook:
-        folded = asyncio.run(send(me, "oc_1", "↪ Redirected current run"))
-    hook.assert_called_once_with(chat_id="oc_1", content="↪ Redirected current run")
+    from unittest.mock import AsyncMock
+
+    taken = AsyncMock(return_value="lark-notice-1")
+    with patch("hermes_lark_streaming.hooks.bridge.on_outbound_text", taken):
+        folded = asyncio.run(send(me, "oc_1", "↪ Redirected current run", reply_to="om_2"))
+    taken.assert_awaited_once_with(chat_id="oc_1", content="↪ Redirected current run", reply_to="om_2")
     assert folded.success and folded.message_id == "lark-notice-1"
-    with patch("hermes_lark_streaming.hooks.bridge.on_outbound_text", return_value=None):
+    with patch("hermes_lark_streaming.hooks.bridge.on_outbound_text", AsyncMock(return_value=None)):
         native = asyncio.run(send(me, "oc_1", "hello"))
     assert native.success is False and native.error == "Not connected"  # the adapter's own path ran
     edit = _load(installed, adapter, "edit_message", {"SendResult": Result, "Any": Any})

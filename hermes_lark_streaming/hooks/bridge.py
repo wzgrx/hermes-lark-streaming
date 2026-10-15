@@ -164,11 +164,12 @@ def on_turn_folded(
 _NO_NOTICE: str | None = None
 
 
-@_safe(_NO_NOTICE)
-def on_outbound_text(ctrl: Any, *, chat_id: str, content: str) -> str | None:
-    """Feishu adapter ``send``: an id when the text became a line in the running card (skip the send)."""
-    notice = ctrl.on_outbound_text(chat_id=chat_id, content=content)
-    return notice if isinstance(notice, str) else None
+@_safe_async(_NO_NOTICE)
+async def on_outbound_text(ctrl: Any, *, chat_id: str, content: str, reply_to: str | None = None) -> str | None:
+    """Feishu adapter ``send``: an id when the text was taken over (a line in the running card, or a recovered
+    reply sent as a card), so the adapter skips its own send."""
+    taken = await ctrl.on_outbound(chat_id=chat_id, content=content, reply_to=reply_to)
+    return taken if isinstance(taken, str) else None
 
 
 @_safe(False)

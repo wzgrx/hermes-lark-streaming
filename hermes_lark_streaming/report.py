@@ -13,6 +13,7 @@ import json
 import time
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -21,6 +22,7 @@ from .card.render import details_element, grey
 from .config import ConfigSource
 from .details import DetailsCollector, DetailsConfig
 from .details.ledger import UsageLedger
+from .details.pool import pool_status
 from .details.providers import short_name
 from .details.sections.fmt import compact
 
@@ -75,13 +77,32 @@ async def account_sections(config: DetailsConfig, chat_id: str) -> list[Section]
     return out
 
 
-def build_card(sections: list[Section], *, period: str, now: datetime) -> dict[str, Any]:
+def route_line(home: Path, rows: list[dict[str, Any]], fallback: str, now: datetime) -> str:
+    """``🔀 在用 Go 221 · Go a22 额度用完 · 10-20 14:26 恢复 · 备用 OpenDesign``: which key serves next."""
+    keys = pool_status(home, "opencode-go", rows)
+    if not keys:
+        return ""
+    serving = next((label for label, until in keys if until is None), "")
+    parts = [f"在用 {serving}" if serving else "Go 额度都已用完"]
+    for label, until in keys:
+        if until is not None:
+            moment = datetime.fromtimestamp(until, now.tzinfo)
+            when = moment.strftime("%H:%M" if until - now.timestamp() < 86400 else "%m-%d %H:%M")
+            parts.append(f"{label} 额度用完 · {when} 恢复")
+    if fallback:
+        parts.append(f"备用 {fallback}")
+    return "🔀 " + " · ".join(parts)
+
+
+def build_card(sections: list[Section], *, period: str, now: datetime, route: str = "") -> dict[str, Any]:
     title = "用量周报" if period == "week" else "用量日报"
     stamp = f"{now:%m-%d}(周{_WEEKDAYS[now.weekday()]})"
     view = TurnView(phase=Phase.DONE, card_key=f"rp{now:%m%d}", sections=tuple(sections))
     panel = details_element(view, RenderOptions())
     elements: list[dict[str, Any]] = [{"tag": "markdown", "content": f"**📊 {title} · {stamp}**",
                                        "text_size": "normal_v2"}]
+    if route:
+        elements.append({"tag": "markdown", "content": grey(route), "text_size": "notation"})
     if panel is not None:
         panel["expanded"] = True
         panel["header"]["title"]["content"] = grey("用量 · 额度")
@@ -103,7 +124,9 @@ async def run(chat_id: str, period: str, *, dry_run: bool = False) -> int:
     now = datetime.now(ZoneInfo(tz))
     sections = [usage_section(UsageLedger(config.ledger_path()), tz, period, now)]
     sections += await account_sections(config, chat_id)
-    card = build_card(sections, period=period, now=now)
+    rows = [r for r in config.account_settings().get("accounts") or [] if isinstance(r, dict)]
+    fallback = next((str(r.get("label") or "") for r in rows if r.get("provider") == "opendesign"), "")
+    card = build_card(sections, period=period, now=now, route=route_line(source.home, rows, fallback, now))
     if dry_run:
         print(json.dumps(card, ensure_ascii=False, indent=1))
         return 0
