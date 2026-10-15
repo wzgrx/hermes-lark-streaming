@@ -27,7 +27,7 @@ from ..card.model import Footer, Phase, TodoItem
 from ..card.static import render_recovered
 from ..config import ConfigSource, hermes_home
 from ..details import DetailsCollector, DetailsConfig, TurnTelemetry, observe_history
-from ..details.pool import bench_until, pool_route
+from ..details.pool import bench_info, pool_route
 from ..details.providers import short_name, with_canonical_provider
 from ..metrics import metrics
 from ..transport import (
@@ -803,12 +803,14 @@ class Controller:
         if not old:
             return
         rows = [r for r in self.details_config.account_settings().get("accounts") or [] if isinstance(r, dict)]
-        until = next((u for p in _POOLED if (u := bench_until(self.home, p, old, rows)) is not None), None)
+        info = next((i for p in _POOLED if (i := bench_info(self.home, p, old, rows)) is not None), None)
         why = ""
-        if until is not None:
-            moment = datetime.fromtimestamp(until, ZoneInfo(self.details_config.zone))
-            when = moment.strftime("%H:%M" if until - time.time() < 86400 else "%m-%d %H:%M")
-            why = f" · {old} 额度用完 · {when} 恢复"
+        if info is not None:
+            until, quota = info
+            why = f" · {old} {'额度用完' if quota else '被限流'}"
+            if until is not None:
+                moment = datetime.fromtimestamp(until, ZoneInfo(self.details_config.zone))
+                why += f" · {moment.strftime('%H:%M' if until - time.time() < 86400 else '%m-%d %H:%M')} 恢复"
         with session.lock:
             session.add_note(f"{old} → {tail}{why}", label="🔀 换线路")
         _logger.info("route switched: msg=%s %s -> %s", session.message_id[:12], old, tail)

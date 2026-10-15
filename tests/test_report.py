@@ -37,7 +37,8 @@ def test_the_route_line_names_the_serving_key_and_when_others_return(tmp_path) -
     back = now.timestamp() + 3 * 86400
     pool = [{"label": "Go 221", "priority": 0, "source": "manual"},
             {"label": "OPENCODE_GO_API_KEY", "priority": 1, "source": "env:OPENCODE_GO_API_KEY",
-             "last_status": "exhausted", "last_status_at": time.time(), "last_error_reset_at": back}]
+             "last_status": "exhausted", "last_status_at": time.time(), "last_error_reset_at": back,
+             "last_error_code": 429, "last_error_reason": "GoUsageLimitError"}]
     (tmp_path / "auth.json").write_text(json.dumps({"credential_pool": {"opencode-go": pool}}))
     rows = [{"label": "Go a22", "provider": "opencode-go", "key_env": "OPENCODE_GO_API_KEY"}]
     when = datetime.fromtimestamp(back, now.tzinfo).strftime("%m-%d %H:%M")

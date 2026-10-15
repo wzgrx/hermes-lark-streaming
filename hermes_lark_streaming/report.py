@@ -82,13 +82,16 @@ def route_line(home: Path, rows: list[dict[str, Any]], fallback: str, now: datet
     keys = pool_status(home, "opencode-go", rows)
     if not keys:
         return ""
-    serving = next((label for label, until in keys if until is None), "")
-    parts = [f"在用 {serving}" if serving else "Go 额度都已用完"]
-    for label, until in keys:
-        if until is not None:
-            moment = datetime.fromtimestamp(until, now.tzinfo)
-            when = moment.strftime("%H:%M" if until - now.timestamp() < 86400 else "%m-%d %H:%M")
-            parts.append(f"{label} 额度用完 · {when} 恢复")
+    serving = next((label for label, info in keys if info is None), "")
+    parts = [f"在用 {serving}" if serving else "Go 的 key 都在冷却"]
+    for label, info in keys:
+        if info is not None:
+            until, quota = info
+            part = f"{label} {'额度用完' if quota else '被限流'}"
+            if until is not None:
+                moment = datetime.fromtimestamp(until, now.tzinfo)
+                part += f" · {moment.strftime('%H:%M' if until - now.timestamp() < 86400 else '%m-%d %H:%M')} 恢复"
+            parts.append(part)
     if fallback:
         parts.append(f"备用 {fallback}")
     return "🔀 " + " · ".join(parts)

@@ -112,3 +112,16 @@ def test_opendesign_nested_reset_reaches_the_error_context(monkeypatch) -> None:
     assert context == {"reason": "insufficient_balance", "reset_at": "2026-10-15T11:19:43Z"}
     assert "reset_at" not in helpers.extract_api_error_context(SimpleNamespace(body={"error": {}}))  # type: ignore[attr-defined]
     assert nested_reset.nested_reset(SimpleNamespace(body={"error": {"details": {"reset_at": True}}})) is None
+
+
+def test_go_upstream_throttle_retries_the_same_key() -> None:
+    upstream = error_classification.classify(
+        provider="opencode-go", status_code=429, error_type="server_error",
+        error_message="Upstream request failed: Rate limit exceeded. Please try again later.")
+    assert upstream is not None and upstream["reason"] == "overloaded"
+    assert upstream["should_rotate_credential"] is False and upstream["retryable"] is True
+    plan_wall = error_classification.classify(provider="opencode-go", status_code=429,
+                                              error_type="GoUsageLimitError", error_message="Go usage limit exceeded")
+    assert plan_wall is None  # a real plan wall keeps Hermes' own rotation
+    assert error_classification.classify(provider="other", status_code=429,
+                                         error_message="Upstream request failed: Rate limit exceeded") is None

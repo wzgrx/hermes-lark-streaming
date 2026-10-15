@@ -552,8 +552,20 @@ async def test_a_switch_of_subscription_is_noted_in_the_timeline(make_controller
     session = await start(ctl, session_key="sk")
     routes = iter(["Go 221", "Go 221", "Go 221 → OpenDesign"])
     monkeypatch.setattr(ctl, "_route_with_keys", lambda route, s: next(routes))
-    monkeypatch.setattr("hermes_lark_streaming.session.controller.bench_until", lambda *a: 1_000_000_000.0)
+    monkeypatch.setattr("hermes_lark_streaming.session.controller.bench_info", lambda *a: (1_000_000_000.0, True))
     for _ in range(3):
         ctl._note_route_switch(session)
     notes = [e for e in session.timeline if e.label == "🔀 换线路"]
     assert len(notes) == 1 and notes[0].text.startswith("Go 221 → OpenDesign · Go 221 额度用完")
+
+
+async def test_a_momentary_rate_limit_is_not_called_an_exhausted_quota(make_controller, client, monkeypatch):
+    ctl = make_controller()
+    session = await start(ctl, session_key="sk")
+    routes = iter(["Go 221", "Go 221 → OpenDesign"])
+    monkeypatch.setattr(ctl, "_route_with_keys", lambda route, s: next(routes))
+    monkeypatch.setattr("hermes_lark_streaming.session.controller.bench_info", lambda *a: (None, False))
+    ctl._note_route_switch(session)
+    ctl._note_route_switch(session)
+    note = next(e for e in session.timeline if e.label == "🔀 换线路")
+    assert note.text == "Go 221 → OpenDesign · Go 221 被限流"
