@@ -71,9 +71,14 @@ def _history_tokens(bucket: Mapping[str, Any]) -> str:
     return compact(tokens, lower_bound=bool(bucket.get("partial")))  # "4.83B+" when some requests had no usage
 
 
-def _history_cache(bucket: Mapping[str, Any]) -> str:
-    cached = count(bucket.get("cached"))
-    return f"缓存另 {compact(cached)}" if cached else ""
+def _cache_note(history: Mapping[str, Any]) -> str:
+    """The cache reads beside the totals, in the note line: inside a fifth-width cell they broke the value."""
+    parts = []
+    for key, title in (("today", "今日"), ("month", "本月"), ("total", "总计")):
+        cached = count(mapping(history.get(key)).get("cached"))
+        if cached and not (key == "total" and cached == count(mapping(history.get("month")).get("cached"))):
+            parts.append(f"{title} {compact(cached)}")
+    return "缓存另计 " + " · ".join(parts) if parts else ""
 
 
 def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -> tuple[tuple[Metric, ...], list[str]]:
@@ -86,8 +91,7 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
     label(history.get("since"))
     group = "累计"
     metrics = [
-        Metric(title, _history_tokens(mapping(history.get(key))), hint=_history_cache(mapping(history.get(key))),
-               label_en=en, group=group)
+        Metric(title, _history_tokens(mapping(history.get(key))), label_en=en, group=group)
         for key, title, en in (("today", "今日", "Today"), ("month", "本月", "Month"), ("total", "总计", "Total"))
     ]
     # request counts: what a request-metered subscription actually spends; also fills the row to five cells
@@ -102,7 +106,9 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
             name = label(row.get("model"))[:48] or UNKNOWN
             metrics.append(Metric(name, _history_tokens(row), hint=label(row.get("subscription"))[:32],
                                   group="模型累计"))
-    notes: list[str] = ["累计 = 新输入 + 输出 · 重复读取的上下文按缓存另计"]
+    notes: list[str] = ["累计 = 新输入 + 输出"]
+    if cache := _cache_note(history):
+        notes.append(cache)
     if any(mapping(history.get(k)).get("partial") for k in ("today", "month", "total")):
         notes.append("* 部分请求缺少用量，带 + 的数字是已观测下限")
     return tuple(metrics), notes

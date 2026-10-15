@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "1.13.0"
+__version__ = "1.13.1"
 
 
 def register(ctx: object) -> None:

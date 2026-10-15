@@ -567,5 +567,5 @@ def test_output_names_its_reasoning_share_and_history_shows_new_tokens():
                "total": {"tokens": 1, "fresh": 1, "cached": 0, "requests": 1, "partial": False}}
     section = usage_section(None, history)
     today = by_label(section)["今日"]
-    assert (today.value, today.hint) == ("11.8M+", "缓存另 280M")
-    assert "累计 = 新输入 + 输出 · 重复读取的上下文按缓存另计" in section.notes
+    assert (today.value, today.hint) == ("11.8M+", "")  # a hint inside a fifth-width cell broke the value
+    assert "累计 = 新输入 + 输出" in section.notes and "缓存另计 今日 280M" in section.notes

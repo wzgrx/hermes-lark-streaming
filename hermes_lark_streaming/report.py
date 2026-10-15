@@ -45,7 +45,6 @@ def _usage_metrics(report: dict[str, Any], group: str) -> list[Metric]:
     rows = sorted(report.get("groups") or [], key=lambda g: -_fresh(g))
     metrics = [
         Metric(short_name(str(g["key"][0])), compact(_fresh(g), lower_bound=bool(g.get("usage_partial"))),
-               hint=f"缓存另 {compact(g.get('cache_read_tokens'))}" if g.get("cache_read_tokens") else "",
                group=group)
         for g in rows[:4] if g.get("total_tokens")
     ]
@@ -61,7 +60,13 @@ def usage_section(ledger: UsageLedger, tz: str, period: str, now: datetime) -> S
     head = "本周" if period == "week" else "今日"
     first = ledger.report(start=start.timestamp(), end=now.timestamp(), group_by="provider", timezone=tz)
     whole = ledger.report(start=month.timestamp(), end=now.timestamp(), group_by="provider", timezone=tz)
-    return Section("usage", "用量", (*_usage_metrics(first, head), *_usage_metrics(whole, "本月")))
+    notes = ["用量 = 新输入 + 输出"]
+    cached = [(title, sum(g.get("cache_read_tokens") or 0 for g in r.get("groups") or []))
+              for title, r in ((head, first), ("本月", whole))]
+    if any(n for _, n in cached):
+        notes.append("缓存另计 " + " · ".join(f"{title} {compact(n)}" for title, n in cached if n))
+    return Section("usage", "用量", (*_usage_metrics(first, head), *_usage_metrics(whole, "本月")),
+                   notes=tuple(notes))
 
 
 async def account_sections(config: DetailsConfig, chat_id: str) -> list[Section]:
