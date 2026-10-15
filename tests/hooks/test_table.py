@@ -15,17 +15,18 @@ from hermes_lark_streaming.hooks.table import INJECTION_NAMES, INJECTIONS
 EXPECTED = {
     "NORMALIZE", "START", "COMPLETE", "FOLLOWUP_COMPLETE", "FOLLOWUP_RESULT", "TOOL", "ANSWER", "THINKING",
     "REASONING", "BACKGROUND_REVIEW", "ABORT", "STOP", "FOLD", "INTERRUPT", "BG_DELIVER", "CLARIFY", "APPROVAL",
-    "CRON_DELIVER",
+    "CRON_DELIVER", "OUTBOUND_SEND", "OUTBOUND_EDIT", "OUTBOUND_DELETE",
 }  # fmt: skip
 
 
-def test_table_covers_all_eighteen_hooks_once() -> None:
+def test_table_covers_every_hook_once() -> None:
     assert set(INJECTION_NAMES) == EXPECTED
-    assert len(INJECTION_NAMES) == len(EXPECTED) == 18
+    assert len(INJECTION_NAMES) == len(EXPECTED) == 21
 
 
-def test_only_cron_is_optional() -> None:
-    assert [i.name for i in INJECTIONS if i.optional] == ["CRON_DELIVER"]
+def test_only_cron_and_notice_folding_are_optional() -> None:
+    optional = ["CRON_DELIVER", "OUTBOUND_SEND", "OUTBOUND_EDIT", "OUTBOUND_DELETE"]
+    assert [i.name for i in INJECTIONS if i.optional] == optional
 
 
 @pytest.mark.parametrize("injection", INJECTIONS, ids=lambda i: i.name)

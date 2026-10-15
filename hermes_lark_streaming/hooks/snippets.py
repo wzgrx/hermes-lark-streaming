@@ -350,6 +350,37 @@ def interrupt() -> list[str]:
     ]
 
 
+def outbound_send() -> list[str]:
+    return [
+        "try:",
+        f"    from {BRIDGE} import on_outbound_text",
+        "    _lark_notice_id = on_outbound_text(chat_id=chat_id, content=content)",
+        "    if _lark_notice_id:",
+        "        return SendResult(success=True, message_id=_lark_notice_id)",
+        *_guard("outbound_send"),
+    ]
+
+
+def outbound_edit() -> list[str]:
+    return [
+        "try:",
+        f"    from {BRIDGE} import on_outbound_edit",
+        "    if on_outbound_edit(message_id=message_id, content=content):",
+        "        return SendResult(success=True, message_id=message_id)",
+        *_guard("outbound_edit"),
+    ]
+
+
+def outbound_delete() -> list[str]:
+    return [
+        "try:",
+        f"    from {BRIDGE} import on_outbound_delete",
+        "    if on_outbound_delete(message_id=message_id):",
+        "        return True",
+        *_guard("outbound_delete"),
+    ]
+
+
 def bg_deliver() -> list[str]:
     return [
         "try:",

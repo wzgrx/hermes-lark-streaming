@@ -25,7 +25,7 @@ def test_verify_install_verify_uninstall_roundtrip_is_byte_identical(hermes_sour
     eng = Engine(hermes_source)
     original = read_all(hermes_source)
     plan = eng.verify()
-    assert plan.ok and not plan.skipped and len(plan.included) == 18
+    assert plan.ok and not plan.skipped and len(plan.included) == 21
     assert read_all(hermes_source) == original  # verify never writes
 
     eng.install()
@@ -98,9 +98,9 @@ def test_missing_cron_anchor_is_optional(hermes_source: Path) -> None:
     assert Engine(hermes_source).status().fully_installed
 
 
-def _callback(root: Path, rel: str, name: str) -> ast.FunctionDef:
+def _callback(root: Path, rel: str, name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
     tree = ast.parse((root / rel).read_text())
-    return next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
+    return next(n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name)
 
 
 def _load(root: Path, rel: str, name: str, namespace: dict[str, Any]) -> Any:
@@ -198,3 +198,30 @@ def test_cron_hook_requires_message_id_evidence(installed: Path) -> None:
     assert source.index("_hermes_lark_cron_receipt.get('delivery_outcome')") < source.index(
         "_maybe_mirror_cron_delivery(", begin
     )
+
+
+def test_feishu_send_hands_notices_to_the_running_card(installed: Path) -> None:
+    import asyncio
+
+    class Result:
+        def __init__(self, success: bool, message_id: Any = None, error: Any = None) -> None:
+            self.success, self.message_id, self.error = success, message_id, error
+
+    adapter = "plugins/platforms/feishu/adapter.py"
+    from typing import Optional
+
+    send = _load(installed, adapter, "send", {"SendResult": Result, "Optional": Optional, "Any": Any})
+    me = SimpleNamespace(_client=None)
+    with patch("hermes_lark_streaming.hooks.bridge.on_outbound_text", return_value="lark-notice-1") as hook:
+        folded = asyncio.run(send(me, "oc_1", "↪ Redirected current run"))
+    hook.assert_called_once_with(chat_id="oc_1", content="↪ Redirected current run")
+    assert folded.success and folded.message_id == "lark-notice-1"
+    with patch("hermes_lark_streaming.hooks.bridge.on_outbound_text", return_value=None):
+        native = asyncio.run(send(me, "oc_1", "hello"))
+    assert native.success is False and native.error == "Not connected"  # the adapter's own path ran
+    edit = _load(installed, adapter, "edit_message", {"SendResult": Result, "Any": Any})
+    with patch("hermes_lark_streaming.hooks.bridge.on_outbound_edit", return_value=True):
+        assert asyncio.run(edit(me, "oc_1", "lark-notice-1", "new")).message_id == "lark-notice-1"
+    delete = _load(installed, adapter, "delete_message", {"Any": Any})
+    with patch("hermes_lark_streaming.hooks.bridge.on_outbound_delete", return_value=True):
+        assert asyncio.run(delete(me, "oc_1", "lark-notice-1")) is True

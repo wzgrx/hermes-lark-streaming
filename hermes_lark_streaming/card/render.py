@@ -358,6 +358,8 @@ def _note_element(block: Block, view: TurnView) -> dict[str, Any]:
     """The user's mid-turn message, shown where it arrived so the answer after it reads in context; or, with a
     label, the reason a Hermes-generated turn (subagent results, a background process) exists."""
     text = esc(clip(redact(block.text), _NOTE_CHARS))
+    if block.notice:
+        return _markdown(Bi.same(grey(f"📣 {text}")), "notation", element_id=_id(block.key, view))
     if block.label:
         line = f"**{esc(block.label)}** {grey('· ' + text)}" if text else f"**{esc(block.label)}**"
         return _markdown(Bi.same(line), "notation", element_id=_id(block.key, view))

@@ -161,6 +161,26 @@ def on_turn_folded(
     ))
 
 
+_NO_NOTICE: str | None = None
+
+
+@_safe(_NO_NOTICE)
+def on_outbound_text(ctrl: Any, *, chat_id: str, content: str) -> str | None:
+    """Feishu adapter ``send``: an id when the text became a line in the running card (skip the send)."""
+    notice = ctrl.on_outbound_text(chat_id=chat_id, content=content)
+    return notice if isinstance(notice, str) else None
+
+
+@_safe(False)
+def on_outbound_edit(ctrl: Any, *, message_id: str, content: str) -> bool:
+    return bool(ctrl.on_outbound_edit(message_id=message_id, content=content))
+
+
+@_safe(False)
+def on_outbound_delete(ctrl: Any, *, message_id: str) -> bool:
+    return bool(ctrl.on_outbound_delete(message_id=message_id))
+
+
 @_safe(None)
 def on_message_started(
     ctrl: Any,

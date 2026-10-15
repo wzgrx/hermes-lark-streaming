@@ -85,6 +85,7 @@ class Block:
     elapsed_s: float | None = None  # thought duration / tool batch wall time, once closed
     open: bool = False  # still receiving content
     label: str = ""  # NOTE only: a Hermes-generated turn's reason ("🔀 后台子代理已完成"); empty = the user's message
+    notice: bool = False  # NOTE only: a Hermes notice that would otherwise have been its own chat message
     agents: tuple[Subagent, ...] = ()  # AGENTS only
 
 

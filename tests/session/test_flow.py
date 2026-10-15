@@ -466,3 +466,50 @@ async def test_late_completion_events_of_a_finished_turn_do_not_open_a_card(make
     assert await ctl.on_completed_wait(message_id="om_1", answer="完成。") is True
     assert ctl.on_tool_update(message_id="om_1", tool_name="t", status="completed") is False
     assert client.cards == 1
+
+
+async def test_hermes_notices_become_lines_in_the_running_card(make_controller, client):
+    ctl = make_controller()
+    await start(ctl)
+    note = ctl.on_outbound_text(chat_id="oc_1", content="🧠 Holographic — recalled 5 memories")
+    assert note and note.startswith("lark-notice-")
+    ack = ctl.on_outbound_text(chat_id="oc_1", content="⏳ Queued for after the current run")
+    assert ctl.on_outbound_edit(message_id=ack, content="↪ Redirected current run") is True
+    ctl.on_answer(message_id="om_1", text="正文。")
+    await settle(ctl)
+    assert await ctl.on_completed_wait(message_id="om_1", answer="正文。") is True
+    body = str(client.of("update_card")[-1][2])
+    assert "📣 🧠 Holographic — recalled 5 memories" in body and "Redirected current run" in body
+    assert "Queued for after" not in body  # the edit replaced the line
+    # after the turn: Hermes' cleanup of its "message" is swallowed, new text goes out as usual
+    assert ctl.on_outbound_delete(message_id=note) is True
+    assert ctl.on_outbound_text(chat_id="oc_1", content="下一条") is None
+
+
+async def test_prompts_long_text_and_other_chats_stay_separate_messages(make_controller, client):
+    ctl = make_controller()
+    session = await start(ctl)
+    assert ctl.on_outbound_text(chat_id="oc_2", content="别的群") is None
+    assert ctl.on_outbound_text(chat_id="oc_1", content="x" * 401) is None
+    assert ctl.on_outbound_text(chat_id="oc_1", content="\n".join("行" for _ in range(6))) is None
+    ctl.on_clarify_enter(message_id="om_1")
+    assert session.state is State.PAUSED
+    assert ctl.on_outbound_text(chat_id="oc_1", content="1. A  2. B") is None  # the clarify question itself
+    assert ctl.on_outbound_edit(message_id="om_unknown", content="x") is False
+    assert ctl.on_outbound_delete(message_id="om_unknown") is False
+
+
+async def test_a_deleted_notice_leaves_the_card(make_controller, client):
+    ctl = make_controller()
+    await start(ctl)
+    note = ctl.on_outbound_text(chat_id="oc_1", content="⏳ Still working (2m)")
+    assert ctl.on_outbound_delete(message_id=note) is True
+    assert await ctl.on_completed_wait(message_id="om_1", answer="好了。") is True
+    assert "Still working" not in str(client.of("update_card")[-1][2])
+
+
+async def test_two_turns_in_one_group_keep_notices_separate(make_controller, client):
+    ctl = make_controller()
+    await start(ctl, mid="om_1")
+    await start(ctl, mid="om_2")
+    assert ctl.on_outbound_text(chat_id="oc_1", content="谁的通知?") is None

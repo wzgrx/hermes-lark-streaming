@@ -39,7 +39,7 @@ from ..transport.open_cards import OPEN_CARDS_FILE, OpenCards
 from ..transport.routing import BotRegistry
 from .agents import SUBAGENT_EVENTS, AgentBook
 from .pipeline import Pipeline, Runtime, guard_for
-from .state import Session, State
+from .state import Entry, Session, State
 from .static import CronDeliveryOutcomeUnknown, StaticDelivery
 from .synthetic import delegation_batch, synthetic_note
 from .text import split_reasoning_text, strip_reasoning_tags
@@ -51,6 +51,9 @@ _ABANDONED_SEC = 6 * 3600.0  # a turn silent this long has lost its completion
 _SWEEP_INTERVAL_SEC = 300.0  # look for cards left live by a dead gateway at most this often
 _ORPHAN_MIN_AGE_SEC = 120.0
 _POOLED = {"opencode-go": short_name("opencode-go")}  # providers whose keys rotate in a Hermes pool
+_NOTICE_MAX_CHARS = 400  # longer text (a /status reply, an answer) is never a notice
+_NOTICE_MAX_LINES = 5  # newlines; six lines or more is content, not a notice
+_NOTICE_IDS_MAX = 512
 _RECENT_SEC = 1800.0  # how long a finished turn's ids still identify their chat (see ``_revive``)
 _RECENT_MAX = 256
 _BACKGROUND_REFRESH_SEC = 5.0  # a finished card re-renders at most this often while its subagents run
@@ -75,6 +78,8 @@ class Controller:
         # under one of them (a queued follow-up, a notice anchored to the last message)
         self._recent: dict[str, tuple[str, str | None, float]] = {}
         self._revive_lock = threading.Lock()
+        # ids handed back to Hermes for notices folded into a card -> (session, timeline entry)
+        self._notice_ids: dict[str, tuple[Session, Entry]] = {}
         self._fallback: dict[str, set[str]] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self.details_config = DetailsConfig.from_mapping(self.source.settings().details)
@@ -442,6 +447,69 @@ class Controller:
                 session.add_note(text.strip())
             self._wake(session)
         _logger.info("turn folded: msg=%s new=%s", session.message_id[:12], (new_message_id or "")[:12])
+        return True
+
+    # ------------------------------------------------------------------ Hermes notices
+
+    def _running_in(self, chat_id: str) -> Session | None:
+        """The one card running in a chat, if it may take a notice: not waiting on an approval or a clarify
+        answer (those prompts must stay separate messages), not handed back to native delivery."""
+        running = [s for s in {id(s): s for s in self._sessions.values()}.values()
+                   if s.chat_id == chat_id and not s.state.terminal]
+        if len(running) != 1:
+            return None  # several people's turns in one group: the text could belong to any of them
+        session = running[0]
+        if session.state is State.PAUSED or session.message_id in self._fallback:
+            return None
+        if session.guard is not None and session.guard.should_skip("hook"):
+            return None
+        return session
+
+    def on_outbound_text(self, *, chat_id: str, content: str) -> str | None:
+        """Hermes is about to post a plain message into a chat whose card is running (a busy ack, the
+        memory-recall line, a process receipt, a credits notice). Keep it in the card as a grey line and
+        hand back an id for later edits; ``None`` lets the message go out as usual."""
+        if not self.enabled or not chat_id or not isinstance(content, str):
+            return None
+        text = content.strip()
+        if not text or len(text) > _NOTICE_MAX_CHARS or text.count("\n") >= _NOTICE_MAX_LINES:
+            return None
+        session = self._running_in(chat_id)
+        if session is None:
+            return None
+        with session.lock:
+            entry = session.add_notice(text)
+        note_id = f"lark-notice-{uuid.uuid4().hex[:16]}"
+        self._notice_ids[note_id] = (session, entry)
+        while len(self._notice_ids) > _NOTICE_IDS_MAX:
+            del self._notice_ids[next(iter(self._notice_ids))]
+        session.touched = time.monotonic()
+        self._wake(session)
+        metrics.increment("notice.folded")
+        return note_id
+
+    def on_outbound_edit(self, *, message_id: str, content: str) -> bool:
+        """Hermes edits a notice it believes it sent: rewrite the line (a finished card keeps its text)."""
+        found = self._notice_ids.get(message_id) if isinstance(message_id, str) else None
+        if found is None:
+            return False
+        session, entry = found
+        if not session.state.terminal and isinstance(content, str) and content.strip():
+            with session.lock:
+                entry.text = content.strip()[:_NOTICE_MAX_CHARS]
+            self._wake(session)
+        return True
+
+    def on_outbound_delete(self, *, message_id: str) -> bool:
+        """Hermes cleans up a notice (progress bubbles at the end of a turn): drop the line while it runs."""
+        found = self._notice_ids.pop(message_id, None) if isinstance(message_id, str) else None
+        if found is None:
+            return False
+        session, entry = found
+        if not session.state.terminal:
+            with session.lock:
+                entry.text = ""
+            self._wake(session)
         return True
 
     # ------------------------------------------------------------------ content events

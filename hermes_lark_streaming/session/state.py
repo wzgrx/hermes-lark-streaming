@@ -50,6 +50,7 @@ class Entry:
     started: float = field(default_factory=time.monotonic)
     ended: float | None = None
     label: str = ""  # NOTE blocks only
+    notice: bool = False  # NOTE blocks only: a Hermes notice folded into the card
     batch: str = ""  # AGENTS blocks only: the delegate_task batch shown in this panel
 
 
@@ -180,6 +181,16 @@ class Session:
         self.timeline.append(entry)
         self.last_was_answer = False
 
+    def add_notice(self, text: str) -> Entry:
+        """A notice Hermes sent to the chat while this card runs (busy ack, memory recall, process receipt),
+        kept in the timeline instead of a separate message. Returned so a later edit can rewrite it."""
+        self.close_entry()
+        entry = Entry(BlockKind.NOTE, f"b{len(self.timeline)}", notice=True)
+        entry.text, entry.ended = text, time.monotonic()
+        self.timeline.append(entry)
+        self.last_was_answer = False
+        return entry
+
     def record_subagent(self, event_type: str, tool_name: str, preview: str, details: dict[str, Any]) -> bool:
         """A subagent event: update its record; the first event of a batch opens that batch's panel here."""
         batch = self.agents.apply(event_type, tool_name, preview, details)
@@ -236,6 +247,7 @@ class Session:
                 elapsed_s=elapsed,
                 open=is_open,
                 label=entry.label,
+                notice=entry.notice,
                 agents=self.agents.views(entry.batch) if entry.kind is BlockKind.AGENTS else (),
             ))
         return tuple(out)

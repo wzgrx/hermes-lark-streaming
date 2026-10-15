@@ -20,6 +20,7 @@ GATEWAY_RUNNER = "gateway/run_turn_runner.py"
 GATEWAY_PROGRESS = "gateway/run_turn_progress.py"  # progress_callback became a method here (Hermes 0.22.1+)
 GATEWAY_BUSY = "gateway/run_busy.py"
 CRON_DELIVERY = "cron/scheduler_delivery.py"
+FEISHU_ADAPTER = "plugins/platforms/feishu/adapter.py"
 LAYOUT_PROBE = GATEWAY_RUNNER
 
 
@@ -156,6 +157,19 @@ INJECTIONS: tuple[Injection, ...] = (
         snippets.cron_deliver,
         ("on_cron_deliver",),
         optional=True,
+    ),
+    # Hermes' own plain notices (busy acks, memory recall, process receipts) become lines in the running card
+    Injection(
+        "OUTBOUND_SEND", FEISHU_ADAPTER, (FuncBody("send"),), snippets.outbound_send, ("on_outbound_text",),
+        optional=True,
+    ),
+    Injection(
+        "OUTBOUND_EDIT", FEISHU_ADAPTER, (FuncBody("edit_message"),), snippets.outbound_edit, ("on_outbound_edit",),
+        optional=True,
+    ),
+    Injection(
+        "OUTBOUND_DELETE", FEISHU_ADAPTER, (FuncBody("delete_message"),), snippets.outbound_delete,
+        ("on_outbound_delete",), optional=True,
     ),
 )
 
