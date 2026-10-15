@@ -104,6 +104,11 @@ def _callback(root: Path, rel: str, name: str) -> ast.FunctionDef:
 
 
 def _load(root: Path, rel: str, name: str, namespace: dict[str, Any]) -> Any:
+    # Closure names the 0.22.1+ callbacks read besides ctx/stts: no local viewer, no execution observers.
+    namespace.setdefault("self", SimpleNamespace(_publish_execution=lambda *_: False))
+    namespace.setdefault("local_viewer_route", False)
+    namespace.setdefault("_finite_viewer_turn", lambda: False)
+    namespace.setdefault("_NoStreamConsumer", RuntimeError)
     module = ast.Module(body=[_callback(root, rel, name)], type_ignores=[])
     exec(compile(ast.fix_missing_locations(module), f"<{name}>", "exec"), namespace)
     return namespace[name]

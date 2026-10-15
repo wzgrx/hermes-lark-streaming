@@ -1,5 +1,12 @@
 # 更新记录
 
+## [1.9.2] - 2026-10-15
+
+适配 Hermes v0.22.1+83(db44c46):
+
+- 工具进度回调 `progress_callback` 移到 `gateway/run_turn_progress.py`(改为方法),TOOL 注入点随之迁移;旧版 Hermes 需用 1.9.1。
+- 测试补上新版回调闭包里的 `local_viewer_route` 等名字。
+
 ## [1.9.1] - 2026-10-14
 
 飞书实测后的修正:

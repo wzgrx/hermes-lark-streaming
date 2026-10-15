@@ -17,6 +17,7 @@ MARKER_PREFIX = "HERMES_LARK"
 GATEWAY_INBOUND = "gateway/run_inbound.py"
 GATEWAY_TURN = "gateway/run_turn.py"
 GATEWAY_RUNNER = "gateway/run_turn_runner.py"
+GATEWAY_PROGRESS = "gateway/run_turn_progress.py"  # progress_callback became a method here (Hermes 0.22.1+)
 GATEWAY_BUSY = "gateway/run_busy.py"
 CRON_DELIVERY = "cron/scheduler_delivery.py"
 LAYOUT_PROBE = GATEWAY_RUNNER
@@ -79,7 +80,7 @@ INJECTIONS: tuple[Injection, ...] = (
     ),
     Injection(
         "TOOL",
-        GATEWAY_RUNNER,
+        GATEWAY_PROGRESS,
         (FuncBody("progress_callback"),),
         snippets.tool,
         ("on_tool_updated", "on_subagent_event"),
