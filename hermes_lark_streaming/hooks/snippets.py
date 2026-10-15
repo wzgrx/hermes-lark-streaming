@@ -23,12 +23,13 @@ def normalize() -> list[str]:
     return [
         "try:",
         f"    from {BRIDGE} import on_feishu_normalize",
-        "    on_feishu_normalize(",
+        "    if on_feishu_normalize(",
         "        message_id=event.message_id,",
         "        source=source,",
         "        event=event,",
         "        reply_anchor_id=self._reply_anchor_for_event(event),",
-        "    )",
+        "    ):",
+        "        return None  # a card button the plugin handled itself (stop a background job)",
         *_guard("normalize"),
     ]
 
@@ -174,6 +175,8 @@ def tool() -> list[str]:
         "            detail=preview or '',",
         "            result=locals().get('kwargs', {}).get('result'),",
         "            is_error=locals().get('kwargs', {}).get('is_error'),",
+        "            command=str((locals().get('args') or {}).get('command') or '')"
+        " if isinstance(locals().get('args'), dict) else '',",
         "        ):",
         "            _lark_log_queue = getattr(_lark_ctx, 'log_queue', None) if _lark_ctx is not None else None",
         "            if _lark_ctx is None:",

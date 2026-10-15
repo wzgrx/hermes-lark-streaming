@@ -379,6 +379,8 @@ def block_elements(view: TurnView, opts: RenderOptions, *, streaming: bool) -> l
                 elements.append(_note_element(block, view))
         elif block.kind is BlockKind.ERROR:
             elements.extend(_error_elements(block, view))
+        elif block.kind is BlockKind.JOB:
+            elements.extend(job_elements(block.label, block.job, element_id=_id(block.key, view)))
         elif not opts.show_process:
             continue
         elif block.kind is BlockKind.THOUGHT and block.text.strip():
@@ -727,6 +729,24 @@ def _error_elements(block: Block, view: TurnView) -> list[dict[str, Any]]:
                          elements=[_markdown(Bi.same(grey(esc(clip(redact(raw), 3000)))), "notation")],
                          expanded=False, element_id=_id(f"{block.key}x", view)))
     return out
+
+
+def job_elements(description: str, job: str, *, element_id: str = "") -> list[dict[str, Any]]:
+    """``🧵 后台任务 · wchat-play-l3 · l3-run-all.sh · 128 并发`` and a stop button: a detached job keeps
+    running (and spending a subscription) after the turn ends."""
+    line = _markdown(Bi(f"🧵 **后台任务** {grey('· ' + esc(clip(description, 120)))}",
+                        f"🧵 **Background job** {grey('· ' + esc(clip(description, 120)))}"), "notation",
+                     element_id=element_id)
+    button = {
+        "tag": "button",
+        "text": {"tag": "plain_text", "content": "⏹ 停止任务", "i18n_content": {"en_us": "⏹ Stop job"}},
+        "type": "danger",
+        "size": "small",
+        "behaviors": [{"type": "callback", "value": {"lark_card": "stopjob", "job": job}}],
+    }
+    if element_id:
+        button["element_id"] = f"{element_id}s"
+    return [line, button]
 
 
 def retry_button(turn: str) -> dict[str, Any]:

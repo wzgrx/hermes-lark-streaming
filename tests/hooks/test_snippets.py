@@ -27,7 +27,7 @@ def tool_callback(use_ctx: bool) -> Any:
         ns = build(
             "class Callbacks:\n"
             "    def __init__(self, ctx):\n        self._ctx = ctx\n"
-            "    def callback(self, event_type, tool_name=None, preview=None, **kwargs):\n"
+            "    def callback(self, event_type, tool_name=None, preview=None, args=None, **kwargs):\n"
             f"{indented(snippets.tool, '        ')}        return 'native'\n"
         )
         return lambda ctx: ns["Callbacks"](ctx).callback
@@ -130,7 +130,14 @@ class TestTool:
             detail="query",
             result=None,
             is_error=None,
+            command="",
         )
+
+    def test_terminal_command_reaches_the_bridge(self) -> None:
+        with patch(f"{BRIDGE}.on_tool_updated", return_value=True) as hook:
+            tool_callback(True)(ctx_with())("tool.started", tool_name="terminal", preview="systemd-run …",
+                                            args={"command": "systemd-run --user --unit=x bash run.sh"})
+        assert hook.call_args.kwargs["command"] == "systemd-run --user --unit=x bash run.sh"
 
     def test_consumed_event_preserves_log_mode(self) -> None:
         ctx = ctx_with(log_queue=MagicMock())

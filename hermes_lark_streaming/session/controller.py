@@ -42,6 +42,7 @@ from ..transport import (
 from ..transport.media import deliver_media_files, extract_media_paths, media_paths_to_deliver
 from ..transport.open_cards import OPEN_CARDS_FILE, OpenCards
 from ..transport.routing import BotRegistry
+from . import jobs
 from .agents import SUBAGENT_EVENTS, AgentBook
 from .pipeline import Pipeline, Runtime, guard_for
 from .state import Entry, Session, State
@@ -78,6 +79,11 @@ _RECOVERED_REASONS = (
 )
 _PROMPTS_MAX = 128  # the text of recent turns, for their retry buttons (memory only)
 _RETRY_GUARD_SEC = 120.0  # a second click on one card's retry within this window is ignored
+_JOBS_MAX = 64
+_WATCH_EVERY_SEC = 600.0  # how often the Go 5-hour windows are read for the spike alert
+_SPIKE_POINTS = 10.0  # a rise this large ...
+_SPIKE_WINDOW_SEC = 1800.0  # ... within this long is a spike
+_ALERT_GAP_SEC = 3600.0  # one alert per key per hour
 _RECENT_SEC = 1800.0  # how long a finished turn's ids still identify their chat (see ``_revive``)
 _RECENT_MAX = 256
 _BACKGROUND_REFRESH_SEC = 5.0  # a finished card re-renders at most this often while its subagents run
@@ -102,6 +108,10 @@ class Controller:
         # under one of them (a queued follow-up, a notice anchored to the last message)
         self._recent: dict[str, tuple[str, str | None, float]] = {}
         self._revive_lock = threading.Lock()
+        self._jobs: dict[str, jobs.Job] = {}  # background jobs the agent detached, by id
+        self._watch: Any = None  # the quota spike watch task, started with the first turn
+        self._usage_seen: dict[str, list[tuple[float, float]]] = {}  # key label -> (when, 5h used %)
+        self._alerted: dict[str, float] = {}
         self._prompts: dict[str, tuple[str, str]] = {}  # user message id -> (chat, text) of its turn
         self._retried: dict[str, float] = {}  # turn -> when its retry button last resent it
         self._retry_anchor: dict[str, str] = {}  # a retry click's event id -> the message it resends
@@ -347,6 +357,8 @@ class Controller:
         if self._swept_at is None or now - self._swept_at >= _SWEEP_INTERVAL_SEC:
             self._swept_at = now
             self._fire(self._sweep_open_cards(), loop)
+        if self._watch is None and self._alert_chat():
+            self._watch = self._fire(self._quota_watch(), loop)
         reply = anchor_id if anchor_id and anchor_id != message_id else None
         session = self._new_session(message_id, chat_id, loop, anchor_id=reply, session_key=session_key)
         if notice is not None:
@@ -499,6 +511,117 @@ class Controller:
         if session.guard is not None and session.guard.should_skip("hook"):
             return None
         return session
+
+    # ------------------------------------------------------------------ background jobs and quota watch
+
+    def stop_job(self, *, job_id: str, chat_id: str) -> bool:
+        """The card's ⏹ 停止任务: stop the job, then say what happened in the chat (Hermes never sees the
+        click). Jobs only the quota watch found carry their unit name in the id."""
+        job = self._jobs.get(job_id)
+        if job is None and job_id.startswith("unit:"):
+            job = jobs.Job(chat_id=chat_id, command="", unit=job_id[5:])
+        loop = self._get_loop()
+        if job is None or loop is None:
+            return False
+        self._fire(self._stop_job(job, chat_id), loop)
+        return True
+
+    async def _stop_job(self, job: jobs.Job, chat_id: str) -> None:
+        try:
+            outcome = await jobs.stop(job)
+        except Exception as exc:
+            outcome = f"停止 {job.label} 失败 · {type(exc).__name__}"
+        _logger.info("background job stop: job=%s %s", job.id, outcome)
+        with contextlib.suppress(Exception):
+            client = await self._client_for(chat_id)
+            await client.send_text(chat_id, f"⏹ {outcome}")
+
+    def _alert_chat(self) -> str:
+        chats = self.details_config.account_chats or self.details_config.allowed_chats
+        return chats[0] if chats else ""
+
+    async def _quota_watch(self) -> None:
+        """Every ten minutes read each Go key's 5-hour window; a rise of ten points within half an hour
+        that Hermes' own requests do not explain gets an alert card with the running background jobs."""
+        while True:
+            try:
+                await self._check_quota()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _logger.debug("quota watch failed", exc_info=True)
+            await asyncio.sleep(_WATCH_EVERY_SEC)
+
+    async def _check_quota(self, now: float | None = None) -> None:
+        now = time.time() if now is None else now
+        for label, used in await asyncio.to_thread(self._rolling_usage):
+            seen = [(t, u) for t, u in self._usage_seen.get(label, []) if now - t <= _SPIKE_WINDOW_SEC]
+            seen.append((now, used))
+            self._usage_seen[label] = seen
+            low_t, low = min(seen, key=lambda item: item[1])
+            if used - low < _SPIKE_POINTS or now - self._alerted.get(label, 0.0) < _ALERT_GAP_SEC:
+                continue
+            self._alerted[label] = now
+            await self._send_spike_alert(label, low, used, low_t, now)
+
+    def _rolling_usage(self) -> list[tuple[str, float]]:
+        """``(label, used %)`` of each configured Go key's 5-hour window, straight from Go's usage API."""
+        import json as _json
+        import os
+        import urllib.request
+
+        out = []
+        for row in self.details_config.account_settings().get("accounts") or []:
+            if not isinstance(row, dict) or row.get("provider") != "opencode-go" or not row.get("key_env"):
+                continue
+            key = os.environ.get(str(row["key_env"]), "")
+            if not key:
+                continue
+            request = urllib.request.Request("https://opencode.ai/zen/go/v1/usage",
+                                             headers={"Authorization": f"Bearer {key}", "Accept": "application/json"})
+            try:
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    window = (_json.load(response).get("usage") or {}).get("rolling") or {}
+            except Exception:
+                continue
+            if isinstance(window.get("percent"), (int, float)):
+                out.append((str(row.get("label") or row["key_env"]), float(window["percent"])))
+        return out
+
+    async def _send_spike_alert(self, label: str, low: float, used: float, since: float, now: float) -> None:
+        from ..card.render import job_elements
+        from ..details.ledger import UsageLedger
+
+        report = await asyncio.to_thread(
+            UsageLedger(self.details_config.ledger_path()).report, start=since, end=now, group_by="provider",
+            timezone=self.details_config.zone,
+        )
+        go: dict[str, Any] = next((g for g in report.get("groups") or [] if g.get("key") == ["opencode-go"]), {})
+        minutes = max(1, round((now - since) / 60))
+        lines = [f"**⚠️ 额度突增 · {label}**",
+                 f"5 小时用量 {low:.0f}% → **{used:.0f}%** · {minutes} 分钟内 +{used - low:.0f}",
+                 f"同期 Hermes 自己只发了 {go.get('requests') or 0} 次 Go 请求"
+                 " · 多出来的多半是后台任务或别的程序在用这个 key"]
+        elements: list[dict[str, Any]] = [{"tag": "markdown", "content": "\n".join(lines), "text_size": "normal_v2"}]
+        running: list[tuple[str, str]] = []
+        for job in list(self._jobs.values()):
+            if not job.stopped and await jobs.alive(job):
+                running.append((job.id, job.describe()))
+        tracked = {job.unit for job in self._jobs.values() if job.unit}
+        running += [(f"unit:{unit}", f"{unit} · {desc[:80]}") for unit, desc in await jobs.running_units()
+                    if unit not in tracked]
+        for job_id, description in running[:6]:
+            elements.extend(job_elements(description, job_id))
+        if not running:
+            elements.append({"tag": "markdown", "content": "没有找到在跑的后台任务 · 请检查是否有别处在用这个 key",
+                             "text_size": "notation"})
+        card = {"schema": "2.0", "config": {"update_multi": True, "summary": {"content": f"额度突增 {label}"}},
+                "body": {"elements": elements}}
+        chat = self._alert_chat()
+        client = await self._client_for(chat)
+        await client.send_card(chat, card)
+        _logger.warning("quota spike alert: %s %.0f%% -> %.0f%% in %d min, jobs=%d", label, low, used, minutes,
+                        len(running))
 
     def retry_prompt(self, *, turn: str, chat_id: str, click_id: str) -> str | None:
         """The text to send again for a retry click on ``turn``'s card: ``None`` when the turn is unknown here
@@ -669,7 +792,7 @@ class Controller:
 
     def on_tool_update(
         self, *, message_id: str, tool_name: str, status: str, detail: str = "",
-        result: Any = None, is_error: Any = None,
+        result: Any = None, is_error: Any = None, command: str = "",
     ) -> bool:
         if not self.enabled:
             return False
@@ -677,9 +800,17 @@ class Controller:
         if session is None:
             return False
         split = ""
+        job = jobs.detect(command, session.chat_id) if status in _STARTED and command else None
+        if job is not None:
+            self._jobs[job.id] = job
+            while len(self._jobs) > _JOBS_MAX:
+                del self._jobs[next(iter(self._jobs))]
+            _logger.info("background job started: msg=%s job=%s %s", session.message_id[:12], job.id, job.label)
         with session.lock:
             if status in _STARTED:
                 session.add_tool(session.tracker.start(tool_name, detail))
+                if job is not None:
+                    session.add_job(job.id, job.describe(), job.command)
             else:
                 _, record = session.tracker.finish(tool_name, status, detail, result=result, is_error=is_error)
                 session.add_tool(record)

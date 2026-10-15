@@ -186,6 +186,14 @@ class Session:
         self.timeline.append(entry)
         self.last_was_answer = False
 
+    def add_job(self, job_id: str, description: str, command: str) -> None:
+        """A background job the agent started detached: it outlives the turn, so the card names it."""
+        self.close_entry()
+        entry = Entry(BlockKind.JOB, f"b{len(self.timeline)}", label=description, batch=job_id)
+        entry.text, entry.ended = command, time.monotonic()
+        self.timeline.append(entry)
+        self.last_was_answer = False
+
     def add_error(self, summary: str, detail: str) -> None:
         """Why the turn failed, in a line, with Hermes' raw error text folded underneath."""
         self.close_entry()
@@ -262,6 +270,7 @@ class Session:
                 label=entry.label,
                 notice=entry.notice,
                 agents=self.agents.views(entry.batch) if entry.kind is BlockKind.AGENTS else (),
+                job=entry.batch if entry.kind is BlockKind.JOB else "",
             ))
         return tuple(out)
 

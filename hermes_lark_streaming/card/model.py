@@ -45,6 +45,7 @@ class BlockKind(StrEnum):
     NOTE = "note"  # a message folded into the running turn, or why a Hermes-generated turn exists
     AGENTS = "agents"  # one batch of subagents started by delegate_task
     ERROR = "error"  # why the turn failed (label, in Chinese) over Hermes' own error text (folded)
+    JOB = "job"  # a background job the agent detached (label: what it is; batch: its id for the stop button)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +88,7 @@ class Block:
     open: bool = False  # still receiving content
     label: str = ""  # NOTE only: a Hermes-generated turn's reason ("🔀 后台子代理已完成"); empty = the user's message
     notice: bool = False  # NOTE only: a Hermes notice that would otherwise have been its own chat message
+    job: str = ""  # JOB only: the job id its stop button sends
     agents: tuple[Subagent, ...] = ()  # AGENTS only
 
 

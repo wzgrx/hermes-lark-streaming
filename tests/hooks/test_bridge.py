@@ -237,6 +237,14 @@ def test_card_stop_button_becomes_slash_stop(controller: MagicMock) -> None:
                            raw_message=None, message_id="tok3", message_type=Kind.COMMAND)
     bridge.on_feishu_normalize(message_id="tok3", source=source, event=lost)
     assert lost.text == "/retry"
+    controller.retry_prompt.return_value = ""  # a repeat click: handled (dropped) here
+    again = SimpleNamespace(text='/card button {"lark_card": "retry", "turn": "om_1"}', reply_to_message_id=None,
+                            raw_message=None, message_id="tok4", message_type=Kind.COMMAND)
+    assert bridge.on_feishu_normalize(message_id="tok4", source=source, event=again) is True
+    stop_job = SimpleNamespace(text='/card button {"lark_card": "stopjob", "job": "j1"}', reply_to_message_id=None,
+                               raw_message=None, message_id="tok5")
+    assert bridge.on_feishu_normalize(message_id="tok5", source=source, event=stop_job) is True
+    controller.stop_job.assert_called_once_with(job_id="j1", chat_id="oc_1")
     other = SimpleNamespace(text='/card button {"hermes_action": "approve"}', reply_to_message_id=None,
                             raw_message=None)
     bridge.on_feishu_normalize(message_id="tok", source=source, event=other)

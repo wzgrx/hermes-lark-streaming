@@ -66,6 +66,7 @@ def _safe_async(
 
 STOP_ACTION = "stop"
 RETRY_ACTION = "retry"
+STOP_JOB_ACTION = "stopjob"
 TODO_TOOLS = frozenset({"todo_list", "todo"})  # Hermes registers todo_list; older builds used todo
 _CARD_CLICK = "/card button "
 
@@ -121,40 +122,45 @@ def _raw_message(event: Any) -> Any:
     return raw if message is None else message
 
 
-def _retry_click(ctrl: Any, event: Any, chat: str, turn: str) -> None:
+def _retry_click(ctrl: Any, event: Any, chat: str, turn: str) -> bool:
     """Send the turn's own message again as a new message (a fresh card replying to it); a repeat click
     within the guard window is ignored. Unknown turns (a restart lost them) fall back to Hermes' /retry."""
     outcome = ctrl.retry_prompt(turn=turn, chat_id=chat, click_id=str(getattr(event, "message_id", "") or ""))
+    if outcome == "":
+        _logger.info("card retry button repeated: chat=%s turn=%s", chat[:12], turn[:12])
+        return True  # a repeat click inside the guard window: drop it
     if outcome is None:
         event.text = "/retry"
-    elif outcome == "":
-        event.text = "/card button repeat"  # nothing of ours: Hermes ignores an unknown card action
     else:
         event.text = outcome
         kind: Any = type(getattr(event, "message_type", None))
         with contextlib.suppress(AttributeError, KeyError, TypeError):
             event.message_type = kind["TEXT"]  # a plain message again, not a slash command (Hermes' enum)
     _logger.info("card retry button: chat=%s turn=%s known=%s", chat[:12], turn[:12], outcome is not None)
+    return False
 
 
-@_safe(None)
+@_safe(False)
 def on_feishu_normalize(
     ctrl: Any, *, message_id: str, source: Any, event: Any, reply_anchor_id: str | None = None
-) -> None:
+) -> bool:
     """Clear the false ``thread_id`` Hermes' Feishu adapter sets on quoted messages (absent in the raw event), and
-    turn the card's stop button into ``/stop`` before Hermes routes the click."""
+    route our card buttons before Hermes sees the click. ``True``: handled here, Hermes drops the event."""
     if getattr(getattr(source, "platform", None), "value", "") != "feishu":
-        return
+        return False
     value = card_value(getattr(event, "text", None))
     action = value.get("lark_card") if value is not None else None
     chat = str(getattr(source, "chat_id", ""))
     if action == STOP_ACTION:
         event.text = "/stop"  # Hermes delivers card clicks as "/card button {value}"; /stop reaches a busy session
         _logger.info("card stop button: chat=%s", chat[:12])
-        return
+        return False
     if action == RETRY_ACTION and value is not None:
-        _retry_click(ctrl, event, chat, str(value.get("turn") or ""))
-        return
+        return _retry_click(ctrl, event, chat, str(value.get("turn") or ""))
+    if action == STOP_JOB_ACTION and value is not None:
+        ctrl.stop_job(job_id=str(value.get("job") or ""), chat_id=chat)
+        _logger.info("card stop-job button: chat=%s job=%s", chat[:12], str(value.get("job") or "")[:10])
+        return True  # handled here: Hermes would answer an unknown /card command
     message = _raw_message(event)
     real_thread = message.get("thread_id") if isinstance(message, dict) else getattr(message, "thread_id", None)
     reply_to = getattr(event, "reply_to_message_id", None)
@@ -170,6 +176,7 @@ def on_feishu_normalize(
     if reply_to and source_thread and not real_thread:
         source.thread_id = None
         event.source = source
+    return False
 
 
 @_safe(False)
@@ -317,12 +324,14 @@ def on_tool_updated(
     result: Any = None,
     is_error: Any = None,
     session_key: str | None = None,
+    command: str = "",
 ) -> bool:
     mid = _mid(ctrl, message_id, session_key)
     if mid and tool_name in TODO_TOOLS and status == "completed" and (todos := parse_todos(result)) is not None:
         ctrl.on_todos(message_id=mid, todos=todos)
     status, detail = normalize_tool_completion(tool_name, status, detail, result=result, is_error=is_error)
-    return bool(mid) and bool(ctrl.on_tool_update(message_id=mid, tool_name=tool_name, status=status, detail=detail))
+    return bool(mid) and bool(ctrl.on_tool_update(message_id=mid, tool_name=tool_name, status=status, detail=detail,
+                                                  command=command))
 
 
 _SUBAGENT_DETAIL_KEYS = (
