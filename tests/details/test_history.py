@@ -65,7 +65,8 @@ def test_summary_uses_two_queries_and_keeps_empty_period_zero(tmp_path):
 
     with patch("hermes_lark_streaming.details.history.sqlite3.connect", reader_connect):
         summary = read_summary(path, "Asia/Shanghai", now=1_900_000_000)
-    assert summary["today"] == summary["month"] == {"tokens": 0, "requests": 0, "partial": False}
+    assert summary["today"] == summary["month"] == {"tokens": 0, "fresh": 0, "cached": 0, "requests": 0,
+                                                    "partial": False}
     assert summary["total"]["tokens"] == 110
     assert statements[0] == "BEGIN"
     assert len([sql for sql in statements if sql.startswith("SELECT")]) == 2
@@ -76,7 +77,7 @@ def test_missing_usage_is_not_a_known_zero_in_summary(tmp_path):
     UsageLedger(path).record("post_api_request", {**event(), "usage": {}})
     summary = read_summary(path, "UTC", now=1_700_000_001)
     for period in ("today", "month", "total"):
-        assert summary[period] == {"tokens": None, "requests": 1, "partial": True}
+        assert summary[period] == {"tokens": None, "fresh": None, "cached": None, "requests": 1, "partial": True}
 
 
 def test_day_and_month_follow_the_configured_timezone(tmp_path):
@@ -201,3 +202,30 @@ def test_summary_counts_auxiliary_requests_too(tmp_path):
     ledger.record("post_auxiliary_call", {**base, "api_request_id": "b", "usage": aux})
     summary = read_summary(tmp_path / "u.sqlite3", "UTC", now=now)
     assert summary["today"]["requests"] == 2 and summary["today"]["tokens"] == 165
+
+
+def test_history_counts_new_tokens_apart_from_cache_and_merges_model_aliases(tmp_path) -> None:
+    import sqlite3
+    import time
+
+    from hermes_lark_streaming.details.history import read_summary
+
+    path = tmp_path / "usage.sqlite3"
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE usage_events (event_key TEXT, occurred_at REAL, provider TEXT, subscription TEXT, "
+               "requested_model TEXT, response_model TEXT, scope TEXT, platform TEXT, completed INT, error_seen INT, "
+               "input_tokens INT, output_tokens INT, cache_read_tokens INT, cache_write_tokens INT, "
+               "reasoning_tokens INT)")
+    now = time.time()
+    rows = [("a", "deepseek-v4.1-flash", "deepseek-flash", 193_000, 500, 192_900),
+            ("b", "deepseek-v4.1-flash", "deepseek-v4.1-flash", 193_100, 100, 193_000)]
+    for key, requested, response, inp, out, read in rows:
+        db.execute("INSERT INTO usage_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (key, now, "opendesign", "OpenDesign 订阅", requested, response, "main", "feishu", 1, 0,
+                    inp, out, read, 0, 0))
+    db.commit()
+    db.close()
+    today = read_summary(path, "Asia/Shanghai", now=now)["today"]
+    assert today["tokens"] == 386_700 and today["cached"] == 385_900 and today["fresh"] == 800  # 200 new + 600 out
+    models = read_summary(path, "Asia/Shanghai", now=now)["models"]
+    assert [(m["model"], m["fresh"]) for m in models] == [("DeepSeek V4.1 Flash", 800)]

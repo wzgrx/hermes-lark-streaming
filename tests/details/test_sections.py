@@ -63,11 +63,12 @@ def test_turn_metrics_from_telemetry():
     section = usage_section(state.snapshot(), None)
     assert (section.key, section.title, section.title_en, section.layout) == ("usage", "用量", "Usage", "grid")
     m = by_label(section)
-    assert m["输入"].value == "100" and m["输出"].value == "7"
-    assert m["缓存"].value == "70%" and m["缓存"].ratio == pytest.approx(0.7)
+    # input is split: 30 new tokens, 70 served by the cache (hit rate as the hint)
+    assert m["新输入"].value == "30" and m["输出"].value == "7"
+    assert m["缓存读"].value == "70" and m["缓存读"].hint == "命中 70%" and m["缓存读"].ratio == pytest.approx(0.7)
     assert "思考" not in m  # the reasoning effort lives in the footer (🧠)
     # model, context, provider and wall time live in the footer and status line, not here
-    assert not {"上下文（末次）", "服务商", "总耗时", "缓存读取", "请求"} & set(m)
+    assert not {"上下文（末次）", "服务商", "总耗时", "输入", "缓存", "请求"} & set(m)
     assert "统计不完整" not in section.notes
 
 
@@ -81,23 +82,22 @@ def test_partial_turn_shows_floor_and_partial_note():
     complete(state, second)
     section = usage_section(state.snapshot(), None)
     m = by_label(section)
-    assert m["缓存"].value == "未知" and m["缓存"].ratio is None  # count known, rate not
-    assert m["缓存读取"].value == "70+"
+    assert m["缓存读"].value == "70+" and m["缓存读"].ratio is None and not m["缓存读"].hint  # count known, rate not
+    assert m["新输入"].value == "≤30"  # some reads unknown: part of "new" may have been cached
     assert "统计不完整" in section.notes and "服务商路径 opencode-go → other" in section.notes
     assert m["请求"].value == "2 · 错误 1"
 
 
 def test_cache_hit_lower_bound_is_labelled_and_never_rounded_up():
     section = usage_section(turn([40, None]).snapshot(), None)
-    metric = by_label(section)["缓存"]
-    assert (metric.value, metric.label_en) == ("≥20%", "Cache") and metric.ratio == 0.2
-    assert by_label(section)["缓存读取"].value == "40+"
+    metric = by_label(section)["缓存读"]
+    assert (metric.value, metric.hint, metric.label_en) == ("40+", "命中 ≥20%", "Cache read") and metric.ratio == 0.2
 
 
 def test_missing_telemetry_is_unknown_not_zero():
     section = usage_section(None, None)
     m = by_label(section)
-    assert m["输入"].value == m["输出"].value == m["缓存"].value == "未知"
+    assert m["新输入"].value == m["输出"].value == m["缓存读"].value == "未知"
     assert "本轮统计待采集" in section.notes
     assert not any(x.ratio for x in section.metrics)
 
@@ -553,3 +553,19 @@ def test_counts_stay_three_digits_wide_however_large(value, lower_bound, expecte
     from hermes_lark_streaming.details.sections.fmt import compact
 
     assert compact(value, lower_bound=lower_bound) == expected  # was "≥4827.6M": too wide for a cell
+
+
+def test_output_names_its_reasoning_share_and_history_shows_new_tokens():
+    turn_data = {"input_tokens": 386_000, "cache_read_tokens": 385_000, "output_tokens": 544,
+                 "reasoning_tokens": 335, "api_calls": 2}
+    m = by_label(usage_section(turn_data, None))
+    assert m["新输入"].value == "1k" and m["缓存读"].value == "385k" and m["输出"].hint == "含推理 335"
+    history = {"status": "ok", "since": "2026-10-01",
+               "today": {"tokens": 291_640_000, "fresh": 11_830_000, "cached": 279_800_000, "requests": 1705,
+                         "partial": True},
+               "month": {"tokens": 1, "fresh": 1, "cached": 0, "requests": 1, "partial": False},
+               "total": {"tokens": 1, "fresh": 1, "cached": 0, "requests": 1, "partial": False}}
+    section = usage_section(None, history)
+    today = by_label(section)["今日"]
+    assert (today.value, today.hint) == ("11.8M+", "缓存另 280M")
+    assert "累计 = 新输入 + 输出 · 重复读取的上下文按缓存另计" in section.notes

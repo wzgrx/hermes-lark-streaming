@@ -87,6 +87,7 @@ class Session:
     folded_at: float = 0.0  # monotonic time a mid-turn message was last folded in (its busy ack is redundant)
     memories: int | None = None  # memories Hermes recalled for the turn; 0 = recalled without a count
     route_tail: str = ""  # the subscription the newest request went to, to notice a switch
+    retry_entry: Entry | None = None  # the line Hermes' retry countdown rewrites while it stays the newest
     provider: str = ""  # provider the turn is actually using, once telemetry has seen a request
     telemetry: Any = None  # details.TurnTelemetry
     final_footer: Footer | None = None

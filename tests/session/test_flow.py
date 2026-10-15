@@ -569,3 +569,17 @@ async def test_a_momentary_rate_limit_is_not_called_an_exhausted_quota(make_cont
     ctl._note_route_switch(session)
     note = next(e for e in session.timeline if e.label == "🔀 换线路")
     assert note.text == "Go 221 → OpenDesign · Go 221 被限流"
+
+
+async def test_a_retry_countdown_is_one_chinese_line(make_controller, client):
+    ctl = make_controller()
+    session = await start(ctl)
+    for n, wait in ((4, "8.9"), (5, "18.3")):
+        ctl.on_outbound_text(chat_id="oc_1", content=f"⏱️ Rate limited. Resets in ~1h 45m. Waiting {wait}s "
+                                                     f"(attempt {n}/5)...")
+    lines = [e.text for e in session.timeline if e.notice]
+    assert lines == ["⏱️ 被限流 · 第 5/5 次重试 · 等 18.3s · 1h 45m 后重置"]
+    ctl.on_answer(message_id="om_1", text="继续。")
+    ctl.on_outbound_text(chat_id="oc_1", content="⏳ Retrying in 2.0s (attempt 1/5)...")
+    assert [e.text for e in session.timeline if e.notice][-1] == "⏱️ 重试中 · 第 1/5 次重试 · 等 2.0s"
+    assert len([e for e in session.timeline if e.notice]) == 2  # after other content: a new line

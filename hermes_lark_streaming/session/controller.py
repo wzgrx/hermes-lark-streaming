@@ -61,6 +61,11 @@ _NOTICE_IDS_MAX = 512
 _FOLD_ACK_SEC = 15.0  # Hermes' busy ack after a folded message repeats the "💬 你补充" line
 _FOLD_ACK_HEADS = ("↪", "⏩", "⚡")  # redirect / steer / interrupt acks, in every Hermes language
 _RECALL = re.compile(r"recalled (?:(\d+) memor(?:y|ies)|relevant memory)")  # Hermes writes this line in English
+_RETRY = re.compile(  # Hermes writes its retry countdown in English whatever the display language
+    r"(?:⏱️ (?P<why>Rate limited|Provider overloaded|The free model is busy)\.(?: Resets in (?P<reset>[^.]+)\.)?"
+    r" Waiting|⏳ Retrying in) (?P<wait>[\d.]+)s \(attempt (?P<n>\d+)/(?P<m>\d+)\)"
+)
+_RETRY_WHY = {"Rate limited": "被限流", "Provider overloaded": "服务商过载", "The free model is busy": "免费模型繁忙"}
 _RECOVERED = "♻️ Recovered reply"
 _RECOVERED_REASONS = (
     ("gateway restarted", "网关重启时没确认送达 · 可能与上面重复"),
@@ -515,6 +520,9 @@ class Controller:
             metrics.increment("notice.ack_dropped")
             self._remember_notice(note_id, session, None)
             return note_id  # the "💬 你补充" line already says it
+        retry = _RETRY.search(text)
+        if retry is not None:
+            return self._retry_line(session, retry, note_id)
         recall = _RECALL.search(text)
         if recall is not None:
             session.memories = (session.memories or 0) + int(recall.group(1) or 0)  # a footer chip, not a line
@@ -527,6 +535,24 @@ class Controller:
         session.touched = time.monotonic()
         self._wake(session)
         metrics.increment("notice.folded")
+        return note_id
+
+    def _retry_line(self, session: Session, retry: re.Match[str], note_id: str) -> str:
+        """One line for a whole retry countdown, in Chinese, rewritten while nothing else came after it."""
+        parts = [f"⏱️ {_RETRY_WHY.get(retry['why'] or '', '重试中')}", f"第 {retry['n']}/{retry['m']} 次重试",
+                 f"等 {retry['wait']}s"]
+        if retry["reset"]:
+            parts.append(f"{retry['reset'].strip().lstrip('~')} 后重置")
+        line = " · ".join(parts)
+        with session.lock:
+            entry = session.retry_entry
+            if entry is not None and session.timeline and session.timeline[-1] is entry:
+                entry.text = line
+            else:
+                entry = session.add_notice(line)
+                session.retry_entry = entry
+        self._remember_notice(note_id, session, entry)
+        self._wake(session)
         return note_id
 
     def _remember_notice(self, note_id: str, session: Session, entry: Entry | None) -> None:

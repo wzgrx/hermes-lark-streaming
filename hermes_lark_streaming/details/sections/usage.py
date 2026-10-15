@@ -31,27 +31,29 @@ def _seconds(value: Any, digits: int = 1) -> str:
 
 
 def _turn_metrics(data: Mapping[str, Any]) -> tuple[Metric, ...]:
-    """The few turn figures worth a second look; model, context and wall time are already in the footer and status."""
+    """The few turn figures worth a second look; model, context and wall time are already in the footer and status.
+
+    Every request re-sends the whole context and nearly all of it is a cache hit, so the summed input of a
+    ten-request turn reads "1.9M" while the model saw a few thousand new tokens. Input is therefore split
+    into what was new and what the cache served."""
     partial_cache = bool(data.get("cache_read_partial"))
     ratio, floor = cache_ratio(dict(data))
     calls, errors = count(data.get("api_calls")), count(data.get("retries"))
+    total_in, read = count(data.get("input_tokens")), count(data.get("cache_read_tokens"))
+    out, reasoning = count(data.get("output_tokens")), count(data.get("reasoning_tokens"))
     group = "本轮"
+    fresh = None if total_in is None else max(0, total_in - (read or 0))
     metrics = [
-        Metric("输入", compact(count(data.get("input_tokens"))), label_en="Input", group=group),
-        Metric("输出", compact(count(data.get("output_tokens"))), label_en="Output", group=group),
-        Metric(
-            "缓存",
-            percent(ratio, floor=floor),
-            ratio=ratio,
-            label_en="Cache",
-            group=group,
-        ),
+        # with cache reads missing for some requests, part of "new" may in fact have been cached
+        Metric("新输入", ("≤" if partial_cache else "") + compact(fresh) if fresh is not None else UNKNOWN,
+               label_en="New input", group=group),
+        Metric("缓存读", compact(read, lower_bound=partial_cache), ratio=ratio,
+               hint=f"命中 {percent(ratio, floor=floor)}" if ratio is not None else "", label_en="Cache read",
+               group=group),
+        Metric("输出", compact(out), hint=f"含推理 {compact(reasoning)}" if reasoning else "", label_en="Output",
+               group=group),
         Metric("首响应", _seconds(data.get("first_response")), label_en="First response", group=group),
     ]
-    if partial_cache:
-        read = count(data.get("cache_read_tokens"))
-        metrics.append(Metric("缓存读取", compact(read, lower_bound=True) if read is not None else UNKNOWN,
-                              group=group))
     if calls is not None and (calls > 1 or errors):
         metrics.append(Metric("请求", f"{calls}" + (f" · 错误 {errors}" if errors else ""), label_en="Requests",
                               group=group))
@@ -60,10 +62,18 @@ def _turn_metrics(data: Mapping[str, Any]) -> tuple[Metric, ...]:
 
 
 def _history_tokens(bucket: Mapping[str, Any]) -> str:
-    tokens = count(bucket.get("tokens"))
+    """New input + output: "12.3M", not the "304M" that counted the same cached context once per request."""
+    tokens = count(bucket.get("fresh"))
+    if tokens is None:
+        tokens = count(bucket.get("tokens"))  # a summary from before the split
     if tokens is None:
         return UNKNOWN
     return compact(tokens, lower_bound=bool(bucket.get("partial")))  # "4.83B+" when some requests had no usage
+
+
+def _history_cache(bucket: Mapping[str, Any]) -> str:
+    cached = count(bucket.get("cached"))
+    return f"缓存另 {compact(cached)}" if cached else ""
 
 
 def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -> tuple[tuple[Metric, ...], list[str]]:
@@ -76,7 +86,8 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
     label(history.get("since"))
     group = "累计"
     metrics = [
-        Metric(title, _history_tokens(mapping(history.get(key))), label_en=en, group=group)
+        Metric(title, _history_tokens(mapping(history.get(key))), hint=_history_cache(mapping(history.get(key))),
+               label_en=en, group=group)
         for key, title, en in (("today", "今日", "Today"), ("month", "本月", "Month"), ("total", "总计", "Total"))
     ]
     # request counts: what a request-metered subscription actually spends; also fills the row to five cells
@@ -91,7 +102,7 @@ def _history(history: Mapping[str, Any], *, terminal: bool, show_models: bool) -
             name = label(row.get("model"))[:48] or UNKNOWN
             metrics.append(Metric(name, _history_tokens(row), hint=label(row.get("subscription"))[:32],
                                   group="模型累计"))
-    notes: list[str] = []
+    notes: list[str] = ["累计 = 新输入 + 输出 · 重复读取的上下文按缓存另计"]
     if any(mapping(history.get(k)).get("partial") for k in ("today", "month", "total")):
         notes.append("* 部分请求缺少用量，带 + 的数字是已观测下限")
     return tuple(metrics), notes

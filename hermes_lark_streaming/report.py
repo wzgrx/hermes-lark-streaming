@@ -34,11 +34,18 @@ def _period_start(now: datetime, period: str) -> datetime:
     return day - timedelta(days=day.weekday()) if period == "week" else day
 
 
+def _fresh(group: dict[str, Any]) -> int:
+    """New input + output: the context every request re-sends and the cache serves is not counted again."""
+    return max(0, (group.get("input_tokens") or 0) - (group.get("cache_read_tokens") or 0)) + (
+        group.get("output_tokens") or 0)
+
+
 def _usage_metrics(report: dict[str, Any], group: str) -> list[Metric]:
-    """One cell per subscription (tokens) plus the request count, largest first."""
-    rows = sorted(report.get("groups") or [], key=lambda g: -(g.get("total_tokens") or 0))
+    """One cell per subscription (new tokens, cache reads as the hint) plus the request count, largest first."""
+    rows = sorted(report.get("groups") or [], key=lambda g: -_fresh(g))
     metrics = [
-        Metric(short_name(str(g["key"][0])), compact(g.get("total_tokens"), lower_bound=bool(g.get("usage_partial"))),
+        Metric(short_name(str(g["key"][0])), compact(_fresh(g), lower_bound=bool(g.get("usage_partial"))),
+               hint=f"缓存另 {compact(g.get('cache_read_tokens'))}" if g.get("cache_read_tokens") else "",
                group=group)
         for g in rows[:4] if g.get("total_tokens")
     ]

@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .values import model_display
+
 
 def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict[str, Any]:
     tz = ZoneInfo(timezone)
@@ -24,6 +26,8 @@ def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict
     if not path.is_file():
         return result
     measured = "input_tokens IS NOT NULL AND output_tokens IS NOT NULL"
+    # what the model newly read plus wrote: re-sent context served from cache is counted apart
+    fresh = "MAX(input_tokens-COALESCE(cache_read_tokens,0),0)+output_tokens"
     periods = (
         ("today", today.timestamp(), tomorrow.timestamp()),
         ("month", month.timestamp(), end_month.timestamp()),
@@ -39,9 +43,11 @@ def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict
                 f"SUM(CASE WHEN {inside} THEN 1 ELSE 0 END)",
                 f"SUM(CASE WHEN {inside} AND {measured} THEN 1 ELSE 0 END)",
                 f"SUM(CASE WHEN {inside} AND {measured} THEN input_tokens+output_tokens END)",
+                f"SUM(CASE WHEN {inside} AND {measured} THEN {fresh} END)",
+                f"SUM(CASE WHEN {inside} AND {measured} THEN COALESCE(cache_read_tokens,0) END)",
             )
         )
-        params.extend((start, end) * 3)
+        params.extend((start, end) * 5)
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.2)) as db:
         deadline = time.monotonic() + 0.5
         db.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
@@ -55,23 +61,36 @@ def read_summary(path: Path, timezone: str, *, now: float | None = None) -> dict
             return result
         result.update(status="ok", since=datetime.fromtimestamp(first, tz).strftime("%Y-%m-%d"))
         for index, (key, _start, _end) in enumerate(periods):
-            requests, known, tokens = row[1 + index * 3 : 4 + index * 3]
+            requests, known, tokens, new, cached = row[1 + index * 5 : 6 + index * 5]
             # A truly empty period is zero once recording exists. Requests with
             # missing usage remain unknown/partial, never an invented zero.
             result[key] = {
                 "tokens": tokens if requests else 0,
+                "fresh": new if requests else 0,
+                "cached": cached if requests else 0,
                 "requests": requests,
                 "partial": requests != (known or 0),
             }
-        for subscription, model, requests, known, tokens in db.execute(
-            f"SELECT subscription, CASE WHEN response_model!='' THEN response_model ELSE requested_model END model, "
+        for subscription, model, requests, known, tokens, new in db.execute(
+            # the configured model, as in the footer: gateways answer under internal aliases (deepseek-flash)
+            "SELECT subscription, CASE WHEN requested_model NOT IN ('', 'auto') THEN requested_model "
+            "ELSE response_model END model, "
             f"COUNT(*), SUM(CASE WHEN {measured} THEN 1 ELSE 0 END), "
-            f"SUM(CASE WHEN {measured} THEN input_tokens+output_tokens END) FROM usage_events "
-            "GROUP BY subscription, model ORDER BY 5 DESC, subscription, model LIMIT 3"
+            f"SUM(CASE WHEN {measured} THEN input_tokens+output_tokens END), "
+            f"SUM(CASE WHEN {measured} THEN {fresh} END) FROM usage_events "
+            "GROUP BY subscription, model ORDER BY 6 DESC, subscription, model LIMIT 24"
         ):
-            result["models"].append(
-                {"subscription": subscription, "model": model, "tokens": tokens, "partial": requests != (known or 0)}
-            )
+            # aliases of one model (deepseek-flash, deepseek-v4.1-flash) are one row under its display name
+            name = model_display(model) or model
+            row = next((m for m in result["models"] if (m["subscription"], m["model"]) == (subscription, name)), None)
+            if row is None:
+                result["models"].append({"subscription": subscription, "model": name, "tokens": tokens or 0,
+                                         "fresh": new or 0, "partial": requests != (known or 0)})
+            else:
+                row["tokens"] += tokens or 0
+                row["fresh"] += new or 0
+                row["partial"] = row["partial"] or requests != (known or 0)
+        result["models"] = sorted(result["models"], key=lambda m: -m["fresh"])[:3]
     return result
 
 

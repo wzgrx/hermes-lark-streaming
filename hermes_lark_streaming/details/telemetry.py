@@ -219,6 +219,9 @@ class TurnTelemetry:
         if measured:
             data["input_tokens"] = sum(r.usage.prompt or 0 for r in measured)
             data["output_tokens"] = sum(r.usage.output or 0 for r in measured)
+            reasoned = [r.usage.reasoning for r in measured if r.usage.reasoning is not None]
+            if reasoned:
+                data["reasoning_tokens"] = sum(reasoned)  # part of the output, shown as its share
         cached = [r for r in measured if r.usage.cache_read is not None]
         if cached:
             # A cold/unknown request must not erase a later positive observation.
