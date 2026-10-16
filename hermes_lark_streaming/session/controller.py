@@ -361,6 +361,10 @@ class Controller:
             self._watch = self._fire(self._quota_watch(), loop)
         reply = anchor_id if anchor_id and anchor_id != message_id else None
         session = self._new_session(message_id, chat_id, loop, anchor_id=reply, session_key=session_key)
+        if notice is None and not message_id.startswith(("om_", "synthetic-")) and not reply:
+            # Hermes names some generated turns by an internal identity (a delegation completion is
+            # '["async_delegation","deleg_…",""]'): there is no Feishu message to reply to
+            session.synthetic = True
         if notice is not None:
             # A Hermes notice anchored to an old message: say what it is and post it, don't quote that message
             session.synthetic = True

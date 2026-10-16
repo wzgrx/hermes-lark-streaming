@@ -652,3 +652,24 @@ async def test_the_chat_scope_stop_reply_is_recognised_by_its_text(make_controll
     for text in ("⚡ 已停止。你可以继续此会话。", "⚡ Stopped. You can continue this session."):
         assert ctl.on_outbound_text(chat_id="oc_1", content=text)
     assert not [e for e in session.timeline if e.notice] and session.stopping
+
+
+async def test_hermes_completion_turns_named_by_identity_post_into_the_chat(make_controller, client):
+    from hermes_lark_streaming.session.synthetic import delegation_batch, synthetic_note
+
+    grouped = ("[IMPORTANT: 5 background subagent delegations completed for this session. Treat these results "
+               "as one … [ASYNC DELEGATION BATCH COMPLETE — deleg_97cc68e8] …")
+    assert synthetic_note(grouped) == ("🔀 后台子代理已完成", "5 批结果合并汇总")
+    assert delegation_batch(grouped) == "deleg_97cc68e8"
+    assert synthetic_note("[ASYNC DELEGATION COMPLETE — deleg_1a2b] done")[0] == "🔀 后台子代理已完成"
+    assert synthetic_note("[ASYNC DELEGATION TASK FAILED — deleg_1a2b, task 1/2]")[0] == "⚠️ 后台子代理任务失败"
+    ctl = make_controller()
+    mid = '["async_delegation","deleg_97cc68e8",""]'
+    ctl.on_message_started(message_id=mid, chat_id="oc_1", session_key="sk", text=grouped)
+    session = ctl._sessions[mid]
+    await ctl._wait_creation(session)
+    assert session.reply_target is None and client.of("reply_card") == [] and client.of("send_card_entity")
+    # an unknown generated turn under an internal id still gets a card, posted into the chat
+    other = '["kanban-wake","x",""]'
+    ctl.on_message_started(message_id=other, chat_id="oc_1", session_key="sk2", text="[SYSTEM: board changed]")
+    assert ctl._sessions[other].reply_target is None

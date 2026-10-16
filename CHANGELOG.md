@@ -1,5 +1,12 @@
 # 更新记录
 
+## [1.15.1] - 2026-10-16
+
+适配 Hermes v0.22.1+321(6206f89)的后台子代理汇总:
+
+- Hermes 现在把同一会话里多批后台子代理的结果合成一轮(`[IMPORTANT: N background subagent delegations completed…`),也有单任务完成(`[ASYNC DELEGATION COMPLETE`)和单任务失败(`[ASYNC DELEGATION TASK FAILED`)两种;都认作“🔀 后台子代理已完成 / ⚠️ 后台子代理任务失败”,带结果面板。
+- 这类回合的消息 ID 是 Hermes 的内部身份串(如 `["async_delegation","deleg_…",""]`),不是飞书消息:此前插件拿它去回复,飞书拒绝,卡片建不起来、回复变成纯文本。现在不是飞书消息 ID 的回合一律把卡片直接发到聊天里。
+
 ## [1.15.0] - 2026-10-15
 
 后台任务看得见、停得掉,额度异常会提醒:
